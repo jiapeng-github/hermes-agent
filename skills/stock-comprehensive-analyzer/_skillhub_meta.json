@@ -1,0 +1,18 @@
+{
+  "name": "股票综合分析器",
+  "installedAt": 1780474159478,
+  "source": "marketplace",
+  "version": "1.0.0",
+  "skillId": "skill_2053082766922698752",
+  "examples_zh": [
+    "基于东方财富数据分析贵州茅台的基本面、新闻情绪和资金流向。",
+    "对比腾讯控股和阿里巴巴的近期资金面与新闻面，生成可视化 HTML 报告。",
+    "分析英伟达的基本面、最新新闻和资本流向，并给出价格区间参考。"
+  ],
+  "examples_en": [
+    "Analyze Kweichow Moutai using EastMoney data across fundamentals, news sentiment, and capital flow.",
+    "Compare Tencent Holdings and Alibaba on recent capital flow and news sentiment, then generate a visual HTML report.",
+    "Analyze NVIDIA's fundamentals, latest news, and capital flow, then provide a reference price range."
+  ],
+  "iconSource": "letter:auto"
+}

@@ -1,0 +1,18 @@
+{
+  "name": "Stock Analysis",
+  "installedAt": 1780474166555,
+  "source": "marketplace",
+  "version": "6.2.1",
+  "skillId": "skill_2053083961308913664",
+  "examples_zh": [
+    "用8维评分比较我关注列表里的AAPL、NVDA和BTC，并指出最弱维度",
+    "监控我的股票组合，汇总今日涨跌、分红影响和需要触发提醒的持仓",
+    "扫描最近的热门股票和加密货币趋势，找出可能还没进入主流报道的传闻信号"
+  ],
+  "examples_en": [
+    "Score AAPL, NVDA, and BTC from my watchlist across the 8 dimensions and identify the weakest dimensions",
+    "Review my portfolio with today's moves, dividend impact, and holdings that should trigger alerts",
+    "Scan trending stocks and cryptocurrencies for early rumor signals before they reach mainstream coverage"
+  ],
+  "iconSource": "letter:auto"
+}
