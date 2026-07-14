@@ -8,6 +8,7 @@ import { COMPLETION_ACTIONS, slashArgStage, slashChipKindForItem, slashCommandTo
 import {
   composerPlainText,
   placeCaretEnd,
+  prependSlashChip,
   refChipElement,
   renderComposerContents,
   slashChipElement
@@ -266,10 +267,29 @@ export function useComposerTrigger({
     finish()
   }
 
+  // Skill commands must lead the submitted text for the slash dispatcher to
+  // resolve them. The picker therefore prepends the same rich chip created by
+  // the `/` completion flow and keeps any already-written request as its arg.
+  const insertSkillChip = (rawCommand: string) => {
+    const editor = editorRef.current
+    const command = rawCommand.trim()
+
+    if (!editor || !command) {
+      return
+    }
+
+    const normalized = command.startsWith('/') ? command : `/${command}`
+    draftRef.current = prependSlashChip(editor, normalized, 'skill')
+    setComposerText(draftRef.current)
+    closeTrigger()
+    requestMainFocus()
+  }
+
   return {
     argStageEmpty,
     closeTrigger,
     commitTypedSlashDirective,
+    insertSkillChip,
     refreshTrigger,
     replaceTriggerWithChip,
     setTriggerActive,

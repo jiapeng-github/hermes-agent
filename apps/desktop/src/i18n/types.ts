@@ -1361,6 +1361,11 @@ export interface Translations {
     lookupNoMatches: string
     lookupTry: string
     lookupOr: string
+    skills: string
+    selectSkill: string
+    searchSkills: string
+    loadingSkills: string
+    noMatchingSkills: string
     commonCommands: string
     hotkeys: string
     helpFooter: string

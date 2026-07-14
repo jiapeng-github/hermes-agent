@@ -51,6 +51,7 @@ import {
   normalizeComposerEditorDom,
   RICH_INPUT_SLOT
 } from './rich-editor'
+import { SkillPicker } from './skill-picker'
 import { ComposerStatusStack } from './status-stack'
 import { CodingStatusRow } from './status-stack/coding-row'
 import { extractClipboardImageBlobs } from './text-utils'
@@ -238,6 +239,7 @@ export function ChatBar({
     argStageEmpty,
     closeTrigger,
     commitTypedSlashDirective,
+    insertSkillChip,
     refreshTrigger,
     replaceTriggerWithChip,
     setTriggerActive,
@@ -962,6 +964,9 @@ export function ChatBar({
                   </div>
                 )}
                 {attachments.length > 0 && <AttachmentList attachments={attachments} onRemove={onRemoveAttachment} />}
+                <div className="flex items-center">
+                  <SkillPicker disabled={inputDisabled} gateway={gateway ?? null} onPick={insertSkillChip} />
+                </div>
                 <div
                   className={cn(
                     'grid w-full',

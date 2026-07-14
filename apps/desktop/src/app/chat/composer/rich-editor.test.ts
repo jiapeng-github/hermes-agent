@@ -6,6 +6,7 @@ import {
   deleteSelectionInEditor,
   insertPlainTextAtCaret,
   normalizeComposerEditorDom,
+  prependSlashChip,
   refChipElement,
   renderComposerContents,
   RICH_INPUT_SLOT
@@ -69,6 +70,22 @@ describe('insertInlineRefsIntoEditor', () => {
 
     expect(editor.querySelector(':scope > div')).toBeNull()
     expect(composerPlainText(editor)).toBe('@file:`src/foo.ts` ')
+  })
+})
+
+describe('prependSlashChip', () => {
+  it('keeps a selected skill first and preserves the drafted request as its argument', () => {
+    const editor = document.createElement('div')
+    editor.dataset.slot = RICH_INPUT_SLOT
+    renderComposerContents(editor, '生成宁德时代的投资分析报告')
+    document.body.append(editor)
+
+    const text = prependSlashChip(editor, '/dashi-ppt', 'skill')
+
+    expect(text).toBe('/dashi-ppt 生成宁德时代的投资分析报告')
+    expect((editor.firstElementChild as HTMLElement | null)?.dataset.slashKind).toBe('skill')
+
+    editor.remove()
   })
 })
 

@@ -296,6 +296,21 @@ export function placeCaretEnd(element: HTMLElement) {
   selection?.addRange(range)
 }
 
+/** Prepend a slash command chip so it remains the command dispatcher target. */
+export function prependSlashChip(editor: HTMLElement, command: string, kind: SlashChipKind): string {
+  const current = composerPlainText(editor).trim()
+
+  editor.replaceChildren(slashChipElement(command, kind), document.createTextNode(' '))
+
+  if (current) {
+    appendComposerContents(editor, current)
+  }
+
+  placeCaretEnd(editor)
+
+  return composerPlainText(editor)
+}
+
 /** Nothing but a break / whitespace (recursively) — i.e. no real text or chip. */
 function isBlankNode(node: ChildNode | null): boolean {
   if (!node) {
