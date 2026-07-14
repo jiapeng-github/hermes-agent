@@ -6,10 +6,24 @@ import { Tip } from '@/components/ui/tooltip'
 import { getHermesConfigDefaults, getHermesConfigRecord, saveHermesConfig } from '@/hermes'
 import { useI18n } from '@/i18n'
 import { triggerHaptic } from '@/lib/haptics'
-import { Archive, Bell, Download, Globe, Info, KeyRound, RefreshCw, Settings2, Upload, Wrench, Zap } from '@/lib/icons'
+import {
+  Archive,
+  Bell,
+  Download,
+  Globe,
+  Info,
+  KeyRound,
+  MessageCircle,
+  RefreshCw,
+  Settings2,
+  Upload,
+  Wrench,
+  Zap
+} from '@/lib/icons'
 import { notifyError } from '@/store/notifications'
 
 import { useRouteEnumParam } from '../hooks/use-route-enum-param'
+import { MessagingView } from '../messaging'
 import { OverlayIconButton } from '../overlays/overlay-chrome'
 import { OverlayMain, OverlayNav, type OverlayNavGroup, OverlaySplitLayout } from '../overlays/overlay-split-layout'
 import { OverlayView } from '../overlays/overlay-view'
@@ -30,6 +44,7 @@ const SETTINGS_VIEWS: readonly SettingsViewId[] = [
   ...SECTIONS.map(s => `config:${s.id}` as SettingsViewId),
   'providers',
   'gateway',
+  'messaging',
   'keys',
   'notifications',
   'sessions',
@@ -164,6 +179,13 @@ export function SettingsView({ onClose, onConfigSaved, onMainModelChanged }: Set
       onSelect: () => setActiveView('gateway')
     },
     {
+      active: activeView === 'messaging',
+      icon: MessageCircle,
+      id: 'messaging',
+      label: t.settings.nav.messagingPlatforms,
+      onSelect: () => setActiveView('messaging')
+    },
+    {
       active: activeView === 'keys',
       children: [
         {
@@ -246,6 +268,8 @@ export function SettingsView({ onClose, onConfigSaved, onMainModelChanged }: Set
             <AboutSettings />
           ) : activeView === 'gateway' ? (
             <GatewaySettings />
+          ) : activeView === 'messaging' ? (
+            <MessagingView embedded />
           ) : activeView.startsWith('config:') ? (
             <ConfigSettings
               activeSectionId={activeView.slice('config:'.length)}

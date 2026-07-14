@@ -1,6 +1,6 @@
 import { useStore } from '@nanostores/react'
 import { useQueryClient } from '@tanstack/react-query'
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom'
 
 import { BootFailureOverlay } from '@/components/boot-failure-overlay'
@@ -77,6 +77,7 @@ import { clearSessionTodos, setSessionTodos, todosForHydration } from '../store/
 import { openUpdatesWindow, startUpdatePoller, stopUpdatePoller } from '../store/updates'
 import { isSecondaryWindow } from '../store/windows'
 
+import type { AppSummary } from './app-market'
 import { ChatView } from './chat'
 import { requestComposerFocus, requestComposerInsert } from './chat/composer/focus'
 import { useComposerActions } from './chat/hooks/use-composer-actions'
@@ -128,11 +129,11 @@ import { useGroupRegistry } from './shell/use-group-registry'
 import { UpdatesOverlay } from './updates-overlay'
 
 const AgentsView = lazy(async () => ({ default: (await import('./agents')).AgentsView }))
+const AppMarketView = lazy(async () => ({ default: (await import('./app-market')).AppMarketView }))
 const ArtifactsView = lazy(async () => ({ default: (await import('./artifacts')).ArtifactsView }))
 const CommandCenterView = lazy(async () => ({ default: (await import('./command-center')).CommandCenterView }))
 const CronView = lazy(async () => ({ default: (await import('./cron')).CronView }))
 const StarmapView = lazy(async () => ({ default: (await import('./starmap')).StarmapView }))
-const MessagingView = lazy(async () => ({ default: (await import('./messaging')).MessagingView }))
 const ProfilesView = lazy(async () => ({ default: (await import('./profiles')).ProfilesView }))
 const SettingsView = lazy(async () => ({ default: (await import('./settings')).SettingsView }))
 const SkillsView = lazy(async () => ({ default: (await import('./skills')).SkillsView }))
@@ -185,6 +186,7 @@ export function DesktopController() {
   const busyRef = useRef(false)
   const creatingSessionRef = useRef(false)
   const messagingTranscriptSignatureRef = useRef(new Map<string, string>())
+  const [queuedAppBuilderPrompt, setQueuedAppBuilderPrompt] = useState<string | null>(null)
 
   const gatewayState = useStore($gatewayState)
   const activeSessionId = useStore($activeSessionId)
@@ -219,7 +221,6 @@ export function DesktopController() {
     closeOverlayToPreviousRoute,
     commandCenterInitialSection,
     commandCenterOpen,
-    cronOpen,
     currentView,
     openAgents,
     openCommandCenterSection,
@@ -627,6 +628,33 @@ export function DesktopController() {
     syncSessionStateToView,
     updateSessionState
   })
+
+  const openAppBuilder = useCallback(
+    (prompt: string) => {
+      setQueuedAppBuilderPrompt(prompt)
+      startFreshSessionDraft()
+    },
+    [startFreshSessionDraft]
+  )
+
+  // App Market navigation unmounts the composer before a fresh chat mounts.
+  // Keep the requested builder template in React state until that new composer
+  // is ready, instead of relying on a one-shot DOM event during the route swap.
+  useEffect(() => {
+    if (!queuedAppBuilderPrompt || location.pathname !== NEW_CHAT_ROUTE || !freshDraftReady) {
+      return undefined
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      window.setTimeout(() => {
+        requestComposerInsert(queuedAppBuilderPrompt, { mode: 'replace', target: 'main' })
+        requestComposerFocus('main')
+        setQueuedAppBuilderPrompt(null)
+      }, 0)
+    })
+
+    return () => window.cancelAnimationFrame(frame)
+  }, [freshDraftReady, location.pathname, queuedAppBuilderPrompt])
 
   // Single global listener for every rebindable hotkey (incl. profile switching)
   // plus the on-screen keybind editor's capture mode.
@@ -1109,15 +1137,6 @@ export function DesktopController() {
         </Suspense>
       )}
 
-      {cronOpen && (
-        <Suspense fallback={null}>
-          <CronView
-            onClose={closeOverlayToPreviousRoute}
-            onOpenSession={sessionId => navigate(sessionRoute(sessionId))}
-          />
-        </Suspense>
-      )}
-
       {profilesOpen && (
         <Suspense fallback={null}>
           <ProfilesView onClose={closeOverlayToPreviousRoute} />
@@ -1324,11 +1343,27 @@ export function DesktopController() {
           <Route
             element={
               <Suspense fallback={null}>
-                <MessagingView setStatusbarItemGroup={setStatusbarItemGroup} />
+                <AppMarketView
+                  onCreateApp={() => {
+                    openAppBuilder(
+                      '/app-builder\n\n我要创建一个 Web 应用。请使用应用创建流程与我协作，并先根据以下模板补齐需求：\n应用名称：\n目标用户：\n核心页面：\n所需数据与服务：\n主要交互：\n验收标准：'
+                    )
+                  }}
+                  onEditApp={(app: AppSummary) => {
+                    const needsDerivedApp = app.trust_state === 'builtin' || !app.source_editable
+
+                    const task = needsDerivedApp
+                      ? `我要以应用「${app.name}」（${app.id}）为蓝本创建一份可编辑的派生应用。请不要修改原应用；先梳理可复用的页面与数据需求，再使用新的用户应用 ID 创建工作区。\n\n希望调整的功能：`
+                      : `我要修改应用「${app.name}」（${app.id}）。请先检查当前版本和可编辑源代码，再按应用修改流程创建 checkout 工作区。\n\n本次修改目标：`
+
+                    openAppBuilder(`/app-builder\n\n${task}`)
+                  }}
+                />
               </Suspense>
             }
-            path="messaging"
+            path="apps"
           />
+          <Route element={<Navigate replace to={`${SETTINGS_ROUTE}?tab=messaging`} />} path="messaging" />
           <Route
             element={
               <Suspense fallback={null}>
@@ -1337,7 +1372,19 @@ export function DesktopController() {
             }
             path="artifacts"
           />
-          <Route element={null} path="cron" />
+          <Route
+            element={
+              <Suspense fallback={null}>
+                <CronView
+                  onClose={() => navigate(NEW_CHAT_ROUTE)}
+                  onOpenSession={sessionId => navigate(sessionRoute(sessionId))}
+                  presentation="page"
+                  setStatusbarItemGroup={setStatusbarItemGroup}
+                />
+              </Suspense>
+            }
+            path="cron"
+          />
           <Route element={null} path="profiles" />
           <Route element={null} path="settings" />
           <Route element={null} path="command-center" />

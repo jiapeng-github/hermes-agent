@@ -1,0 +1,38 @@
+schema_version: 1
+id: ai.hermes.industry-monitor
+name: 行业轮动于资金流向监控
+version: 1.0.1
+description: A 股市场广度、热点题材、行业轮动、资金流与北向成交监控
+entry: dist/index.html
+icon: icon.png
+sdk_version: 1.0.0
+min_runtime_version: 1.0.0
+display:
+  theme: auto
+  preferred_width: 1280
+  preferred_height: 820
+permissions:
+  agent: false
+  mcp_servers: []
+  storage:
+    mode: none
+    quota_mb: 0
+actions:
+  snapshot:
+    kind: service
+    title: 获取行业监控快照
+    handler: finance.industry.snapshot
+    input_schema: schemas/snapshot.input.json
+    output_schema: schemas/snapshot.output.json
+    timeout_seconds: 30
+    max_concurrent_runs: 2
+    cache_ttl_seconds: 5
+  refresh:
+    kind: service
+    title: 刷新行业监控数据
+    handler: finance.industry.refresh
+    input_schema: schemas/empty.input.json
+    output_schema: schemas/refresh.output.json
+    timeout_seconds: 30
+    max_concurrent_runs: 1
+    cache_ttl_seconds: 0

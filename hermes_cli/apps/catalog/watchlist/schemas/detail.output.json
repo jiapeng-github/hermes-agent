@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["ok", "status", "stock", "kline", "technicals", "summary"],
+  "properties": {
+    "ok": { "type": "boolean" },
+    "status": { "type": "string" },
+    "stock": { "type": "object" },
+    "kline": { "type": "array" },
+    "technicals": { "type": "object" },
+    "summary": { "type": "string" }
+  },
+  "additionalProperties": true
+}

@@ -1,0 +1,38 @@
+schema_version: 1
+id: ai.hermes.company-analysis
+name: 上市公司基本面分析
+version: 1.0.1
+description: 按公司名称或股票代码生成 A 股公司画像、财务趋势、估值与研报分析
+entry: dist/index.html
+icon: icon.png
+sdk_version: 1.0.0
+min_runtime_version: 1.0.0
+display:
+  theme: auto
+  preferred_width: 1280
+  preferred_height: 820
+permissions:
+  agent: false
+  mcp_servers: []
+  storage:
+    mode: persistent
+    quota_mb: 1
+actions:
+  analyze:
+    kind: service
+    title: 获取公司分析
+    handler: finance.company.analysis
+    input_schema: schemas/analysis.input.json
+    output_schema: schemas/analysis.output.json
+    timeout_seconds: 60
+    max_concurrent_runs: 2
+    cache_ttl_seconds: 10
+  refresh:
+    kind: service
+    title: 刷新公司分析
+    handler: finance.company.refresh
+    input_schema: schemas/refresh.input.json
+    output_schema: schemas/refresh.output.json
+    timeout_seconds: 30
+    max_concurrent_runs: 1
+    cache_ttl_seconds: 0

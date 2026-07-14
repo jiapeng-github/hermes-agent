@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["ok", "status", "indices", "items", "sectors", "summary", "gaps"],
+  "properties": {
+    "ok": { "type": "boolean" },
+    "status": { "type": "string" },
+    "indices": { "type": "array" },
+    "items": { "type": "array" },
+    "sectors": { "type": "array" },
+    "summary": { "type": "object" },
+    "gaps": { "type": "array" }
+  },
+  "additionalProperties": true
+}

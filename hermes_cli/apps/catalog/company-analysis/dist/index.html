@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>公司分析</title>
+    <link rel="stylesheet" href="/assets/app.css">
+  </head>
+  <body>
+    <header class="topbar company-topbar">
+      <div class="brand"><span class="brand-mark">⌁</span><div><h1>公司分析</h1><p id="status">输入公司名称或股票代码</p></div></div>
+      <form id="search-form" class="search-form"><label for="query">公司名称或股票代码</label><input id="query" value="宁德时代" autocomplete="off" placeholder="例如 宁德时代 / 300750"><button type="submit">搜索</button><button class="icon-button" id="refresh" type="button" title="刷新分析" aria-label="刷新分析">↻</button></form>
+    </header>
+    <main>
+      <section class="hero panel company-hero">
+        <div><span class="eyebrow">COMPANY PROFILE</span><div class="company-title"><h2 id="company-name">公司核心画像</h2><span id="company-code"></span><span id="industry"></span></div><p class="business" id="business"></p><div class="concepts" id="concepts"></div></div>
+        <div class="quote-card" id="quote"></div>
+      </section>
+      <section class="metric-grid company-metrics" id="metrics"></section>
+      <div class="two-column">
+        <section class="panel"><div class="panel-head"><div><span class="eyebrow">FINANCIAL TREND</span><h2>财务趋势</h2></div></div><div class="chart" id="financial-chart"></div></section>
+        <section class="panel"><div class="panel-head"><div><span class="eyebrow">PROFITABILITY</span><h2>盈利能力</h2></div></div><div class="line-chart" id="profitability"></div><div class="operating" id="operating"></div></section>
+      </div>
+      <div class="two-column">
+        <section class="panel"><div class="panel-head"><div><span class="eyebrow">VALUATION</span><h2>估值与价格</h2></div></div><div id="valuation"></div></section>
+        <section class="panel"><div class="panel-head"><div><span class="eyebrow">CAPITAL</span><h2>资金与经营质量</h2></div></div><div class="metric-grid mini-metrics" id="capital"></div></section>
+      </div>
+      <section class="panel"><div class="panel-head"><div><span class="eyebrow">PEERS</span><h2>同行对比</h2></div></div><div class="table-wrap"><table><thead><tr><th>公司</th><th>市值</th><th>毛利率</th><th>ROE</th><th>PE(TTM)</th></tr></thead><tbody id="peers"></tbody></table></div></section>
+      <div class="two-column research-grid">
+        <section class="panel"><div class="panel-head"><div><span class="eyebrow">HIGHLIGHTS</span><h2>投资亮点</h2></div></div><div class="bullet-list good" id="highlights"></div></section>
+        <section class="panel"><div class="panel-head"><div><span class="eyebrow">RISKS</span><h2>主要风险</h2></div></div><div class="bullet-list risk" id="risks"></div></section>
+      </div>
+      <section class="panel"><div class="panel-head"><div><span class="eyebrow">RESEARCH</span><h2>研报摘要</h2></div></div><div class="research" id="research"></div></section>
+      <section class="rating panel" id="rating"></section>
+      <section class="footnote" id="footnote"></section>
+    </main>
+    <dialog id="article-dialog"><div class="dialog-shell"><header><h2 id="article-title"></h2><button class="icon-button" id="article-close" aria-label="关闭">×</button></header><p id="article-meta"></p><div id="article-body"></div></div></dialog>
+    <script src="/assets/runtime.js"></script>
+    <script src="/assets/app.js"></script>
+  </body>
+</html>

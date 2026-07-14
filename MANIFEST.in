@@ -9,5 +9,9 @@ graft locales
 recursive-include plugins plugin.yaml plugin.yml
 # Gateway assets include images plus YAML catalogs such as status_phrases.yaml.
 recursive-include gateway/assets *
+# Local App Platform contracts and first-party browser bundles. The matching
+# package-data globs cover wheels; these rules keep downstream sdist builds whole.
+recursive-include hermes_cli/apps/contracts *.json *.yaml *.md
+recursive-include hermes_cli/apps/catalog *
 global-exclude __pycache__
 global-exclude *.py[cod]

@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["refresh_id", "status", "sections"],
+  "properties": {
+    "refresh_id": { "type": "string", "minLength": 1 },
+    "status": { "type": "string" },
+    "sections": { "type": "object" }
+  },
+  "additionalProperties": true
+}

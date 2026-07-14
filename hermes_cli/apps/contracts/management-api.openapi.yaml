@@ -1,0 +1,1006 @@
+openapi: 3.1.0
+info:
+  title: Hermes Local App Management API
+  version: 1.0.0
+  summary: Desktop management plane for local Hermes web applications
+  description: |
+    Frozen phase-1 management contract. This API is served only by the local
+    Hermes backend and uses the existing desktop/dashboard session
+    authentication. Browser-hosted apps never receive this credential and
+    cannot call the management plane. App execution uses the separate AppHost
+    Runtime protocol.
+servers:
+  - url: http://127.0.0.1:{port}
+    description: Local Hermes backend
+    variables:
+      port:
+        default: "8642"
+        description: Ephemeral or configured local backend port
+tags:
+  - name: Apps
+  - name: Launch
+  - name: Permissions
+  - name: Versions
+  - name: Packages
+security:
+  - sessionBearer: []
+paths:
+  /api/apps:
+    get:
+      tags: [Apps]
+      operationId: listApps
+      summary: List applications in the active profile
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+        - name: query
+          in: query
+          schema:
+            type: string
+            maxLength: 200
+      responses:
+        "200":
+          description: Application page
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /api/apps/{app_id}:
+    parameters:
+      - $ref: "#/components/parameters/AppId"
+    get:
+      tags: [Apps]
+      operationId: getApp
+      summary: Read one application and its active version
+      responses:
+        "200":
+          description: Application details
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Apps]
+      operationId: deleteApp
+      summary: Uninstall an application
+      description: Runtime data is preserved unless preserve_data is false.
+      parameters:
+        - name: preserve_data
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: true
+        - $ref: "#/components/parameters/IfMatch"
+      responses:
+        "204":
+          description: Application uninstalled
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/RevisionConflict"
+  /api/apps/{app_id}/launch:
+    parameters:
+      - $ref: "#/components/parameters/AppId"
+    post:
+      tags: [Launch]
+      operationId: launchApp
+      summary: Launch the active version in a dedicated local AppHost
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "201":
+          description: One-time browser launch URL
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Launch"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/PermissionRequired"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/RuntimeStartFailed"
+  /api/apps/{app_id}/stop:
+    parameters:
+      - $ref: "#/components/parameters/AppId"
+    post:
+      tags: [Launch]
+      operationId: stopApp
+      summary: Stop every AppHost launch for an application
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "204":
+          description: All launches stopped or already absent
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/apps/{app_id}/edit-context:
+    parameters:
+      - $ref: "#/components/parameters/AppId"
+    get:
+      tags: [Apps]
+      operationId: getAppEditContext
+      summary: Build the new-session template for modifying an application
+      responses:
+        "200":
+          description: Session template and editable source inventory
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EditContext"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /api/apps/{app_id}/permissions:
+    parameters:
+      - $ref: "#/components/parameters/AppId"
+    put:
+      tags: [Permissions]
+      operationId: updateAppPermissions
+      summary: Replace runtime permission grants
+      description: Grants must be a subset of the active manifest request.
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PermissionGrants"
+      responses:
+        "200":
+          description: Updated permission state
+          headers:
+            ETag:
+              $ref: "#/components/headers/ETag"
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PermissionState"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "412":
+          $ref: "#/components/responses/RevisionConflict"
+  /api/apps/{app_id}/enable:
+    parameters:
+      - $ref: "#/components/parameters/AppId"
+    post:
+      tags: [Apps]
+      operationId: enableApp
+      summary: Enable a disabled application
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          $ref: "#/components/responses/AppDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "412":
+          $ref: "#/components/responses/RevisionConflict"
+  /api/apps/{app_id}/disable:
+    parameters:
+      - $ref: "#/components/parameters/AppId"
+    post:
+      tags: [Apps]
+      operationId: disableApp
+      summary: Disable an application and stop its AppHosts
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          $ref: "#/components/responses/AppDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "412":
+          $ref: "#/components/responses/RevisionConflict"
+  /api/apps/{app_id}/versions:
+    parameters:
+      - $ref: "#/components/parameters/AppId"
+    get:
+      tags: [Versions]
+      operationId: listAppVersions
+      summary: List installed versions
+      responses:
+        "200":
+          description: Installed versions, newest first
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AppVersion"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/apps/{app_id}/versions/{version}/activate:
+    parameters:
+      - $ref: "#/components/parameters/AppId"
+      - $ref: "#/components/parameters/Version"
+    post:
+      tags: [Versions]
+      operationId: activateAppVersion
+      summary: Atomically activate an installed compatible version
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          $ref: "#/components/responses/AppDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "412":
+          $ref: "#/components/responses/RevisionConflict"
+  /api/apps/{app_id}/export:
+    parameters:
+      - $ref: "#/components/parameters/AppId"
+    post:
+      tags: [Packages]
+      operationId: exportAppPackage
+      summary: Export an application as a .happ package
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [include_source]
+              properties:
+                include_source:
+                  type: boolean
+      responses:
+        "200":
+          description: Portable .happ ZIP archive
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/vnd.hermes.app+zip:
+              schema:
+                type: string
+                contentMediaType: application/zip
+                contentEncoding: binary
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /api/apps/{app_id}/data:
+    parameters:
+      - $ref: "#/components/parameters/AppId"
+    delete:
+      tags: [Apps]
+      operationId: deleteAppData
+      summary: Permanently delete app-scoped runtime data
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "204":
+          description: Data deleted or already absent
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+  /api/apps/imports:
+    post:
+      tags: [Packages]
+      operationId: analyzeAppImport
+      summary: Stage and analyze a .happ package without installing it
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [package]
+              properties:
+                package:
+                  type: string
+                  contentMediaType: application/vnd.hermes.app+zip
+                  contentEncoding: binary
+      responses:
+        "201":
+          description: Immutable, expiring import plan; no app was installed
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportPlan"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "413":
+          $ref: "#/components/responses/PackageTooLarge"
+        "422":
+          $ref: "#/components/responses/ImportRejected"
+  /api/apps/imports/{import_id}:
+    parameters:
+      - $ref: "#/components/parameters/ImportId"
+    get:
+      tags: [Packages]
+      operationId: getAppImportPlan
+      summary: Read an unexpired import plan
+      responses:
+        "200":
+          description: Import plan
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportPlan"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [Packages]
+      operationId: discardAppImportPlan
+      summary: Discard a staged import plan
+      responses:
+        "204":
+          description: Plan and staged bytes removed
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestId"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/apps/imports/{import_id}/confirm:
+    parameters:
+      - $ref: "#/components/parameters/ImportId"
+    post:
+      tags: [Packages]
+      operationId: confirmAppImport
+      summary: Confirm permissions and atomically install a staged package
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImportConfirmation"
+      responses:
+        "201":
+          $ref: "#/components/responses/AppDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "410":
+          $ref: "#/components/responses/ImportExpired"
+        "422":
+          $ref: "#/components/responses/ImportRejected"
+components:
+  securitySchemes:
+    sessionBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: Hermes local session token
+      description: Existing ephemeral desktop/dashboard backend credential.
+  parameters:
+    AppId:
+      name: app_id
+      in: path
+      required: true
+      schema:
+        type: string
+        maxLength: 128
+        pattern: "^[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*){2,}$"
+    Version:
+      name: version
+      in: path
+      required: true
+      schema:
+        $ref: "#/components/schemas/Semver"
+    ImportId:
+      name: import_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema:
+        type: string
+        maxLength: 512
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 50
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: Strong ETag returned by the latest app read or mutation.
+      schema:
+        type: string
+        minLength: 3
+        maxLength: 128
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 128
+  headers:
+    RequestId:
+      description: Correlation ID generated or accepted by the backend.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+    ETag:
+      description: Strong revision token for optimistic concurrency.
+      schema:
+        type: string
+        minLength: 3
+        maxLength: 128
+  schemas:
+    Semver:
+      type: string
+      pattern: "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$"
+    StoragePermission:
+      type: object
+      additionalProperties: false
+      required: [mode, quota_mb]
+      properties:
+        mode:
+          type: string
+          enum: [none, session, persistent]
+        quota_mb:
+          type: integer
+          minimum: 0
+          maximum: 100
+    PermissionRequest:
+      type: object
+      additionalProperties: false
+      required: [agent, mcp_servers, storage]
+      properties:
+        agent:
+          type: boolean
+        mcp_servers:
+          type: array
+          uniqueItems: true
+          maxItems: 32
+          items:
+            type: string
+            maxLength: 128
+        storage:
+          $ref: "#/components/schemas/StoragePermission"
+    PermissionGrants:
+      type: object
+      additionalProperties: false
+      required: [agent, mcp_servers, storage]
+      properties:
+        agent:
+          type: boolean
+        mcp_servers:
+          type: array
+          uniqueItems: true
+          maxItems: 32
+          items:
+            type: string
+            maxLength: 128
+        storage:
+          $ref: "#/components/schemas/StoragePermission"
+    PermissionState:
+      type: object
+      additionalProperties: false
+      required: [requested, granted, revision]
+      properties:
+        requested:
+          $ref: "#/components/schemas/PermissionRequest"
+        granted:
+          $ref: "#/components/schemas/PermissionGrants"
+        revision:
+          type: integer
+          minimum: 1
+    AppStatus:
+      type: string
+      enum: [ready, disabled, incompatible, invalid, busy]
+    TrustState:
+      type: string
+      enum: [builtin, signed, local_untrusted]
+    AppSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - name
+        - description
+        - version
+        - enabled
+        - source_editable
+        - trust_state
+        - status
+        - requested_permissions
+        - granted_permissions
+      properties:
+        id:
+          type: string
+          maxLength: 128
+        name:
+          type: string
+          maxLength: 80
+        description:
+          type: string
+          maxLength: 500
+        version:
+          $ref: "#/components/schemas/Semver"
+        enabled:
+          type: boolean
+        source_editable:
+          type: boolean
+        trust_state:
+          $ref: "#/components/schemas/TrustState"
+        status:
+          $ref: "#/components/schemas/AppStatus"
+        requested_permissions:
+          $ref: "#/components/schemas/PermissionRequest"
+        granted_permissions:
+          $ref: "#/components/schemas/PermissionGrants"
+    AppDetail:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - name
+        - description
+        - version
+        - enabled
+        - source_editable
+        - trust_state
+        - status
+        - requested_permissions
+        - granted_permissions
+        - manifest
+        - revision
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          maxLength: 128
+        name:
+          type: string
+          maxLength: 80
+        description:
+          type: string
+          maxLength: 500
+        version:
+          $ref: "#/components/schemas/Semver"
+        enabled:
+          type: boolean
+        source_editable:
+          type: boolean
+        trust_state:
+          $ref: "#/components/schemas/TrustState"
+        status:
+          $ref: "#/components/schemas/AppStatus"
+        requested_permissions:
+          $ref: "#/components/schemas/PermissionRequest"
+        granted_permissions:
+          $ref: "#/components/schemas/PermissionGrants"
+        manifest:
+          $ref: "./app-manifest.schema.json"
+        revision:
+          type: integer
+          minimum: 1
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    AppList:
+      type: object
+      additionalProperties: false
+      required: [items, next_cursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AppSummary"
+        next_cursor:
+          oneOf:
+            - type: string
+              maxLength: 512
+            - type: "null"
+    Launch:
+      type: object
+      additionalProperties: false
+      required: [launch_id, url, expires_at]
+      properties:
+        launch_id:
+          type: string
+          format: uuid
+        url:
+          type: string
+          format: uri
+          pattern: "^http://127\\.0\\.0\\.1:[0-9]+/launch/"
+        expires_at:
+          type: string
+          format: date-time
+    EditContext:
+      type: object
+      additionalProperties: false
+      required: [app_id, version, source_editable, session_template, files]
+      properties:
+        app_id:
+          type: string
+          maxLength: 128
+        version:
+          $ref: "#/components/schemas/Semver"
+        source_editable:
+          type: boolean
+        session_template:
+          type: string
+          minLength: 1
+          maxLength: 20000
+        files:
+          type: array
+          maxItems: 5000
+          items:
+            type: string
+            maxLength: 1024
+    AppVersion:
+      type: object
+      additionalProperties: false
+      required: [version, active, compatible, source_editable, installed_at, checksum]
+      properties:
+        version:
+          $ref: "#/components/schemas/Semver"
+        active:
+          type: boolean
+        compatible:
+          type: boolean
+        source_editable:
+          type: boolean
+        installed_at:
+          type: string
+          format: date-time
+        checksum:
+          type: string
+          pattern: "^[a-f0-9]{64}$"
+    ImportConflict:
+      type: object
+      additionalProperties: false
+      required: [kind, existing_version, incoming_version]
+      properties:
+        kind:
+          type: string
+          enum: [none, app_id_exists, version_exists, version_checksum_mismatch]
+        existing_version:
+          oneOf:
+            - $ref: "#/components/schemas/Semver"
+            - type: "null"
+        incoming_version:
+          $ref: "#/components/schemas/Semver"
+    ImportPlan:
+      type: object
+      additionalProperties: false
+      required:
+        - import_id
+        - expires_at
+        - app
+        - source_included
+        - signature_state
+        - requested_permissions
+        - conflict
+        - warnings
+        - package_sha256
+      properties:
+        import_id:
+          type: string
+          format: uuid
+        expires_at:
+          type: string
+          format: date-time
+        app:
+          type: object
+          additionalProperties: false
+          required: [id, name, version, description]
+          properties:
+            id:
+              type: string
+              maxLength: 128
+            name:
+              type: string
+              maxLength: 80
+            version:
+              $ref: "#/components/schemas/Semver"
+            description:
+              type: string
+              maxLength: 500
+        source_included:
+          type: boolean
+        signature_state:
+          type: string
+          enum: [unsigned, valid_trusted, valid_untrusted, invalid]
+        requested_permissions:
+          $ref: "#/components/schemas/PermissionRequest"
+        conflict:
+          $ref: "#/components/schemas/ImportConflict"
+        warnings:
+          type: array
+          maxItems: 100
+          items:
+            type: string
+            maxLength: 1000
+        package_sha256:
+          type: string
+          pattern: "^[a-f0-9]{64}$"
+    ImportConfirmation:
+      type: object
+      additionalProperties: false
+      required: [package_sha256, conflict_mode, grants]
+      properties:
+        package_sha256:
+          type: string
+          pattern: "^[a-f0-9]{64}$"
+        conflict_mode:
+          type: string
+          enum: [install, update, copy]
+        copy_app_id:
+          type: string
+          maxLength: 128
+          pattern: "^[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*){2,}$"
+        grants:
+          $ref: "#/components/schemas/PermissionGrants"
+      allOf:
+        - if:
+            properties:
+              conflict_mode:
+                const: copy
+            required: [conflict_mode]
+          then:
+            required: [copy_app_id]
+          else:
+            not:
+              required: [copy_app_id]
+    ErrorDetail:
+      type: object
+      additionalProperties: true
+    Error:
+      type: object
+      additionalProperties: false
+      required: [code, message, retryable, request_id, details]
+      properties:
+        code:
+          type: string
+          enum:
+            - APP_REQUEST_INVALID
+            - APP_MANAGEMENT_UNAUTHORIZED
+            - APP_PERMISSION_REQUIRED
+            - APP_NOT_FOUND
+            - APP_VERSION_CONFLICT
+            - APP_BUSY
+            - APP_REVISION_CONFLICT
+            - APP_PACKAGE_TOO_LARGE
+            - APP_MANIFEST_INVALID
+            - APP_IMPORT_REJECTED
+            - APP_IMPORT_EXPIRED
+            - APP_RUNTIME_INCOMPATIBLE
+            - APP_RUNTIME_START_FAILED
+        message:
+          type: string
+          minLength: 1
+          maxLength: 1000
+        retryable:
+          type: boolean
+        request_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        details:
+          $ref: "#/components/schemas/ErrorDetail"
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          $ref: "#/components/schemas/Error"
+  responses:
+    AppDetail:
+      description: Updated application details
+      headers:
+        ETag:
+          $ref: "#/components/headers/ETag"
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AppDetail"
+    BadRequest:
+      description: Request violates the frozen contract
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    Unauthorized:
+      description: Missing or invalid local management session
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    PermissionRequired:
+      description: Required app permission has not been granted
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    NotFound:
+      description: Application, version, or import plan was not found
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    Conflict:
+      description: Current application state conflicts with the operation
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    RevisionConflict:
+      description: If-Match does not identify the current revision
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    PackageTooLarge:
+      description: Package exceeds a frozen .happ resource limit
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    ImportRejected:
+      description: Package validation or compatibility analysis failed
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    ImportExpired:
+      description: Import plan expired and staged data was removed
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    RuntimeStartFailed:
+      description: Local AppHost could not be started
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestId"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"

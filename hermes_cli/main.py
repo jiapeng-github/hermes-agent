@@ -304,6 +304,7 @@ from hermes_cli.subcommands.pairing import build_pairing_parser
 from hermes_cli.subcommands.plugins import build_plugins_parser
 from hermes_cli.subcommands.mcp import build_mcp_parser
 from hermes_cli.subcommands.claw import build_claw_parser
+from hermes_cli.subcommands.apps import build_apps_parser
 
 
 def _require_tty(command_name: str) -> None:
@@ -12228,7 +12229,7 @@ def _build_provider_choices() -> list[str]:
 # to parse.
 _BUILTIN_SUBCOMMANDS = frozenset(
     {
-        "acp", "auth", "backup", "bundles", "checkpoints", "claw", "completion",
+        "acp", "apps", "auth", "backup", "bundles", "checkpoints", "claw", "completion",
         "computer-use",
         "config", "console", "cron", "curator", "dashboard", "serve", "debug", "doctor",
         "dump", "fallback", "gateway", "hooks", "import", "insights",
@@ -12695,6 +12696,14 @@ def cmd_skills(args):
         skills_command(args)
 
 
+def cmd_apps(args):
+    from hermes_cli.apps.cli import apps_command
+
+    exit_code = apps_command(args)
+    if exit_code:
+        raise SystemExit(exit_code)
+
+
 def cmd_pairing(args):
     from hermes_cli.pairing import pairing_command
 
@@ -13090,6 +13099,9 @@ def main():
     # skills command  (parser built in hermes_cli/subcommands/skills.py)
     # =========================================================================
     build_skills_parser(subparsers, cmd_skills=cmd_skills)
+
+    # Applications stay at the product edge: CLI + Skill, not a core model tool.
+    build_apps_parser(subparsers, cmd_apps=cmd_apps)
 
     # =========================================================================
     # bundles command — skill bundles (alias /<name> for multiple skills)

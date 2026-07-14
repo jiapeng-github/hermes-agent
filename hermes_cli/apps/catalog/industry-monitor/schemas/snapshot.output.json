@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["ok", "status", "indices", "industry_heatmap", "topic_heatmap", "fund_flow", "pressure", "research", "summary", "gaps"],
+  "properties": {
+    "ok": { "type": "boolean" },
+    "status": { "type": "string" },
+    "indices": { "type": "array" },
+    "industry_heatmap": { "type": "array" },
+    "topic_heatmap": { "type": "array" },
+    "fund_flow": { "type": "array" },
+    "pressure": { "type": "array" },
+    "research": { "type": "array" },
+    "summary": { "type": "object" },
+    "gaps": { "type": "array" }
+  },
+  "additionalProperties": true
+}

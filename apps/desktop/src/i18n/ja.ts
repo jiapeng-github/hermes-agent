@@ -211,6 +211,7 @@ export const ja = defineLocale({
       providerAccounts: 'アカウント',
       providerApiKeys: 'API キー',
       gateway: 'ゲートウェイ',
+      messagingPlatforms: 'メッセージング',
       apiKeys: 'ツールとキー',
       keysTools: 'ツール',
       keysSettings: '設定',
@@ -1458,7 +1459,12 @@ export const ja = defineLocale({
   sidebar: {
     nav: {
       'new-session': '新しいセッション',
+      cron: '定期タスク',
+      'industry-monitor': '業界監視',
+      'company-analysis': '企業分析',
+      watchlist: 'ウォッチリスト',
       skills: 'スキルとツール',
+      'app-market': 'アプリ市場',
       messaging: 'メッセージング',
       artifacts: 'アーティファクト'
     },

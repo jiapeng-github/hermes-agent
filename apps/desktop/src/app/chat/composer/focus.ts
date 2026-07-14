@@ -14,7 +14,7 @@ import type { InlineRefInput } from './inline-refs'
 import { RICH_INPUT_SLOT } from './rich-editor'
 
 export type ComposerTarget = 'edit' | 'main'
-export type ComposerInsertMode = 'block' | 'inline'
+export type ComposerInsertMode = 'block' | 'inline' | 'replace'
 
 interface FocusDetail {
   target: ComposerTarget

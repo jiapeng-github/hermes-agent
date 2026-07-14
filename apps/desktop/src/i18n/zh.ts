@@ -296,6 +296,7 @@ export const zh: Translations = {
       providerAccounts: '账号',
       providerApiKeys: 'API 密钥',
       gateway: '网关',
+      messagingPlatforms: '消息平台',
       apiKeys: '工具与密钥',
       keysTools: '工具',
       keysSettings: '设置',
@@ -372,7 +373,8 @@ export const zh: Translations = {
       toolViewTitle: '工具调用显示',
       toolViewDesc: '产品模式隐藏原始工具数据；技术模式显示完整输入/输出。',
       uiScaleTitle: '界面缩放',
-      uiScaleDesc: (percent: number) => `缩放整个应用的文字和界面。也可使用 Cmd/Ctrl 加 +、- 或 0 调整。当前：${percent}%`,
+      uiScaleDesc: (percent: number) =>
+        `缩放整个应用的文字和界面。也可使用 Cmd/Ctrl 加 +、- 或 0 调整。当前：${percent}%`,
       translucencyTitle: '窗口透明',
       translucencyDesc: '让整个窗口透出桌面。仅支持 macOS 和 Windows。',
       embedsTitle: '内嵌预览',
@@ -1657,7 +1659,12 @@ export const zh: Translations = {
   sidebar: {
     nav: {
       'new-session': '新建会话',
+      cron: '定时任务',
+      'industry-monitor': '行业监控',
+      'company-analysis': '公司分析',
+      watchlist: '自选股',
       skills: '技能与工具',
+      'app-market': '应用市场',
       messaging: '消息平台',
       artifacts: '产物'
     },

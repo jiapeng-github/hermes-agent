@@ -3,9 +3,12 @@ export const NEW_CHAT_ROUTE = '/'
 export const SETTINGS_ROUTE = '/settings'
 export const COMMAND_CENTER_ROUTE = '/command-center'
 export const SKILLS_ROUTE = '/skills'
+export const APP_MARKET_ROUTE = '/apps'
 export const MESSAGING_ROUTE = '/messaging'
 export const ARTIFACTS_ROUTE = '/artifacts'
 export const CRON_ROUTE = '/cron'
+/** @deprecated Financial experiences launch from Application Market. */
+export const COMPANY_ANALYSIS_ROUTE = '/company-analysis'
 export const PROFILES_ROUTE = '/profiles'
 export const AGENTS_ROUTE = '/agents'
 export const STARMAP_ROUTE = '/starmap'
@@ -14,6 +17,7 @@ export type AppView =
   | 'agents'
   | 'artifacts'
   | 'chat'
+  | 'app-market'
   | 'command-center'
   | 'cron'
   | 'messaging'
@@ -25,6 +29,7 @@ export type AppView =
 export type AppRouteId =
   | 'agents'
   | 'artifacts'
+  | 'app-market'
   | 'command-center'
   | 'cron'
   | 'messaging'
@@ -45,6 +50,7 @@ export const APP_ROUTES = [
   { id: 'settings', path: SETTINGS_ROUTE, view: 'settings' },
   { id: 'command-center', path: COMMAND_CENTER_ROUTE, view: 'command-center' },
   { id: 'skills', path: SKILLS_ROUTE, view: 'skills' },
+  { id: 'app-market', path: APP_MARKET_ROUTE, view: 'app-market' },
   { id: 'messaging', path: MESSAGING_ROUTE, view: 'messaging' },
   { id: 'artifacts', path: ARTIFACTS_ROUTE, view: 'artifacts' },
   { id: 'cron', path: CRON_ROUTE, view: 'cron' },
@@ -62,7 +68,6 @@ const RESERVED_PATHS: ReadonlySet<string> = new Set(APP_ROUTES.map(route => rout
 export const OVERLAY_VIEWS: ReadonlySet<AppView> = new Set([
   'agents',
   'command-center',
-  'cron',
   'profiles',
   'settings',
   'starmap'

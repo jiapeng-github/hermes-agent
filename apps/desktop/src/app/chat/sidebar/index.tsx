@@ -95,7 +95,13 @@ import {
   setCurrentCwd
 } from '@/store/session'
 
-import { type AppView, ARTIFACTS_ROUTE, MESSAGING_ROUTE, SKILLS_ROUTE } from '../../routes'
+import {
+  APP_MARKET_ROUTE,
+  type AppView,
+  ARTIFACTS_ROUTE,
+  CRON_ROUTE,
+  SKILLS_ROUTE
+} from '../../routes'
 import type { SidebarNavItem } from '../../types'
 
 import { countLabel } from './chrome'
@@ -138,12 +144,23 @@ const SIDEBAR_NAV: SidebarNavItem[] = [
     action: 'new-session'
   },
   {
+    id: 'cron',
+    label: '',
+    icon: props => <Codicon name="clock" {...props} />,
+    route: CRON_ROUTE
+  },
+  {
     id: 'skills',
     label: '',
     icon: props => <Codicon name="symbol-misc" {...props} />,
     route: SKILLS_ROUTE
   },
-  { id: 'messaging', label: '', icon: props => <Codicon name="comment" {...props} />, route: MESSAGING_ROUTE },
+  {
+    id: 'app-market',
+    label: '',
+    icon: props => <Codicon name="extensions" {...props} />,
+    route: APP_MARKET_ROUTE
+  },
   { id: 'artifacts', label: '', icon: props => <Codicon name="files" {...props} />, route: ARTIFACTS_ROUTE }
 ]
 
@@ -1051,8 +1068,9 @@ export function ChatSidebar({
                 const isInteractive = Boolean(item.action) || Boolean(item.route)
 
                 const active =
+                  (item.id === 'app-market' && currentView === 'app-market') ||
                   (item.id === 'skills' && currentView === 'skills') ||
-                  (item.id === 'messaging' && currentView === 'messaging') ||
+                  (item.id === 'cron' && currentView === 'cron') ||
                   (item.id === 'artifacts' && currentView === 'artifacts')
 
                 const isNewSession = item.id === 'new-session'

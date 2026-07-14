@@ -8,6 +8,8 @@ import type {
   AudioTranscriptionResponse,
   AuxiliaryModelsResponse,
   BackendUpdateCheckResponse,
+  CompanyAnalysisRefreshResponse,
+  CompanyAnalysisSnapshot,
   ComputerUseStatus,
   ConfigSchemaResponse,
   CronJob,
@@ -17,8 +19,11 @@ import type {
   DebugShareResponse,
   ElevenLabsVoicesResponse,
   EnvVarInfo,
+  HermesAppLaunch,
   HermesConfig,
   HermesConfigRecord,
+  IndustryMonitorRefreshResponse,
+  IndustryMonitorSnapshot,
   LogsResponse,
   McpCatalogResponse,
   McpServerSummary,
@@ -54,7 +59,11 @@ import type {
   StatusResponse,
   ToolsetConfig,
   ToolsetInfo,
-  ToolsetModelsResponse
+  ToolsetModelsResponse,
+  WatchlistMutationResponse,
+  WatchlistRefreshResponse,
+  WatchlistSnapshot,
+  WatchlistStockDetail
 } from '@/types/hermes'
 
 // Desktop startup fires a burst of read-only data calls (config, profiles,
@@ -94,6 +103,24 @@ export type {
   AudioTranscriptionResponse,
   AuxiliaryModelsResponse,
   BackendUpdateCheckResponse,
+  CompanyAnalysisArticle,
+  CompanyAnalysisCapital,
+  CompanyAnalysisCashFlow,
+  CompanyAnalysisFinancialTrend,
+  CompanyAnalysisGap,
+  CompanyAnalysisMetric,
+  CompanyAnalysisOperatingMetric,
+  CompanyAnalysisPeer,
+  CompanyAnalysisProfitability,
+  CompanyAnalysisQuote,
+  CompanyAnalysisRating,
+  CompanyAnalysisRefreshResponse,
+  CompanyAnalysisRefreshState,
+  CompanyAnalysisResearch,
+  CompanyAnalysisResolved,
+  CompanyAnalysisSeriesPoint,
+  CompanyAnalysisSnapshot,
+  CompanyAnalysisValuation,
   ComputerUseCheck,
   ComputerUsePermissionSource,
   ComputerUseStatus,
@@ -1126,6 +1153,99 @@ export function installMcpCatalogEntry(
     method: 'POST',
     body: { name, env, enable: true },
     timeoutMs: 60_000
+  })
+}
+
+export function getCompanyAnalysisSnapshot(query = '宁德时代'): Promise<CompanyAnalysisSnapshot> {
+  return window.hermesDesktop.api<CompanyAnalysisSnapshot>({
+    ...profileScoped(),
+    path: `/api/finance/company-analysis?query=${encodeURIComponent(query)}`,
+    timeoutMs: 15_000
+  })
+}
+
+export function refreshCompanyAnalysisSnapshot(query: string): Promise<CompanyAnalysisRefreshResponse> {
+  return window.hermesDesktop.api<CompanyAnalysisRefreshResponse>({
+    ...profileScoped(),
+    path: '/api/finance/company-analysis/refresh',
+    method: 'POST',
+    body: { query },
+    timeoutMs: 15_000
+  })
+}
+
+export function getIndustryMonitorSnapshot(): Promise<IndustryMonitorSnapshot> {
+  return window.hermesDesktop.api<IndustryMonitorSnapshot>({
+    ...profileScoped(),
+    path: '/api/finance/industry-monitor',
+    timeoutMs: 15_000
+  })
+}
+
+export function refreshIndustryMonitorSnapshot(): Promise<IndustryMonitorRefreshResponse> {
+  return window.hermesDesktop.api<IndustryMonitorRefreshResponse>({
+    ...profileScoped(),
+    path: '/api/finance/industry-monitor/refresh',
+    method: 'POST',
+    body: {},
+    timeoutMs: 15_000
+  })
+}
+
+export function getWatchlistSnapshot(): Promise<WatchlistSnapshot> {
+  return window.hermesDesktop.api<WatchlistSnapshot>({
+    ...profileScoped(),
+    path: '/api/finance/watchlist',
+    timeoutMs: 15_000
+  })
+}
+
+export function launchHermesApp(appId: string): Promise<HermesAppLaunch> {
+  return window.hermesDesktop.api<HermesAppLaunch>({
+    ...profileScoped(),
+    path: `/api/apps/${encodeURIComponent(appId)}/launch`,
+    method: 'POST',
+    body: {},
+    timeoutMs: 15_000
+  })
+}
+
+export function refreshWatchlistSnapshot(): Promise<WatchlistRefreshResponse> {
+  return window.hermesDesktop.api<WatchlistRefreshResponse>({
+    ...profileScoped(),
+    path: '/api/finance/watchlist/refresh',
+    method: 'POST',
+    body: {},
+    timeoutMs: 15_000
+  })
+}
+
+export function addWatchlistStock(query: string): Promise<WatchlistMutationResponse> {
+  return window.hermesDesktop.api<WatchlistMutationResponse>({
+    ...profileScoped(),
+    path: '/api/finance/watchlist/stocks',
+    method: 'POST',
+    body: { query },
+    timeoutMs: 45_000
+  })
+}
+
+export function removeWatchlistStock(code: string): Promise<WatchlistMutationResponse> {
+  return window.hermesDesktop.api<WatchlistMutationResponse>({
+    ...profileScoped(),
+    path: `/api/finance/watchlist/stocks/${encodeURIComponent(code)}`,
+    method: 'DELETE',
+    timeoutMs: 15_000
+  })
+}
+
+export function getWatchlistStockDetail(code: string, force = false): Promise<WatchlistStockDetail> {
+  const refresh = force ? '?force=true' : ''
+
+  return window.hermesDesktop.api<WatchlistStockDetail>({
+    ...profileScoped(),
+    path: `/api/finance/watchlist/stocks/${encodeURIComponent(code)}/detail${refresh}`,
+    timeoutMs: 90_000
   })
 }
 

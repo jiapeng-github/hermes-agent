@@ -50,6 +50,8 @@ const { fetchMarketplaceThemes, searchMarketplaceThemes } = require('./vscode-ma
 const { buildDesktopBackendEnv, normalizeHermesHomeRoot } = require('./backend-env.cjs')
 const { readWindowsUserEnvVar } = require('./windows-user-env.cjs')
 const { readWslWindowsClipboardImage } = require('./wsl-clipboard-image.cjs')
+const { analyzeAppPackage, exportAppPackage } = require('./app-packages.cjs')
+const { openAppLaunchUrl } = require('./app-browser.cjs')
 const {
   nativeOverlayWidth: computeNativeOverlayWidth,
   macTitleBarOverlayHeight
@@ -6593,6 +6595,31 @@ ipcMain.handle('hermes:api', async (_event, request) => {
     body: request?.body,
     timeoutMs
   })
+})
+
+ipcMain.handle('hermes:apps:import:select', async (_event, profile) => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: '导入应用',
+    properties: ['openFile'],
+    filters: [{ name: 'Hermes 应用', extensions: ['happ'] }]
+  })
+  if (result.canceled || result.filePaths.length !== 1) return null
+  const connection = await ensureBackend(profile || null)
+  return analyzeAppPackage(connection, result.filePaths[0])
+})
+
+ipcMain.handle('hermes:apps:open', (_event, url) => openAppLaunchUrl(url, value => shell.openExternal(value)))
+
+ipcMain.handle('hermes:apps:export', async (_event, appId, options = {}, profile) => {
+  const safeName = String(appId || 'application').replace(/[^A-Za-z0-9._-]/g, '_')
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: '导出应用',
+    defaultPath: `${safeName}.happ`,
+    filters: [{ name: 'Hermes 应用', extensions: ['happ'] }]
+  })
+  if (result.canceled || !result.filePath) return { canceled: true }
+  const connection = await ensureBackend(profile || null)
+  return exportAppPackage(connection, appId, result.filePath, options)
 })
 
 ipcMain.handle('hermes:notify', (_event, payload) => {

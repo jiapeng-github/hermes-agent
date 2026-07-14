@@ -29,7 +29,11 @@ if (import.meta.env.MODE !== 'production') {
 // The pet overlay rides this same bundle (`?win=overlay`) but mounts a tiny,
 // transparent, gateway-less surface instead of the full app. Branch before any
 // app-shell work so the overlay window stays cheap.
-if (new URLSearchParams(window.location.search).get('win') === 'overlay') {
+const windowMode = new URLSearchParams(window.location.search).get('win')
+
+if (import.meta.env.MODE !== 'production' && windowMode === 'app-market-preview') {
+  void import('./app/app-market/preview-root').then(({ mountAppMarketPreview }) => mountAppMarketPreview())
+} else if (windowMode === 'overlay') {
   void import('./app/pet-overlay/overlay-root').then(({ mountPetOverlay }) => mountPetOverlay())
 } else {
   createRoot(document.getElementById('root')!).render(

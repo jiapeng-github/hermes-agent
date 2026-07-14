@@ -33,6 +33,7 @@ import type { SetStatusbarItemGroup } from '../shell/statusbar-controls'
 import { PlatformAvatar } from './platform-icon'
 
 interface MessagingViewProps extends React.ComponentProps<'section'> {
+  embedded?: boolean
   setStatusbarItemGroup?: SetStatusbarItemGroup
 }
 
@@ -99,7 +100,11 @@ function fieldCopy(field: MessagingEnvVarInfo, m: Translations['messaging']) {
   }
 }
 
-export function MessagingView({ setStatusbarItemGroup: _setStatusbarItemGroup, ...props }: MessagingViewProps) {
+export function MessagingView({
+  embedded = false,
+  setStatusbarItemGroup: _setStatusbarItemGroup,
+  ...props
+}: MessagingViewProps) {
   const { t } = useI18n()
   const m = t.messaging
   // Both save/toggle toasts offer the same one-click restart.
@@ -267,6 +272,7 @@ export function MessagingView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
   return (
     <PageSearchShell
       {...props}
+      headerClassName={embedded ? 'pt-0!' : undefined}
       onSearchChange={setQuery}
       searchHidden={(platforms?.length ?? 0) === 0}
       searchHints={platforms?.slice(0, 5).map(platform => t.common.tryHint(platform.name.toLowerCase()))}

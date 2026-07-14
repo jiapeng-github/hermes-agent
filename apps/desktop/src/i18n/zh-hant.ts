@@ -205,6 +205,7 @@ export const zhHant = defineLocale({
       providerAccounts: '帳號',
       providerApiKeys: 'API 金鑰',
       gateway: '閘道',
+      messagingPlatforms: '訊息平台',
       apiKeys: '工具與金鑰',
       keysTools: '工具',
       keysSettings: '設定',
@@ -281,7 +282,8 @@ export const zhHant = defineLocale({
       toolViewTitle: '工具呼叫顯示',
       toolViewDesc: '產品模式會隱藏原始工具 payload；技術模式會顯示完整輸入/輸出。',
       uiScaleTitle: '介面縮放',
-      uiScaleDesc: (percent: number) => `縮放整個應用程式的文字與介面。也可使用 Cmd/Ctrl 加 +、- 或 0 調整。目前：${percent}%`,
+      uiScaleDesc: (percent: number) =>
+        `縮放整個應用程式的文字與介面。也可使用 Cmd/Ctrl 加 +、- 或 0 調整。目前：${percent}%`,
       translucencyTitle: '視窗透明',
       translucencyDesc: '讓整個視窗透出桌面。僅支援 macOS 與 Windows。',
       embedsTitle: '內嵌預覽',
@@ -1410,7 +1412,12 @@ export const zhHant = defineLocale({
   sidebar: {
     nav: {
       'new-session': '新工作階段',
+      cron: '定時任務',
+      'industry-monitor': '行業監控',
+      'company-analysis': '公司分析',
+      watchlist: '自選股',
       skills: '技能與工具',
+      'app-market': '應用市場',
       messaging: '訊息平台',
       artifacts: '成品'
     },

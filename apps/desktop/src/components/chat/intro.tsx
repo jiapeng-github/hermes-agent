@@ -22,24 +22,24 @@ const NEUTRAL_PERSONALITIES = new Set(['', 'default', 'none', 'neutral'])
 
 const FALLBACK_COPY: IntroCopy[] = [
   {
-    headline: 'What are we moving today?',
-    body: "Send a bug, branch, plan, or rough idea. I'll inspect the repo and turn it into the next concrete step."
+    headline: '今天关注哪只股票？',
+    body: '输入股票代码、公司名称或投资问题。我会帮你整理行情、财务、消息面和风险线索。'
   },
   {
-    headline: "What's on your mind?",
-    body: "Bring the code, question, or stuck part. I'll read the room before making changes."
+    headline: '从一个标的开始。',
+    body: '告诉我你想研究的股票、行业或组合，我会把关键指标和后续问题拆清楚。'
   },
   {
-    headline: 'What should Hermes look at?',
-    body: "Send the task, failing path, or half-formed plan. I'll help turn it into action."
+    headline: '要分析什么机会？',
+    body: '给我一段想法、公告或财报片段，我会协助提炼投资逻辑、催化因素和不确定性。'
   },
   {
-    headline: 'Where should we start?',
-    body: "Bring the problem, goal, or file. I'll inspect first and keep the next step concrete."
+    headline: '从市场、行业还是个股开始？',
+    body: '描述你的研究目标，我会先梳理框架，再给出可执行的分析路径。'
   },
   {
-    headline: 'What needs attention?',
-    body: "Send the context you have. I'll help sort it into a plan or a fix."
+    headline: '哪些风险需要关注？',
+    body: '贴入持仓、观点或新闻，我会帮你检查估值、基本面、情绪和潜在风险。'
   }
 ]
 
@@ -144,7 +144,7 @@ function pickCopy(copies: IntroCopy[], seed = 0): IntroCopy {
   return copies[Math.abs(seed) % copies.length] || FALLBACK_COPY[0]
 }
 
-const WORDMARK = 'HERMES AGENT'
+const WORDMARK = 'STOCK AGENT'
 
 function resolveCopy(personality?: string, seed?: number): IntroCopy {
   const personalityKey = normalizeKey(personality)

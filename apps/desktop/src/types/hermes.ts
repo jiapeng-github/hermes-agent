@@ -1021,6 +1021,435 @@ export interface McpCatalogResponse {
   diagnostics: { name: string; kind: string; message: string }[]
 }
 
+export interface CompanyAnalysisGap {
+  key: string
+  title: string
+  message: string
+  severity: 'error' | 'info' | 'warning'
+}
+
+export interface CompanyAnalysisRefreshState {
+  cache_state: 'empty' | 'warm' | string
+  completed_at: string | null
+  error: string | null
+  refresh_id: string | null
+  refreshing: boolean
+  sections: Record<string, 'failed' | 'refreshing' | 'success' | string>
+  started_at: string | null
+  status: 'failed' | 'idle' | 'not-found' | 'running' | 'success' | string
+}
+
+export interface CompanyAnalysisResolved {
+  name: string
+  code: string | null
+  exchange: string | null
+  industry: string | null
+  business: string | null
+  concepts: string[]
+}
+
+export interface CompanyAnalysisQuote extends CompanyAnalysisResolved {
+  trade_date: string | null
+  price: number | null
+  change_percent: number | null
+  change_amount: number | null
+  market_cap_yi: number | null
+  float_market_cap_yi: number | null
+  pe_ttm: number | null
+  pb: number | null
+  gross_margin_percent: number | null
+  roe_percent: number | null
+  turnover_yi: number | null
+  turnover_rate_percent: number | null
+  volume_ratio: number | null
+  high_price: number | null
+  low_price: number | null
+}
+
+export interface CompanyAnalysisMetric {
+  label: string
+  value: number | null
+  unit: string
+  caption: string
+  tone: 'bad' | 'good' | 'neutral' | string
+}
+
+export interface CompanyAnalysisSeriesPoint {
+  period: string
+  value: number
+}
+
+export interface CompanyAnalysisFinancialTrend {
+  periods: string[]
+  revenue_yi: CompanyAnalysisSeriesPoint[]
+  net_profit_yi: CompanyAnalysisSeriesPoint[]
+}
+
+export interface CompanyAnalysisProfitability {
+  periods: string[]
+  gross_margin_percent: CompanyAnalysisSeriesPoint[]
+  roe_percent: CompanyAnalysisSeriesPoint[]
+}
+
+export interface CompanyAnalysisCashFlow {
+  periods: string[]
+  operating_cash_flow_yi: CompanyAnalysisSeriesPoint[]
+}
+
+export interface CompanyAnalysisOperatingMetric {
+  label: string
+  value: number | null
+  unit: string
+}
+
+export interface CompanyAnalysisValuation {
+  price_range: {
+    low: number | null
+    high: number | null
+    current: number | null
+    percentile: number | null
+    label: string
+  }
+  pe_ttm: number | null
+  pb: number | null
+  peer_median_pe: number | null
+  signal: string
+}
+
+export interface CompanyAnalysisCapital {
+  turnover_yi: number | null
+  turnover_rate_percent: number | null
+  volume_ratio: number | null
+  activity_label: string
+  turnover_to_market_cap_percent: number | null
+  momentum_label: string
+}
+
+export interface CompanyAnalysisPeer {
+  name: string
+  code: string
+  is_target: boolean
+  market_cap_yi: number | null
+  pe_ttm: number | null
+  pb: number | null
+  gross_margin_percent: number | null
+  roe_percent: number | null
+  industry: string
+}
+
+export interface CompanyAnalysisArticle {
+  title: string
+  summary: string
+  published_at: string
+  source: string
+  url: string | null
+}
+
+export interface CompanyAnalysisResearch {
+  articles: CompanyAnalysisArticle[]
+  highlights: string[]
+  risks: string[]
+}
+
+export interface CompanyAnalysisRating {
+  grade: string
+  score: number | null
+  summary: string
+  tags: string[]
+}
+
+export interface CompanyAnalysisSnapshot {
+  ok: boolean
+  source: string
+  status: string
+  query: string
+  generated_at: string
+  cached_at?: string | null
+  as_of: string | null
+  resolved: CompanyAnalysisResolved
+  quote: CompanyAnalysisQuote
+  core_metrics: CompanyAnalysisMetric[]
+  financial_trend: CompanyAnalysisFinancialTrend
+  profitability: CompanyAnalysisProfitability
+  cash_flow: CompanyAnalysisCashFlow
+  operating_metrics: CompanyAnalysisOperatingMetric[]
+  valuation: CompanyAnalysisValuation
+  capital: CompanyAnalysisCapital
+  peers: CompanyAnalysisPeer[]
+  research: CompanyAnalysisResearch
+  rating: CompanyAnalysisRating
+  summary: {
+    headline: string
+    details: string[]
+  }
+  gaps: CompanyAnalysisGap[]
+  methodology?: {
+    title: string
+    description: string
+  }
+  refresh?: CompanyAnalysisRefreshState
+}
+
+export interface CompanyAnalysisRefreshResponse {
+  completed_at: string | null
+  error: string | null
+  query: string
+  refresh_id: string
+  sections: Record<string, string>
+  started_at: string
+  status: string
+}
+
+export interface IndustryMonitorGroup {
+  name: string
+  category: string
+  side: string
+  sample_count: number
+  avg_change_percent: number
+  turnover_yi: number
+  main_net_inflow_yi: number
+  leaders: string[]
+}
+
+export interface IndustryMonitorIndex {
+  name: string
+  code: string | null
+  value: number | null
+  change_percent: number | null
+  turnover: string | null
+}
+
+export interface IndustryMonitorNorthboundPoint {
+  date: string
+  total_yi: number
+  sh_yi: number
+  sz_yi: number
+}
+
+export interface IndustryMonitorNorthbound {
+  average_total_yi: number
+  current: IndustryMonitorNorthboundPoint & {
+    activity_label: string
+    activity_ratio: number
+    bias_label: string
+    sz_share_percent: number
+  }
+  note: string
+  series: IndustryMonitorNorthboundPoint[]
+}
+
+export interface IndustryMonitorBreadth {
+  as_of: string | null
+  advancers: number
+  decliners: number
+  flat: number
+  limit_up: number
+  limit_down: number
+  total: number
+  advance_ratio: number
+  sentiment_label: string
+}
+
+export interface IndustryMonitorResearchView {
+  title: string
+  summary: string
+  published_at: string
+  source: string
+  url: string | null
+}
+
+export interface IndustryMonitorGap {
+  key: string
+  title: string
+  message: string
+  severity: 'error' | 'info' | 'warning'
+}
+
+export interface IndustryMonitorRefreshState {
+  cache_state: 'empty' | 'warm' | string
+  completed_at: string | null
+  error: string | null
+  refresh_id: string | null
+  refreshing: boolean
+  sections: Record<string, 'failed' | 'refreshing' | 'success' | string>
+  started_at: string | null
+  status: 'failed' | 'idle' | 'not-found' | 'running' | 'success' | string
+}
+
+export interface IndustryMonitorSnapshot {
+  ok: boolean
+  source: string
+  status: string
+  generated_at: string
+  cached_at?: string | null
+  as_of: string | null
+  market_turnover_yi: number | null
+  market_breadth: IndustryMonitorBreadth | null
+  market_sample_size: number
+  indices: IndustryMonitorIndex[]
+  industry_heatmap: IndustryMonitorGroup[]
+  topic_heatmap: IndustryMonitorGroup[]
+  fund_flow: IndustryMonitorGroup[]
+  pressure: IndustryMonitorGroup[]
+  northbound: IndustryMonitorNorthbound | null
+  research: IndustryMonitorResearchView[]
+  summary: {
+    headline: string
+    details: string[]
+  }
+  gaps: IndustryMonitorGap[]
+  methodology?: {
+    title: string
+    description: string
+  }
+  refresh?: IndustryMonitorRefreshState
+}
+
+export interface IndustryMonitorRefreshResponse {
+  completed_at: string | null
+  error: string | null
+  refresh_id: string
+  sections: Record<string, string>
+  started_at: string
+  status: string
+}
+
+export interface WatchlistQuote {
+  code: string
+  name: string
+  exchange: string
+  currency: string
+  industry: string
+  sector: string
+  price: number | null
+  change_percent: number | null
+  change_amount: number | null
+  turnover_yi: number | null
+  main_net_flow_yi: number | null
+  sparkline: number[]
+  as_of: string | null
+  quote_status: 'loading' | 'missing' | 'ok' | string
+}
+
+export interface WatchlistSector {
+  name: string
+  stock_count: number
+  avg_change_percent: number | null
+  main_net_flow_yi: number
+}
+
+export interface WatchlistSummary {
+  total: number
+  priced: number
+  rising: number
+  falling: number
+  flat: number
+  main_net_flow_yi: number
+  strongest_sector: WatchlistSector | null
+  weakest_sector: WatchlistSector | null
+  headline: string
+}
+
+export interface WatchlistGap {
+  key: string
+  title: string
+  message: string
+  severity: 'error' | 'info' | 'warning'
+}
+
+export interface WatchlistRefreshState {
+  cache_state: 'empty' | 'warm' | string
+  completed_at: string | null
+  error: string | null
+  refresh_id: string | null
+  refreshing: boolean
+  sections: Record<string, 'failed' | 'refreshing' | 'success' | string>
+  started_at: string | null
+  status: 'failed' | 'idle' | 'not-found' | 'running' | 'success' | string
+}
+
+export interface WatchlistSnapshot {
+  ok: boolean
+  source: string
+  status: string
+  generated_at: string
+  cached_at?: string | null
+  as_of: string | null
+  indices: IndustryMonitorIndex[]
+  items: WatchlistQuote[]
+  sectors: WatchlistSector[]
+  summary: WatchlistSummary
+  gaps: WatchlistGap[]
+  methodology?: {
+    title: string
+    description: string
+  }
+  refresh?: WatchlistRefreshState
+}
+
+export interface WatchlistRefreshResponse {
+  completed_at: string | null
+  error: string | null
+  refresh_id: string
+  sections: Record<string, string>
+  started_at: string
+  status: string
+}
+
+export interface WatchlistMutationResponse {
+  ok: boolean
+  added?: boolean
+  removed?: boolean
+  code?: string
+  item?: {
+    code: string
+    name: string
+    exchange: string
+    industry: string
+    added_at: string
+  }
+  refresh?: WatchlistRefreshResponse
+}
+
+export interface WatchlistKlinePoint {
+  date: string
+  open: number
+  high: number
+  low: number
+  close: number
+  volume: number | null
+  turnover_yi: number | null
+  change_percent: number | null
+}
+
+export interface WatchlistTechnicals {
+  ma5: number | null
+  ma20: number | null
+  support: number | null
+  resistance: number | null
+  period_change_percent: number | null
+  amplitude_percent: number | null
+  trend_label: string
+}
+
+export interface WatchlistStockDetail {
+  ok: boolean
+  source: string
+  status: string
+  generated_at: string
+  as_of: string | null
+  stock: WatchlistQuote
+  kline: WatchlistKlinePoint[]
+  technicals: WatchlistTechnicals
+  summary: string
+}
+
+export interface HermesAppLaunch {
+  launch_id: string
+  url: string
+  expires_at: string
+}
+
 /** `GET /api/memory` — active provider + built-in memory file sizes. */
 export interface MemoryStatusResponse {
   active: string

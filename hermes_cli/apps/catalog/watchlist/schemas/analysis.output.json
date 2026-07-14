@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["ok", "status", "resolved", "quote", "rating", "summary", "research"],
+  "properties": {
+    "ok": { "type": "boolean" },
+    "status": { "type": "string" },
+    "resolved": { "type": "object" },
+    "quote": { "type": "object" },
+    "rating": { "type": "object" },
+    "summary": { "type": "object" },
+    "research": { "type": "object" }
+  },
+  "additionalProperties": true
+}

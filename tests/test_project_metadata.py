@@ -252,3 +252,13 @@ def test_nested_bundled_plugin_metadata_is_packaged():
     assert "**/plugin.yaml" in plugin_data
     assert "**/plugin.yml" in plugin_data
     assert "**/README.md" in plugin_data
+
+
+def test_frozen_app_contracts_are_packaged():
+    """Installed desktop backends must retain every App Runtime contract."""
+    package_data = _load_package_data()
+    hermes_cli_data = package_data["hermes_cli"]
+
+    assert "apps/contracts/*.json" in hermes_cli_data
+    assert "apps/contracts/*.yaml" in hermes_cli_data
+    assert "apps/contracts/*.md" in hermes_cli_data

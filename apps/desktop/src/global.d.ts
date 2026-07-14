@@ -63,6 +63,15 @@ declare global {
         set: (name: string | null) => Promise<DesktopActiveProfile>
       }
       api: <T>(request: HermesApiRequest) => Promise<T>
+      apps: {
+        openLaunchUrl: (url: string) => Promise<boolean>
+        selectAndAnalyzePackage: (profile?: null | string) => Promise<AppImportPlan | null>
+        exportPackage: (
+          appId: string,
+          options: AppExportOptions,
+          profile?: null | string
+        ) => Promise<AppPackageSaveResult>
+      }
       notify: (payload: HermesNotification) => Promise<boolean>
       requestMicrophoneAccess: () => Promise<boolean>
       readFileDataUrl: (filePath: string) => Promise<string>
@@ -370,6 +379,40 @@ export interface HermesConnection {
   // connection belongs to.
   profile?: string
   windowButtonPosition: { x: number; y: number } | null
+}
+
+export interface AppExportOptions {
+  includeSource: boolean
+}
+
+export interface AppPackageSaveResult {
+  canceled: boolean
+  path?: string
+}
+
+export interface AppImportPlan {
+  import_id: string
+  expires_at: string
+  app: {
+    id: string
+    name: string
+    version: string
+    description: string
+  }
+  source_included: boolean
+  signature_state: 'unsigned' | 'valid_trusted' | 'valid_untrusted' | 'invalid'
+  requested_permissions: {
+    agent: boolean
+    mcp_servers: string[]
+    storage: { mode: 'none' | 'session' | 'persistent'; quota_mb: number }
+  }
+  conflict: {
+    kind: 'none' | 'app_id_exists' | 'version_exists' | 'version_checksum_mismatch'
+    existing_version: null | string
+    incoming_version: string
+  }
+  warnings: string[]
+  package_sha256: string
 }
 
 export interface HermesTitleBarTheme {

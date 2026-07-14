@@ -246,10 +246,16 @@ function matchesQuery(job: CronJob, q: string): boolean {
 interface CronViewProps extends React.ComponentProps<'section'> {
   onClose: () => void
   onOpenSession?: (sessionId: string) => void
+  presentation?: 'overlay' | 'page'
   setStatusbarItemGroup?: SetStatusbarItemGroup
 }
 
-export function CronView({ onClose, onOpenSession, setStatusbarItemGroup: _setStatusbarItemGroup }: CronViewProps) {
+export function CronView({
+  onClose,
+  onOpenSession,
+  presentation = 'overlay',
+  setStatusbarItemGroup: _setStatusbarItemGroup
+}: CronViewProps) {
   const { t } = useI18n()
   const c = t.cron
   // Source of truth is the shared atom (also fed by the controller poll), so the
@@ -411,7 +417,7 @@ export function CronView({ onClose, onOpenSession, setStatusbarItemGroup: _setSt
   }
 
   return (
-    <Panel closeLabel={c.close} onClose={onClose}>
+    <Panel closeLabel={c.close} onClose={onClose} presentation={presentation}>
       {loading && jobs.length === 0 ? (
         <PageLoader label={c.loading} />
       ) : totalCount === 0 ? (

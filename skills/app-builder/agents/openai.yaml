@@ -1,0 +1,4 @@
+interface:
+  display_name: "Hermes App Builder"
+  short_description: "创建、修改、验证并安全发布 Hermes Web 应用"
+  default_prompt: "Use $app-builder to create a reusable Hermes Web application for the App Market."

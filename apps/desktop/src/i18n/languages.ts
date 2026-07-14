@@ -2,7 +2,7 @@ import { normalize } from '@/lib/text'
 
 import type { Locale } from './types'
 
-export const DEFAULT_LOCALE: Locale = 'en'
+export const DEFAULT_LOCALE: Locale = 'zh'
 
 export const LOCALE_OPTIONS = [
   {

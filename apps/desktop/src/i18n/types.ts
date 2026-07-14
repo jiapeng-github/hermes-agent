@@ -266,6 +266,7 @@ export interface Translations {
       providerAccounts: string
       providerApiKeys: string
       gateway: string
+      messagingPlatforms: string
       apiKeys: string
       keysTools: string
       keysSettings: string

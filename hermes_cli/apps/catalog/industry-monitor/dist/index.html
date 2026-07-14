@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>行业监控</title>
+    <link rel="stylesheet" href="/assets/app.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand"><span class="brand-mark">↗</span><div><h1>行业监控</h1><p id="status">正在读取市场快照</p></div></div>
+      <button class="icon-button" id="refresh" aria-label="刷新数据" title="刷新数据">↻</button>
+    </header>
+    <main>
+      <section class="hero panel">
+        <div><span class="eyebrow">MARKET PULSE</span><h2 id="headline">行业轮动与资金流向</h2><div class="details" id="details"></div></div>
+        <div class="breadth" id="breadth"></div>
+      </section>
+      <section class="metric-grid" id="indices" aria-label="主要指数"></section>
+      <section class="panel">
+        <div class="panel-head"><div><span class="eyebrow">ROTATION MAP</span><h2>热点与行业轮动</h2></div><div class="tabs"><button class="active" data-mode="topic">热点题材</button><button data-mode="industry">一级行业</button></div></div>
+        <div class="heatmap" id="heatmap"></div>
+      </section>
+      <div class="two-column">
+        <section class="panel"><div class="panel-head"><div><span class="eyebrow">CAPITAL FLOW</span><h2>主力资金强弱</h2></div></div><div class="flow-list" id="flows"></div></section>
+        <section class="panel"><div class="panel-head"><div><span class="eyebrow">NORTHBOUND</span><h2>北向成交活跃度</h2></div></div><div id="northbound"></div></section>
+      </div>
+      <section class="panel"><div class="panel-head"><div><span class="eyebrow">RESEARCH</span><h2>轮动研判</h2></div></div><div class="research" id="research"></div></section>
+      <section class="footnote" id="footnote"></section>
+    </main>
+    <script src="/assets/runtime.js"></script>
+    <script src="/assets/app.js"></script>
+  </body>
+</html>

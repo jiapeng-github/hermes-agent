@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>自选股盯盘</title>
+    <link rel="stylesheet" href="/assets/app.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">⌁</span>
+        <div>
+          <h1>自选股盯盘</h1>
+          <p id="market-status">正在连接行情服务</p>
+        </div>
+      </div>
+      <div class="topbar-actions">
+        <label class="switch"><input id="auto-refresh" type="checkbox" checked><span></span>自动刷新</label>
+        <button class="icon-button" id="refresh-button" title="刷新行情" aria-label="刷新行情">↻</button>
+      </div>
+    </header>
+
+    <main>
+      <section class="indices" id="indices" aria-label="主要指数"></section>
+
+      <section class="summary-grid" id="summary-grid" aria-label="自选股摘要"></section>
+
+      <section class="panel watchlist-panel">
+        <div class="panel-heading">
+          <div><span class="eyebrow">WATCHLIST</span><h2>我的自选股</h2></div>
+          <form id="add-form" class="add-form">
+            <label class="sr-only" for="stock-query">公司名称或股票代码</label>
+            <input id="stock-query" autocomplete="off" placeholder="公司名称或股票代码">
+            <button type="submit">添加</button>
+          </form>
+        </div>
+        <div class="notice" id="notice" hidden></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th data-sort="name">名称 / 代码</th>
+              <th data-sort="price">现价</th>
+              <th data-sort="change">涨跌幅</th>
+              <th data-sort="flow">主力净流入</th>
+              <th>近况</th>
+              <th>板块</th>
+              <th><span class="sr-only">操作</span></th>
+            </tr></thead>
+            <tbody id="stock-rows"></tbody>
+          </table>
+        </div>
+        <div class="empty" id="empty" hidden><strong>还没有自选股</strong><span>在上方输入公司名称或股票代码开始盯盘</span></div>
+      </section>
+
+      <div class="lower-grid">
+        <section class="panel">
+          <div class="panel-heading compact"><div><span class="eyebrow">SECTOR PULSE</span><h2>板块今日表现</h2></div></div>
+          <div class="sector-bars" id="sector-bars"></div>
+        </section>
+        <section class="panel insight-panel">
+          <span class="eyebrow">MARKET NOTE</span>
+          <h2>今日资金主线</h2>
+          <p id="headline">等待自选股行情</p>
+          <div class="gap-list" id="gap-list"></div>
+        </section>
+      </div>
+    </main>
+
+    <dialog id="detail-dialog">
+      <div class="dialog-shell">
+        <header class="dialog-header">
+          <div><span class="eyebrow" id="detail-code"></span><h2 id="detail-title">股票详情</h2></div>
+          <button class="icon-button" id="detail-close" aria-label="关闭">×</button>
+        </header>
+        <div class="dialog-tabs" role="tablist">
+          <button class="active" data-tab="market" role="tab">行情与 K 线</button>
+          <button data-tab="analysis" role="tab">详细分析</button>
+        </div>
+        <div class="dialog-content" id="detail-content"></div>
+      </div>
+    </dialog>
+
+    <script src="/assets/runtime.js"></script>
+    <script src="/assets/app.js"></script>
+  </body>
+</html>

@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { atom } from 'nanostores'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { I18nProvider } from '@/i18n'
 import type { EnvVarInfo, OAuthProvider } from '@/types/hermes'
 
 const listOAuthProviders = vi.fn()
@@ -74,7 +75,11 @@ afterEach(() => {
 async function renderProvidersSettings() {
   const { ProvidersSettings } = await import('./providers-settings')
 
-  return render(<ProvidersSettings onClose={vi.fn()} onViewChange={vi.fn()} view="accounts" />)
+  return render(
+    <I18nProvider configClient={null} initialLocale="en">
+      <ProvidersSettings onClose={vi.fn()} onViewChange={vi.fn()} view="accounts" />
+    </I18nProvider>
+  )
 }
 
 describe('ProvidersSettings', () => {
@@ -132,7 +137,11 @@ describe('ProvidersSettings', () => {
     listOAuthProviders.mockResolvedValue({ providers: [] })
 
     const { ProvidersSettings } = await import('./providers-settings')
-    render(<ProvidersSettings onClose={vi.fn()} onViewChange={vi.fn()} view="keys" />)
+    render(
+      <I18nProvider configClient={null} initialLocale="en">
+        <ProvidersSettings onClose={vi.fn()} onViewChange={vi.fn()} view="keys" />
+      </I18nProvider>
+    )
 
     expect(await screen.findByText('WidgetAI')).toBeTruthy()
   })
@@ -149,7 +158,11 @@ describe('ProvidersSettings', () => {
     listOAuthProviders.mockResolvedValue({ providers: [] })
 
     const { ProvidersSettings } = await import('./providers-settings')
-    render(<ProvidersSettings onClose={vi.fn()} onViewChange={vi.fn()} view="keys" />)
+    render(
+      <I18nProvider configClient={null} initialLocale="en">
+        <ProvidersSettings onClose={vi.fn()} onViewChange={vi.fn()} view="keys" />
+      </I18nProvider>
+    )
 
     // Equal priority → alphabetical tiebreak: Acme, Middle, Zebra.
     await screen.findByText('Acme')

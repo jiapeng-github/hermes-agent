@@ -8,7 +8,7 @@ import { GatewayMenuPanel } from '@/app/shell/gateway-menu-panel'
 import { Codicon } from '@/components/ui/codicon'
 import { GlyphSpinner } from '@/components/ui/glyph-spinner'
 import { useI18n } from '@/i18n'
-import { Activity, AlertCircle, Clock, Command, Hash, Loader2, Terminal, Zap, ZapFilled } from '@/lib/icons'
+import { Activity, AlertCircle, Command, Hash, Loader2, Terminal, Zap, ZapFilled } from '@/lib/icons'
 import type { RuntimeReadinessResult } from '@/lib/runtime-readiness'
 import { contextBarLabel, LiveDuration, usageContextLabel } from '@/lib/statusbar'
 import { cn } from '@/lib/utils'
@@ -35,7 +35,6 @@ import {
 } from '@/store/updates'
 import type { StatusResponse } from '@/types/hermes'
 
-import { CRON_ROUTE } from '../../routes'
 import type { StatusbarItem, StatusbarSelectModifiers } from '../statusbar-controls'
 
 interface StatusbarItemsOptions {
@@ -322,14 +321,6 @@ export function useStatusbarItems({
         label: copy.agents,
         onSelect: openAgents,
         title: agentsOpen ? copy.closeAgents : copy.openAgents,
-        variant: 'action'
-      },
-      {
-        icon: <Clock className="size-3" />,
-        id: 'cron',
-        label: copy.cron,
-        title: copy.openCron,
-        to: CRON_ROUTE,
         variant: 'action'
       }
     ],

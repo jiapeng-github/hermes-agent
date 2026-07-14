@@ -28,6 +28,7 @@ interface PageSearchShellProps extends React.ComponentProps<'section'> {
   searchValue: string
   /** Hide the search field when there's nothing to search (empty dataset). */
   searchHidden?: boolean
+  headerClassName?: string
   /** Right-aligned control in the header's trailing cell (e.g. a refresh button)
    *  so mouse users get a visible affordance for the refresh hotkey. */
   searchTrailingAction?: ReactNode
@@ -64,6 +65,7 @@ export function PageSearchShell({
   searchHints,
   searchValue,
   searchHidden = false,
+  headerClassName,
   searchTrailingAction,
   ...props
 }: PageSearchShellProps) {
@@ -91,7 +93,12 @@ export function PageSearchShell({
       */}
       <div className="shrink-0">
         {(hasTabs || !searchHidden) && (
-          <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 px-3 pb-2 pt-[calc(var(--titlebar-height)+0.5rem)]">
+          <div
+            className={cn(
+              'grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 px-3 pb-2 pt-[calc(var(--titlebar-height)+0.5rem)]',
+              headerClassName
+            )}
+          >
             <div className="flex min-w-0 items-center justify-start">
               {!searchHidden && (
                 <SearchField

@@ -1,0 +1,74 @@
+schema_version: 1
+id: ai.hermes.watchlist
+name: 自选股盯盘看板
+version: 1.0.1
+description: Profile 隔离的 A 股自选股盯盘、K 线详情与公司分析应用
+entry: dist/index.html
+icon: icon.png
+sdk_version: 1.0.0
+min_runtime_version: 1.0.0
+display:
+  theme: auto
+  preferred_width: 1280
+  preferred_height: 820
+permissions:
+  agent: false
+  mcp_servers: []
+  storage:
+    mode: persistent
+    quota_mb: 5
+actions:
+  snapshot:
+    kind: service
+    title: 获取自选股行情
+    handler: finance.watchlist.snapshot
+    input_schema: schemas/snapshot.input.json
+    output_schema: schemas/snapshot.output.json
+    timeout_seconds: 30
+    max_concurrent_runs: 2
+    cache_ttl_seconds: 10
+  refresh:
+    kind: service
+    title: 刷新自选股行情
+    handler: finance.watchlist.refresh
+    input_schema: schemas/empty.input.json
+    output_schema: schemas/refresh.output.json
+    timeout_seconds: 30
+    max_concurrent_runs: 1
+    cache_ttl_seconds: 0
+  add_stock:
+    kind: service
+    title: 添加自选股
+    handler: finance.watchlist.add
+    input_schema: schemas/add.input.json
+    output_schema: schemas/mutation.output.json
+    timeout_seconds: 60
+    max_concurrent_runs: 1
+    cache_ttl_seconds: 0
+  remove_stock:
+    kind: service
+    title: 删除自选股
+    handler: finance.watchlist.remove
+    input_schema: schemas/remove.input.json
+    output_schema: schemas/mutation.output.json
+    timeout_seconds: 30
+    max_concurrent_runs: 1
+    cache_ttl_seconds: 0
+  detail:
+    kind: service
+    title: 获取股票 K 线详情
+    handler: finance.watchlist.detail
+    input_schema: schemas/detail.input.json
+    output_schema: schemas/detail.output.json
+    timeout_seconds: 120
+    max_concurrent_runs: 2
+    cache_ttl_seconds: 60
+  analyze:
+    kind: service
+    title: 获取公司详细分析
+    handler: finance.company.analysis
+    input_schema: schemas/analysis.input.json
+    output_schema: schemas/analysis.output.json
+    timeout_seconds: 60
+    max_concurrent_runs: 1
+    cache_ttl_seconds: 60

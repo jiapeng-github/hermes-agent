@@ -100,6 +100,16 @@ def test_packaging_declared_as_core_dependency():
     )
 
 
+def test_jsonschema_declared_as_core_dependency_for_app_validation():
+    data = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    names = {_distribution_name(dep) for dep in data["project"]["dependencies"]}
+
+    assert "jsonschema" in names, (
+        "hermes apps validate imports jsonschema on a production CLI path, so "
+        "it must be installed as a core dependency"
+    )
+
+
 def test_faster_whisper_is_not_a_base_dependency():
     data = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     deps = data["project"]["dependencies"]
@@ -115,6 +125,18 @@ def test_manifest_includes_bundled_skills():
 
     assert "graft skills" in manifest
     assert "graft optional-skills" in manifest
+
+
+def test_app_platform_assets_ship_in_wheel_and_sdist():
+    data = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    package_data = data["tool"]["setuptools"]["package-data"]["hermes_cli"]
+    manifest = (REPO_ROOT / "MANIFEST.in").read_text(encoding="utf-8")
+
+    assert "apps/contracts/*.json" in package_data
+    assert "apps/contracts/*.yaml" in package_data
+    assert "apps/catalog/**/*" in package_data
+    assert "recursive-include hermes_cli/apps/contracts" in manifest
+    assert "recursive-include hermes_cli/apps/catalog" in manifest
 
 
 def test_bundled_plugin_manifests_ship_in_both_wheel_and_sdist():

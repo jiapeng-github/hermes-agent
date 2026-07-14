@@ -17,7 +17,7 @@ describe('desktop i18n languages', () => {
     expect(normalizeLocale('ja-JP')).toBe('ja')
   })
 
-  it('falls back to English for empty or unsupported values', () => {
+  it('falls back to the default locale for empty or unsupported values', () => {
     expect(normalizeLocale(null)).toBe(DEFAULT_LOCALE)
     expect(normalizeLocale('')).toBe(DEFAULT_LOCALE)
     expect(normalizeLocale('de')).toBe(DEFAULT_LOCALE)

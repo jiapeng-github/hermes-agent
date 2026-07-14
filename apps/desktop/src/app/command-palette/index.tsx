@@ -65,10 +65,10 @@ import { isUserTheme, resolveTheme } from '@/themes/user-themes'
 
 import {
   AGENTS_ROUTE,
+  APP_MARKET_ROUTE,
   ARTIFACTS_ROUTE,
   COMMAND_CENTER_ROUTE,
   CRON_ROUTE,
-  MESSAGING_ROUTE,
   NEW_CHAT_ROUTE,
   PROFILES_ROUTE,
   sessionRoute,
@@ -222,6 +222,7 @@ type NonConfigSettingsLabel =
   | 'gateway'
   | 'keysSettings'
   | 'keysTools'
+  | 'messagingPlatforms'
   | 'mcp'
   | 'providerAccounts'
   | 'providerApiKeys'
@@ -245,6 +246,12 @@ const NON_CONFIG_SETTINGS: ReadonlyArray<{
     tab: 'providers&pview=keys'
   },
   { icon: Globe, keywords: ['connection', 'messaging'], labelKey: 'gateway', tab: 'gateway' },
+  {
+    icon: MessageCircle,
+    keywords: ['telegram', 'slack', 'discord', 'wechat', 'messaging', 'platforms'],
+    labelKey: 'messagingPlatforms',
+    tab: 'messaging'
+  },
   {
     icon: KeyRound,
     keywords: ['api', 'secrets', 'tokens', 'credentials', 'browser', 'search'],
@@ -432,11 +439,11 @@ export function CommandPalette() {
             run: go(SKILLS_ROUTE)
           },
           {
-            action: 'nav.messaging',
-            icon: MessageCircle,
-            id: 'nav-messaging',
-            label: cc.nav.messaging.title,
-            run: go(MESSAGING_ROUTE)
+            icon: Package,
+            id: 'nav-app-market',
+            keywords: ['apps', 'applications', 'market', 'happ', '应用', '应用市场'],
+            label: t.sidebar.nav['app-market'] ?? '应用市场',
+            run: go(APP_MARKET_ROUTE)
           },
           {
             action: 'nav.artifacts',

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["ok"],
+  "properties": {
+    "ok": { "type": "boolean" },
+    "added": { "type": "boolean" },
+    "removed": { "type": "boolean" },
+    "code": { "type": "string" },
+    "item": { "type": "object" },
+    "refresh": { "type": "object" }
+  },
+  "additionalProperties": true
+}

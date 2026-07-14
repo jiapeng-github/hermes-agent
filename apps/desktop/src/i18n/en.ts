@@ -305,6 +305,7 @@ export const en: Translations = {
       providerAccounts: 'Accounts',
       providerApiKeys: 'API keys',
       gateway: 'Gateway',
+      messagingPlatforms: 'Messaging',
       apiKeys: 'Tools & Keys',
       keysTools: 'Tools',
       keysSettings: 'Settings',
@@ -1480,7 +1481,12 @@ export const en: Translations = {
   sidebar: {
     nav: {
       'new-session': 'New session',
+      cron: 'Scheduled Tasks',
+      'industry-monitor': 'Industry Monitor',
+      'company-analysis': 'Company Analysis',
+      watchlist: 'Watchlist',
       skills: 'Capabilities',
+      'app-market': 'App Market',
       messaging: 'Messaging',
       artifacts: 'Artifacts'
     },

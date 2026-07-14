@@ -124,6 +124,12 @@ export function useComposerDraft({
         return
       }
 
+      if (mode === 'replace') {
+        paintDraft(value)
+
+        return
+      }
+
       const base = mode === 'inline' ? draftRef.current.trimEnd() : draftRef.current
       const sep = mode === 'inline' ? (base ? ' ' : '') : base && !base.endsWith('\n') ? '\n\n' : ''
 

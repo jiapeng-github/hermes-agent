@@ -34,6 +34,7 @@ interface PanelProps {
   closeLabel?: string
   contentClassName?: string
   onClose: () => void
+  presentation?: 'overlay' | 'page'
 }
 
 export function Panel({
@@ -41,8 +42,29 @@ export function Panel({
   className,
   closeLabel = translateNow('common.close'),
   contentClassName,
-  onClose
+  onClose,
+  presentation = 'overlay'
 }: PanelProps) {
+  if (presentation === 'page') {
+    return (
+      <section
+        className={cn(
+          'flex h-full min-w-0 flex-col overflow-hidden bg-(--ui-chat-surface-background)',
+          className
+        )}
+      >
+        <div
+          className={cn(
+            'flex h-full min-h-0 flex-col px-4 pb-4 pt-[calc(var(--titlebar-height)+0.5rem)] sm:px-5',
+            contentClassName
+          )}
+        >
+          {children}
+        </div>
+      </section>
+    )
+  }
+
   return (
     <OverlayView
       closeLabel={closeLabel}

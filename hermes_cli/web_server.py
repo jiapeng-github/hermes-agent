@@ -93,6 +93,7 @@ try:
     from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
     from fastapi.staticfiles import StaticFiles
     from pydantic import BaseModel
+    from starlette.background import BackgroundTask
 except ImportError:
     # First try lazy-installing the dashboard extras. Only the user actually
     # running `hermes dashboard` needs fastapi+uvicorn; lazy install keeps
@@ -108,6 +109,7 @@ except ImportError:
         from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
         from fastapi.staticfiles import StaticFiles
         from pydantic import BaseModel
+        from starlette.background import BackgroundTask
     except Exception:
         raise SystemExit(
             "Web UI requires fastapi and uvicorn.\n"
@@ -168,6 +170,9 @@ def _resolve_restart_drain_timeout() -> float:
 
 @asynccontextmanager
 async def _lifespan(app: "FastAPI"):
+    from hermes_cli.apps.paths import AppPaths
+    from hermes_cli.apps.runtime.supervisor import AppRuntimeSupervisor
+
     app.state.event_channels = {}  # dict[str, set]
     app.state.event_lock = asyncio.Lock()
     app.state.pty_active_session_files = {}  # dict[str, Path]
@@ -176,6 +181,7 @@ async def _lifespan(app: "FastAPI"):
     # On app.state (not a module global) so the Lock binds to the running
     # event loop during lifespan startup — see _get_event_state's docstring.
     app.state.chat_argv_lock = asyncio.Lock()
+    app.state.app_runtime_supervisor = AppRuntimeSupervisor(AppPaths.active_profile())
 
     # Fire hermes_cli.gateway import into a background thread so the event
     # loop is not blocked and HERMES_DASHBOARD_READY fires without delay.
@@ -208,6 +214,7 @@ async def _lifespan(app: "FastAPI"):
     finally:
         pty_reaper_task.cancel()
         await PTY_REGISTRY.close_all()
+        app.state.app_runtime_supervisor.close_all()
         if cron_stop is not None:
             cron_stop.set()
 
@@ -10337,6 +10344,452 @@ async def instantiate_blueprint(body: AutomationBlueprintInstantiate, profile: s
     except Exception as e:
         _log.exception("POST /api/cron/blueprints/instantiate failed")
         raise HTTPException(status_code=400, detail=str(e))
+
+
+# ---------------------------------------------------------------------------
+# Finance data — desktop stock-agent views.
+# ---------------------------------------------------------------------------
+
+
+class CompanyAnalysisRefreshRequest(BaseModel):
+    query: str = "宁德时代"
+
+
+class WatchlistStockRequest(BaseModel):
+    query: str
+
+
+class AppExportRequest(BaseModel):
+    include_source: bool
+
+
+class AppImportConfirmationRequest(BaseModel):
+    package_sha256: str
+    conflict_mode: str
+    copy_app_id: Optional[str] = None
+    grants: Dict[str, Any]
+
+
+@app.get("/api/apps")
+async def list_local_apps(request: Request, query: Optional[str] = None):
+    """Return installed and bundled applications for the active Profile."""
+    from hermes_cli.apps.errors import AppDomainError
+    from hermes_cli.apps.manager import AppManager
+
+    try:
+        return await asyncio.to_thread(AppManager().list_apps, query=query)
+    except AppDomainError as exc:
+        return _app_api_error(exc)
+
+
+@app.get("/api/apps/{app_id}")
+async def get_local_app(app_id: str, request: Request):
+    """Return one installed application using the frozen AppDetail shape."""
+    from hermes_cli.apps.errors import AppDomainError
+    from hermes_cli.apps.manager import AppManager
+
+    try:
+        return await asyncio.to_thread(AppManager().get, app_id)
+    except AppDomainError as exc:
+        return _app_api_error(exc)
+
+
+@app.delete("/api/apps/{app_id}", status_code=204)
+async def uninstall_local_app(
+    app_id: str,
+    request: Request,
+    preserve_data: bool = True,
+):
+    """Uninstall a user application, preserving its Profile data by default."""
+    from hermes_cli.apps.errors import AppDomainError
+    from hermes_cli.apps.manager import AppManager
+
+    try:
+        await asyncio.to_thread(
+            AppManager().uninstall,
+            app_id,
+            request.app.state.app_runtime_supervisor,
+            preserve_data=preserve_data,
+        )
+    except AppDomainError as exc:
+        return _app_api_error(exc)
+    return Response(status_code=204)
+
+
+@app.post("/api/apps/{app_id}/launch", status_code=201)
+async def launch_local_app(app_id: str, request: Request):
+    """Start or reuse one isolated AppHost and return a one-time browser URL."""
+    from hermes_cli.apps.errors import AppDomainError
+    from hermes_cli.apps.manager import AppManager
+
+    try:
+        return await asyncio.to_thread(
+            AppManager().launch,
+            app_id,
+            request.app.state.app_runtime_supervisor,
+        )
+    except AppDomainError as exc:
+        return _app_api_error(exc)
+    except (OSError, RuntimeError):
+        _log.exception("POST /api/apps/%s/launch failed", app_id)
+        return JSONResponse(
+            {
+                "error": {
+                    "code": "APP_RUNTIME_START_FAILED",
+                    "message": "应用运行时启动失败",
+                    "retryable": True,
+                }
+            },
+            status_code=503,
+        )
+
+
+@app.post("/api/apps/{app_id}/stop", status_code=204)
+async def stop_local_app(app_id: str, request: Request):
+    """Stop an application's local AppHost without changing its data."""
+    from hermes_cli.apps.errors import AppDomainError
+    from hermes_cli.apps.manager import AppManager
+
+    try:
+        await asyncio.to_thread(
+            AppManager().stop,
+            app_id,
+            request.app.state.app_runtime_supervisor,
+        )
+    except AppDomainError as exc:
+        return _app_api_error(exc)
+    return Response(status_code=204)
+
+
+@app.post("/api/apps/{app_id}/export")
+async def export_local_app(app_id: str, body: AppExportRequest, request: Request):
+    """Build a portable package and stream it to the authenticated desktop."""
+    from hermes_cli.apps.errors import AppDomainError
+    from hermes_cli.apps.manager import AppManager
+
+    manager = AppManager()
+    manager.paths.ensure()
+    export_dir = Path(tempfile.mkdtemp(prefix="export-", dir=manager.paths.staging))
+    destination = export_dir / f"{app_id}.happ"
+    try:
+        exported = await asyncio.to_thread(
+            manager.export,
+            app_id,
+            destination,
+            include_source=body.include_source,
+        )
+    except AppDomainError as exc:
+        shutil.rmtree(export_dir, ignore_errors=True)
+        return _app_api_error(exc)
+    return FileResponse(
+        exported.path,
+        media_type="application/vnd.hermes.app+zip",
+        filename=destination.name,
+        background=BackgroundTask(shutil.rmtree, export_dir, ignore_errors=True),
+    )
+
+
+@app.delete("/api/apps/{app_id}/data", status_code=204)
+async def delete_local_app_data(app_id: str, request: Request):
+    """Permanently remove one application's Profile-scoped runtime data."""
+    from hermes_cli.apps.errors import AppDomainError
+    from hermes_cli.apps.manager import AppManager
+
+    try:
+        await asyncio.to_thread(
+            AppManager().delete_data,
+            app_id,
+            request.app.state.app_runtime_supervisor,
+        )
+    except AppDomainError as exc:
+        return _app_api_error(exc)
+    return Response(status_code=204)
+
+
+@app.post("/api/apps/imports", status_code=201)
+async def analyze_local_app_import(
+    request: Request,
+    package: UploadFile = File(...),
+):
+    """Stage and inspect hostile .happ bytes without installing them."""
+    from hermes_cli.apps.errors import AppDomainError, PackageTooLargeError
+    from hermes_cli.apps.manager import AppManager
+    from hermes_cli.apps.package import MAX_COMPRESSED_BYTES
+
+    manager = AppManager()
+    manager.paths.ensure()
+    upload_dir = Path(tempfile.mkdtemp(prefix="upload-", dir=manager.paths.staging))
+    upload_path = upload_dir / "application.happ"
+    total = 0
+    try:
+        with upload_path.open("xb") as handle:
+            while chunk := await package.read(64 * 1024):
+                total += len(chunk)
+                if total > MAX_COMPRESSED_BYTES:
+                    raise PackageTooLargeError(".happ exceeds the 50 MiB compressed limit")
+                handle.write(chunk)
+            handle.flush()
+            os.fsync(handle.fileno())
+        plan = await asyncio.to_thread(manager.analyze_import, upload_path)
+        return plan.public_dict()
+    except AppDomainError as exc:
+        return _app_api_error(exc)
+    finally:
+        await package.close()
+        shutil.rmtree(upload_dir, ignore_errors=True)
+
+
+@app.get("/api/apps/imports/{import_id}")
+async def get_local_app_import(import_id: str, request: Request):
+    from hermes_cli.apps.errors import AppDomainError
+    from hermes_cli.apps.manager import AppManager
+
+    try:
+        plan = await asyncio.to_thread(AppManager().get_import_plan, import_id)
+        return plan.public_dict()
+    except (AppDomainError, ValueError) as exc:
+        if isinstance(exc, ValueError):
+            return _app_api_error(
+                AppDomainError("APP_REQUEST_INVALID", "invalid import plan id")
+            )
+        return _app_api_error(exc)
+
+
+@app.delete("/api/apps/imports/{import_id}", status_code=204)
+async def discard_local_app_import(import_id: str, request: Request):
+    from hermes_cli.apps.errors import AppDomainError
+    from hermes_cli.apps.manager import AppManager
+
+    try:
+        await asyncio.to_thread(AppManager().discard_import, import_id)
+    except (AppDomainError, ValueError) as exc:
+        if isinstance(exc, ValueError):
+            return _app_api_error(
+                AppDomainError("APP_REQUEST_INVALID", "invalid import plan id")
+            )
+        return _app_api_error(exc)
+    return Response(status_code=204)
+
+
+@app.post("/api/apps/imports/{import_id}/confirm", status_code=201)
+async def confirm_local_app_import(
+    import_id: str,
+    body: AppImportConfirmationRequest,
+    request: Request,
+):
+    from pydantic import ValidationError
+
+    from hermes_cli.apps.errors import AppDomainError
+    from hermes_cli.apps.manager import AppManager
+    from hermes_cli.apps.package import ImportConfirmation
+
+    try:
+        confirmation = ImportConfirmation.model_validate(body.model_dump())
+        result = await asyncio.to_thread(
+            AppManager().confirm_import,
+            import_id,
+            confirmation,
+        )
+        return result["app"]
+    except ValidationError as exc:
+        return _app_api_error(
+            AppDomainError(
+                "APP_REQUEST_INVALID",
+                "import confirmation is invalid",
+                details={"issues": len(exc.errors())},
+            )
+        )
+    except (AppDomainError, ValueError) as exc:
+        if isinstance(exc, ValueError):
+            return _app_api_error(
+                AppDomainError("APP_REQUEST_INVALID", "invalid import plan id")
+            )
+        return _app_api_error(exc)
+
+
+def _app_api_error(exc):
+    status = {
+        "APP_NOT_FOUND": 404,
+        "APP_IMPORT_EXPIRED": 410,
+        "APP_IMPORT_REJECTED": 422,
+        "APP_PACKAGE_TOO_LARGE": 413,
+        "APP_DISABLED": 409,
+        "APP_PERMISSION_REQUIRED": 403,
+        "APP_RUNTIME_INCOMPATIBLE": 409,
+        "APP_VERSION_CONFLICT": 409,
+    }.get(exc.code, 400)
+    return JSONResponse(
+        {
+            "error": {
+                "code": exc.code,
+                "message": exc.message,
+                "retryable": exc.retryable,
+                "details": exc.details,
+            }
+        },
+        status_code=status,
+    )
+
+
+@app.get("/api/finance/industry-monitor")
+async def finance_industry_monitor(profile: Optional[str] = None):
+    """Return the cached stock-agent industry monitor snapshot immediately.
+
+    The implementation is intentionally a narrow page-specific aggregation
+    over the configured MX Data MCP server, not a generic MCP tool proxy.
+    """
+    from hermes_cli.finance_industry_monitor import get_industry_monitor_snapshot_cached
+
+    try:
+        with _config_profile_scope(profile):
+            return await asyncio.to_thread(get_industry_monitor_snapshot_cached)
+    except Exception as exc:
+        _log.exception("GET /api/finance/industry-monitor failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/api/finance/industry-monitor/refresh")
+async def refresh_finance_industry_monitor(profile: Optional[str] = None):
+    """Trigger a background refresh for the industry monitor snapshot."""
+    from hermes_cli.finance_industry_monitor import start_industry_monitor_refresh
+
+    try:
+        with _config_profile_scope(profile):
+            return await asyncio.to_thread(start_industry_monitor_refresh, force=True)
+    except Exception as exc:
+        _log.exception("POST /api/finance/industry-monitor/refresh failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.get("/api/finance/industry-monitor/refresh/{refresh_id}")
+async def finance_industry_monitor_refresh_status(refresh_id: str):
+    """Return background refresh progress."""
+    from hermes_cli.finance_industry_monitor import get_industry_monitor_refresh_status
+
+    return get_industry_monitor_refresh_status(refresh_id)
+
+
+@app.get("/api/finance/company-analysis")
+async def finance_company_analysis(query: str = "宁德时代", profile: Optional[str] = None):
+    """Return the cached company-analysis snapshot immediately."""
+    from hermes_cli.finance_company_analysis import get_company_analysis_snapshot_cached
+
+    try:
+        with _config_profile_scope(profile):
+            return await asyncio.to_thread(get_company_analysis_snapshot_cached, query)
+    except Exception as exc:
+        _log.exception("GET /api/finance/company-analysis failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/api/finance/company-analysis/refresh")
+async def refresh_finance_company_analysis(
+    body: CompanyAnalysisRefreshRequest,
+    profile: Optional[str] = None,
+):
+    """Trigger a background refresh for one company-analysis snapshot."""
+    from hermes_cli.finance_company_analysis import start_company_analysis_refresh
+
+    try:
+        with _config_profile_scope(profile):
+            return await asyncio.to_thread(start_company_analysis_refresh, body.query, force=True)
+    except Exception as exc:
+        _log.exception("POST /api/finance/company-analysis/refresh failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.get("/api/finance/company-analysis/refresh/{refresh_id}")
+async def finance_company_analysis_refresh_status(refresh_id: str):
+    """Return background refresh progress for company analysis."""
+    from hermes_cli.finance_company_analysis import get_company_analysis_refresh_status
+
+    return get_company_analysis_refresh_status(refresh_id)
+
+
+@app.get("/api/finance/watchlist")
+async def finance_watchlist(profile: Optional[str] = None):
+    """Return the persisted watchlist with a cache-first quote snapshot."""
+    from hermes_cli.finance_watchlist import get_watchlist_snapshot_cached
+
+    try:
+        with _config_profile_scope(profile):
+            return await asyncio.to_thread(get_watchlist_snapshot_cached)
+    except Exception as exc:
+        _log.exception("GET /api/finance/watchlist failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/api/finance/watchlist/refresh")
+async def refresh_finance_watchlist(profile: Optional[str] = None):
+    """Trigger one background refresh for watchlist quotes and indices."""
+    from hermes_cli.finance_watchlist import start_watchlist_refresh
+
+    try:
+        with _config_profile_scope(profile):
+            return await asyncio.to_thread(start_watchlist_refresh, force=True)
+    except Exception as exc:
+        _log.exception("POST /api/finance/watchlist/refresh failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.get("/api/finance/watchlist/refresh/{refresh_id}")
+async def finance_watchlist_refresh_status(refresh_id: str):
+    """Return background watchlist refresh progress."""
+    from hermes_cli.finance_watchlist import get_watchlist_refresh_status
+
+    return get_watchlist_refresh_status(refresh_id)
+
+
+@app.post("/api/finance/watchlist/stocks")
+async def add_finance_watchlist_stock(
+    body: WatchlistStockRequest,
+    profile: Optional[str] = None,
+):
+    """Resolve and add one A-share to the current profile's watchlist."""
+    from hermes_cli.finance_watchlist import add_watchlist_stock
+
+    try:
+        with _config_profile_scope(profile):
+            return await asyncio.to_thread(add_watchlist_stock, body.query)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        _log.exception("POST /api/finance/watchlist/stocks failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.delete("/api/finance/watchlist/stocks/{code}")
+async def delete_finance_watchlist_stock(code: str, profile: Optional[str] = None):
+    """Remove one stock from the current profile's watchlist."""
+    from hermes_cli.finance_watchlist import remove_watchlist_stock
+
+    try:
+        with _config_profile_scope(profile):
+            return await asyncio.to_thread(remove_watchlist_stock, code)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        _log.exception("DELETE /api/finance/watchlist/stocks/%s failed", code)
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.get("/api/finance/watchlist/stocks/{code}/detail")
+async def finance_watchlist_stock_detail(
+    code: str,
+    force: bool = False,
+    profile: Optional[str] = None,
+):
+    """Return cached or live 60-session OHLCV detail for one watchlist stock."""
+    from hermes_cli.finance_watchlist import get_watchlist_stock_detail
+
+    try:
+        with _config_profile_scope(profile):
+            return await asyncio.to_thread(get_watchlist_stock_detail, code, force=force)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except Exception as exc:
+        _log.exception("GET /api/finance/watchlist/stocks/%s/detail failed", code)
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 # ---------------------------------------------------------------------------

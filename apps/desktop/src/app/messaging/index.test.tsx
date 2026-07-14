@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { I18nProvider } from '@/i18n'
 import type { MessagingPlatformInfo } from '@/types/hermes'
 
 const getMessagingPlatforms = vi.fn()
@@ -56,7 +57,9 @@ async function renderMessaging() {
 
   return render(
     <MemoryRouter>
-      <MessagingView />
+      <I18nProvider configClient={null} initialLocale="en">
+        <MessagingView />
+      </I18nProvider>
     </MemoryRouter>
   )
 }
