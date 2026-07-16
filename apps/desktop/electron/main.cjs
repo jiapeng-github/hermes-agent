@@ -370,7 +370,7 @@ const BOOTSTRAP_MARKER_SCHEMA_VERSION = 1
 function resolveStockMcpDefaultsPath() {
   const candidates = [
     process.resourcesPath ? path.join(process.resourcesPath, 'stock-mcp-defaults.json') : null,
-    path.join(APP_ROOT, 'build', 'stock-mcp-defaults.json')
+    path.join(APP_ROOT, 'resources', 'stock-mcp.default.json')
   ]
   return candidates.find(candidate => candidate && fileExists(candidate)) || null
 }

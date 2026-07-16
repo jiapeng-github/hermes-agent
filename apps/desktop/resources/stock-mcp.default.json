@@ -4,7 +4,7 @@
     "mx-ds-mcp": {
       "url": "https://mxapi.eastmoney.com/mxds/mcp",
       "headers": {
-        "em_api_key": "${EM_API_KEY}"
+        "em_api_key": ""
       },
       "tools": {
         "include": []

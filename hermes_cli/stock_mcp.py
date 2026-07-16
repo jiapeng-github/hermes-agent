@@ -8,14 +8,11 @@ import json
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from hermes_cli.config import get_env_value, load_config, save_config, save_env_value
+from hermes_cli.config import load_config, save_config
 
 
 MX_SERVER_NAME = "mx-ds-mcp"
 MX_SERVER_URL = "https://mxapi.eastmoney.com/mxds/mcp"
-MX_API_KEY_ENV = "EM_API_KEY"
-
-
 def _read_defaults(path: str | Path) -> Dict[str, Any]:
     """Read the signed installer resource and reject an unexpected payload."""
     try:
@@ -30,7 +27,7 @@ def _read_defaults(path: str | Path) -> Dict[str, Any]:
 
 
 def install_bundled_mx_mcp(defaults_path: str | Path) -> bool:
-    """Merge the bundled server once; existing user server and key always win."""
+    """Merge the bundled server once; existing user configuration always wins."""
     payload = _read_defaults(defaults_path)
     default_server = payload["mcp_servers"][MX_SERVER_NAME]
     config = load_config()
@@ -44,10 +41,6 @@ def install_bundled_mx_mcp(defaults_path: str | Path) -> bool:
     if MX_SERVER_NAME not in servers:
         servers[MX_SERVER_NAME] = copy.deepcopy(default_server)
         changed = True
-
-    api_key = str((payload.get("default_env") or {}).get(MX_API_KEY_ENV) or "").strip()
-    if api_key and not get_env_value(MX_API_KEY_ENV):
-        save_env_value(MX_API_KEY_ENV, api_key)
 
     if changed:
         save_config(config)

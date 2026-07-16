@@ -21,7 +21,7 @@
     "build": "node scripts/assert-root-install.cjs && node scripts/write-build-stamp.cjs && node scripts/stage-native-deps.cjs && tsc -b && vite build && npm run postbuild",
     "postbuild": "node scripts/assert-dist-built.cjs",
     "prebuilder": "node scripts/patch-electron-builder-mac-binary.cjs",
-    "builder": "cross-env NODE_OPTIONS=--max-old-space-size=16384 node scripts/prepare-stock-mcp-resource.cjs && node scripts/run-electron-builder.cjs",
+    "builder": "cross-env NODE_OPTIONS=--max-old-space-size=16384 node scripts/run-electron-builder.cjs",
     "pack": "npm run build && npm run builder -- --dir",
     "dist": "npm run build && npm run builder",
     "dist:mac": "npm run build && npm run builder -- --mac",
@@ -187,7 +187,7 @@
         "to": "native-deps"
       },
       {
-        "from": "build/stock-mcp-defaults.json",
+        "from": "resources/stock-mcp.default.json",
         "to": "stock-mcp-defaults.json"
       },
       {
