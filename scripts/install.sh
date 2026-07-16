@@ -1792,6 +1792,16 @@ copy_config_templates() {
         log_info "~/.hermes/config.yaml already exists, keeping it"
     fi
 
+    # StockSense desktop packages carry a release-generated 妙想 MCP resource.
+    # Merge it after the venv exists, preserving all user MCPs and credentials.
+    if [ -n "${STOCKSENSE_MCP_DEFAULTS_PATH:-}" ] && [ -f "$STOCKSENSE_MCP_DEFAULTS_PATH" ]; then
+        if "$INSTALL_DIR/venv/bin/python" -m hermes_cli.stock_mcp --defaults "$STOCKSENSE_MCP_DEFAULTS_PATH"; then
+            log_success "Configured bundled 妙想 MCP Server"
+        else
+            log_warn "Could not configure bundled 妙想 MCP Server"
+        fi
+    fi
+
     # Create SOUL.md if it doesn't exist (global persona file).
     # This MUST match DEFAULT_SOUL_MD in hermes_cli/default_soul.py — the
     # runtime (_ensure_default_soul_md) treats the old comment-only scaffold as

@@ -279,6 +279,8 @@ function launchFresh() {
 //   - The Hermes Agent Python payload is NOT shipped (it's fetched at first
 //     launch via install.ps1's stage protocol).
 //   - install-stamp.json IS shipped in resources/ with a valid commit + branch.
+//   - stock-mcp-defaults.json is shipped in resources so the bundled stock
+//     applications can configure their required 妙想 MCP without a network fetch.
 //   - native-deps/@homebridge/node-pty-prebuilt-multiarch/ IS shipped with
 //     the package.json + lib/ + at least one .node binary (the renderer's
 //     integrated terminal needs this; see Phase 1F.6).
@@ -315,6 +317,20 @@ function validateBundle() {
   }
   if (!stamp.branch || typeof stamp.branch !== 'string') {
     die(`install-stamp.json is missing the branch field: ${JSON.stringify(stamp)}`)
+  }
+
+  const stockMcpDefaultsPath = path.join(APP.resourcesPath, 'stock-mcp-defaults.json')
+  if (!exists(stockMcpDefaultsPath)) {
+    die(`Missing bundled 妙想 MCP defaults: ${stockMcpDefaultsPath}`)
+  }
+  let stockMcpDefaults
+  try {
+    stockMcpDefaults = JSON.parse(fs.readFileSync(stockMcpDefaultsPath, 'utf8'))
+  } catch (err) {
+    die(`stock-mcp-defaults.json is not valid JSON: ${err.message}`)
+  }
+  if (stockMcpDefaults?.mcp_servers?.['mx-ds-mcp']?.url !== 'https://mxapi.eastmoney.com/mxds/mcp') {
+    die('Bundled 妙想 MCP defaults do not contain the expected mx-ds-mcp server.')
   }
 
   // Positive assertion: node-pty native deps shipped

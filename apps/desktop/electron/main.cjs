@@ -367,6 +367,14 @@ const VENV_ROOT = path.join(ACTIVE_HERMES_ROOT, 'venv')
 const BOOTSTRAP_COMPLETE_MARKER = path.join(ACTIVE_HERMES_ROOT, '.hermes-bootstrap-complete')
 const BOOTSTRAP_MARKER_SCHEMA_VERSION = 1
 
+function resolveStockMcpDefaultsPath() {
+  const candidates = [
+    process.resourcesPath ? path.join(process.resourcesPath, 'stock-mcp-defaults.json') : null,
+    path.join(APP_ROOT, 'build', 'stock-mcp-defaults.json')
+  ]
+  return candidates.find(candidate => candidate && fileExists(candidate)) || null
+}
+
 const DESKTOP_CONNECTION_CONFIG_PATH = path.join(app.getPath('userData'), 'connection.json')
 const DESKTOP_UPDATE_CONFIG_PATH = path.join(app.getPath('userData'), 'updates.json')
 const DESKTOP_WINDOW_STATE_PATH = path.join(app.getPath('userData'), 'window-state.json')
@@ -3179,6 +3187,7 @@ async function ensureRuntime(backend) {
       sourceRepoRoot: SOURCE_REPO_ROOT,
       hermesHome: HERMES_HOME,
       logRoot: path.join(HERMES_HOME, 'logs'),
+      stockMcpDefaultsPath: resolveStockMcpDefaultsPath(),
       abortSignal: bootstrapAbortController.signal,
       onEvent: ev => {
         // Tee every bootstrap event to (a) the desktop log for forensics

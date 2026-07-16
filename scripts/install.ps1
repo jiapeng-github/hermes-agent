@@ -2211,6 +2211,23 @@ function Copy-ConfigTemplates {
     } else {
         Write-Info "$configPath already exists, keeping it"
     }
+
+    # StockSense desktop packages carry a release-generated 妙想 MCP resource.
+    # The helper only adds a missing server/key, so user MCP configuration wins.
+    $stockMcpDefaults = $env:STOCKSENSE_MCP_DEFAULTS_PATH
+    $pythonExe = "$InstallDir\venv\Scripts\python.exe"
+    if ($stockMcpDefaults -and (Test-Path $stockMcpDefaults) -and (Test-Path $pythonExe)) {
+        try {
+            & $pythonExe -m hermes_cli.stock_mcp --defaults $stockMcpDefaults
+            if ($LASTEXITCODE -eq 0) {
+                Write-Success "Configured bundled 妙想 MCP Server"
+            } else {
+                Write-Warn "Could not configure bundled 妙想 MCP Server"
+            }
+        } catch {
+            Write-Warn "Could not configure bundled 妙想 MCP Server: $_"
+        }
+    }
     
     # Create SOUL.md if it doesn't exist (global persona file).
     # IMPORTANT: write without a BOM.  Windows PowerShell 5.1's
@@ -2238,7 +2255,6 @@ You are Hermes Agent, an intelligent AI assistant created by Nous Research. You 
     
     # Seed bundled skills into $HermesHome\skills (manifest-based, one-time per skill)
     Write-Info "Syncing bundled skills to $HermesHome\skills ..."
-    $pythonExe = "$InstallDir\venv\Scripts\python.exe"
     if (Test-Path $pythonExe) {
         try {
             & $pythonExe "$InstallDir\tools\skills_sync.py" 2>$null

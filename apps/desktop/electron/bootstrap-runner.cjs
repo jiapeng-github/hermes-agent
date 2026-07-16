@@ -294,7 +294,7 @@ function resolveWindowsPowerShell() {
   return 'powershell.exe'
 }
 
-function spawnPowerShell(scriptPath, args, { emit, stageName, abortSignal, hermesHome } = {}) {
+function spawnPowerShell(scriptPath, args, { emit, stageName, abortSignal, hermesHome, stockMcpDefaultsPath } = {}) {
   return new Promise((resolve, reject) => {
     const ps = process.platform === 'win32' ? resolveWindowsPowerShell() : 'pwsh'
     const fullArgs = ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptPath, ...args]
@@ -308,7 +308,8 @@ function spawnPowerShell(scriptPath, args, { emit, stageName, abortSignal, herme
           ...process.env,
           // Pass HERMES_HOME through so install.ps1 respects the caller's
           // choice rather than re-computing the default.
-          HERMES_HOME: hermesHome || process.env.HERMES_HOME || ''
+          HERMES_HOME: hermesHome || process.env.HERMES_HOME || '',
+          STOCKSENSE_MCP_DEFAULTS_PATH: stockMcpDefaultsPath || ''
         }
       })
     )
@@ -376,13 +377,14 @@ function spawnPowerShell(scriptPath, args, { emit, stageName, abortSignal, herme
   })
 }
 
-function spawnBash(scriptPath, args, { emit, stageName, abortSignal, hermesHome } = {}) {
+function spawnBash(scriptPath, args, { emit, stageName, abortSignal, hermesHome, stockMcpDefaultsPath } = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn('bash', [scriptPath, ...args], {
       stdio: ['ignore', 'pipe', 'pipe'],
       env: {
         ...process.env,
-        HERMES_HOME: hermesHome || process.env.HERMES_HOME || ''
+        HERMES_HOME: hermesHome || process.env.HERMES_HOME || '',
+        STOCKSENSE_MCP_DEFAULTS_PATH: stockMcpDefaultsPath || ''
       }
     })
 
@@ -528,7 +530,7 @@ function parseStageResult(stdout) {
   return null
 }
 
-async function runStage({ scriptPath, installerKind, stage, emit, hermesHome, activeRoot, abortSignal, installStamp }) {
+async function runStage({ scriptPath, installerKind, stage, emit, hermesHome, activeRoot, abortSignal, installStamp, stockMcpDefaultsPath }) {
   const startedAt = Date.now()
   emit({ type: 'stage', name: stage.name, state: 'running' })
 
@@ -546,7 +548,8 @@ async function runStage({ scriptPath, installerKind, stage, emit, hermesHome, ac
     emit,
     stageName: stage.name,
     abortSignal,
-    hermesHome
+    hermesHome,
+    stockMcpDefaultsPath
   })
 
   const durationMs = Date.now() - startedAt
@@ -619,7 +622,8 @@ async function runBootstrap(opts) {
     logRoot,
     onEvent,
     abortSignal,
-    writeMarker // callback to write the bootstrap-complete marker; main.cjs provides
+    writeMarker, // callback to write the bootstrap-complete marker; main.cjs provides
+    stockMcpDefaultsPath
   } = opts
 
   // Bail before spawning anything if the user already cancelled — otherwise an
@@ -700,7 +704,8 @@ async function runBootstrap(opts) {
         hermesHome,
         activeRoot,
         abortSignal,
-        installStamp
+        installStamp,
+        stockMcpDefaultsPath
       })
       if (ev.state === 'failed') {
         emit({ type: 'failed', stage: stage.name, error: ev.error || 'stage failed' })
