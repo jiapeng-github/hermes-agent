@@ -75,13 +75,37 @@ npm run dev:fake-boot   # exercise the startup overlay with deterministic delays
 ### Building installers
 
 ```bash
-npm run dist:mac     # DMG + zip
-npm run dist:win     # NSIS + MSI
-npm run dist:linux   # AppImage + deb + rpm
+npm run dist:mac          # macOS arm64 offline DMG + zip
+npm run dist:mac:thin     # macOS arm64 network-bootstrap DMG + zip
+npm run dist:win          # Windows x64 offline NSIS exe
+npm run dist:win:thin     # Windows x64 network-bootstrap NSIS exe
 npm run pack         # unpacked app under release/ (no installer)
 ```
 
-Installers are built and uploaded to GitHub Releases manually. macOS/Windows signing & notarization happen automatically when the relevant credentials are present in the environment (`CSC_LINK` / `CSC_KEY_PASSWORD` / `APPLE_*` for macOS, `WIN_CSC_*` for Windows).
+The release matrix intentionally supports only `macos-arm64` and `windows-x64`. `STOCKSENSE_BUNDLE_RUNTIME` controls whether release builds include the native runtime. It defaults to `1`; set it to `0` for the original lightweight installer that downloads dependencies on first launch. The `:thin` commands above are cross-platform shortcuts for the `0` setting. Artifacts include an `offline` or `network` suffix so the two flavors do not overwrite each other.
+
+Offline release commands prepare uv, Python 3.11, the locked Python dependency cache, and a source archive before Electron Builder runs. Because Python runtimes and wheels are platform-specific, prepare and package offline installers on their matching native host; cross-building the Windows offline installer from macOS is not supported. Thin installers do not contain platform Python resources and retain the existing network bootstrap behavior.
+
+On Apple Silicon macOS, `npm run dist:win:thin` can cross-build the Windows x64 NSIS installer when Wine and Rosetta 2 are available. The build stages `win32-x64` native Node bindings explicitly instead of copying the macOS host bindings. If GitHub downloads time out, use the Electron and Electron Builder binary mirrors:
+
+```bash
+ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ \
+ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/ \
+npm run dist:win:thin
+```
+
+This cross-build path intentionally produces the `network` flavor. Run `npm run dist:win` on a Windows x64 host when the installer must include the Windows Python runtime and wheel cache.
+
+The bundled runtime is used on first launch before any network fallback. Node workspace dependencies, Playwright Chromium, ripgrep, and ffmpeg are not installed during desktop bootstrap. Default apps open in the user's system browser, so no browser binary is required in the installer; browser automation dependencies remain an on-demand installation. Installers are built and uploaded to GitHub Releases manually. macOS/Windows signing and notarization happen automatically when the relevant credentials are present in the environment (`CSC_LINK` / `CSC_KEY_PASSWORD` / `APPLE_*` for macOS, `WIN_CSC_*` for Windows).
+
+Downloaded release inputs are retained under `build/offline-runtime-prep/<target>` so a failed release preparation can resume without downloading Python and completed wheels again. The final verified resource tree is assembled under `build/offline-runtime` only after `uv sync` succeeds.
+
+Equivalent parameter form:
+
+```bash
+STOCKSENSE_BUNDLE_RUNTIME=1 npm run dist:mac  # offline, also the default
+STOCKSENSE_BUNDLE_RUNTIME=0 npm run dist:mac  # network bootstrap
+```
 
 ### How it works
 

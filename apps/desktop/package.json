@@ -18,19 +18,20 @@
     "profile:main": "wait-on http://127.0.0.1:5174 && cross-env XCURSOR_SIZE=24 HERMES_DESKTOP_DEV_SERVER=http://127.0.0.1:5174 electron --inspect=9229 .",
     "profile:main:cpu": "wait-on http://127.0.0.1:5174 && cross-env XCURSOR_SIZE=24 NODE_OPTIONS=--cpu-prof HERMES_DESKTOP_DEV_SERVER=http://127.0.0.1:5174 electron .",
     "start": "npm run build && electron .",
-    "build": "node scripts/assert-root-install.cjs && node scripts/write-build-stamp.cjs && node scripts/stage-native-deps.cjs && tsc -b && vite build && npm run postbuild",
+    "build": "node scripts/assert-root-install.cjs && node scripts/write-build-stamp.cjs && node scripts/stage-native-deps.cjs && node scripts/prepare-offline-runtime.cjs --placeholder && tsc -b && vite build && npm run postbuild",
+    "build:win": "cross-env STOCKSENSE_TARGET_PLATFORM=win32 STOCKSENSE_TARGET_ARCH=x64 npm run build",
     "postbuild": "node scripts/assert-dist-built.cjs",
     "prebuilder": "node scripts/patch-electron-builder-mac-binary.cjs",
     "builder": "cross-env NODE_OPTIONS=--max-old-space-size=16384 node scripts/run-electron-builder.cjs",
     "pack": "npm run build && npm run builder -- --dir",
-    "dist": "npm run build && npm run builder",
-    "dist:mac": "npm run build && npm run builder -- --mac",
-    "dist:mac:dmg": "npm run build && npm run builder -- --mac dmg",
-    "dist:mac:zip": "npm run build && npm run builder -- --mac zip",
-    "dist:win": "npm run build && npm run builder -- --win --x64",
-    "dist:win:msi": "npm run build && npm run builder -- --win msi --x64",
-    "dist:win:nsis": "npm run build && npm run builder -- --win nsis --x64",
-    "dist:linux": "npm run build && npm run builder -- --linux AppImage deb rpm",
+    "dist": "npm run build && node scripts/prepare-offline-runtime.cjs --package-mode && npm run builder",
+    "dist:mac": "npm run build && node scripts/prepare-offline-runtime.cjs --package-mode --target macos-arm64 && npm run builder -- --mac --arm64",
+    "dist:mac:thin": "cross-env STOCKSENSE_BUNDLE_RUNTIME=0 npm run dist:mac",
+    "dist:mac:dmg": "npm run build && node scripts/prepare-offline-runtime.cjs --package-mode --target macos-arm64 && npm run builder -- --mac dmg --arm64",
+    "dist:mac:zip": "npm run build && node scripts/prepare-offline-runtime.cjs --package-mode --target macos-arm64 && npm run builder -- --mac zip --arm64",
+    "dist:win": "npm run build:win && node scripts/prepare-offline-runtime.cjs --package-mode --target windows-x64 && npm run builder -- --win nsis --x64",
+    "dist:win:thin": "cross-env STOCKSENSE_BUNDLE_RUNTIME=0 npm run dist:win",
+    "dist:win:nsis": "npm run build:win && node scripts/prepare-offline-runtime.cjs --package-mode --target windows-x64 && npm run builder -- --win nsis --x64",
     "test:desktop": "node scripts/test-desktop.mjs",
     "test:desktop:all": "node scripts/test-desktop.mjs all",
     "test:desktop:dmg": "node scripts/test-desktop.mjs dmg",
@@ -38,7 +39,7 @@
     "test:desktop:existing": "node scripts/test-desktop.mjs existing",
     "test:desktop:fresh": "node scripts/test-desktop.mjs fresh",
     "test:apps:platforms": "node --test electron/app-browser.test.cjs electron/app-packages.test.cjs",
-    "test:desktop:platforms": "node --test electron/bootstrap-platform.test.cjs electron/hardening.test.cjs electron/backend-env.test.cjs electron/backend-probes.test.cjs electron/backend-ready.test.cjs electron/bootstrap-runner.test.cjs electron/connection-config.test.cjs electron/dashboard-token.test.cjs electron/gateway-ws-probe.test.cjs electron/oauth-net-request.test.cjs electron/desktop-uninstall.test.cjs electron/session-windows.test.cjs electron/link-title-window.test.cjs electron/workspace-cwd.test.cjs electron/fs-read-dir.test.cjs electron/git-root.test.cjs electron/git-worktree-ops.test.cjs electron/windows-child-process.test.cjs electron/update-remote.test.cjs electron/update-count.test.cjs electron/update-rebuild.test.cjs electron/update-marker.test.cjs electron/update-relaunch.test.cjs electron/windows-user-env.test.cjs electron/wsl-clipboard-image.test.cjs electron/titlebar-overlay-width.test.cjs electron/window-state.test.cjs electron/zoom.test.cjs electron/windows-hermes-resolution.test.cjs electron/oauth-session-request.test.cjs",
+    "test:desktop:platforms": "node --test electron/bootstrap-platform.test.cjs electron/hardening.test.cjs electron/backend-env.test.cjs electron/backend-probes.test.cjs electron/backend-ready.test.cjs electron/bootstrap-runner.test.cjs electron/connection-config.test.cjs electron/dashboard-token.test.cjs electron/gateway-ws-probe.test.cjs electron/oauth-net-request.test.cjs electron/desktop-uninstall.test.cjs electron/session-windows.test.cjs electron/link-title-window.test.cjs electron/workspace-cwd.test.cjs electron/fs-read-dir.test.cjs electron/git-root.test.cjs electron/git-worktree-ops.test.cjs electron/windows-child-process.test.cjs electron/update-remote.test.cjs electron/update-count.test.cjs electron/update-rebuild.test.cjs electron/update-marker.test.cjs electron/update-relaunch.test.cjs electron/windows-user-env.test.cjs electron/wsl-clipboard-image.test.cjs electron/titlebar-overlay-width.test.cjs electron/window-state.test.cjs electron/zoom.test.cjs electron/windows-hermes-resolution.test.cjs electron/oauth-session-request.test.cjs scripts/prepare-offline-runtime.test.cjs scripts/stage-native-deps.test.cjs",
     "typecheck": "tsc -p . --noEmit",
     "lint": "eslint src/ electron/",
     "lint:fix": "eslint src/ electron/ --fix",
@@ -191,6 +192,10 @@
         "to": "stock-mcp-defaults.json"
       },
       {
+        "from": "build/offline-runtime",
+        "to": "offline-runtime"
+      },
+      {
         "from": "assets/icon.ico",
         "to": "icon.ico"
       }
@@ -245,10 +250,9 @@
     "win": {
       "legalTrademarks": "StockSense",
       "target": [
-        "nsis",
-        "msi"
+        "nsis"
       ],
-      "signAndEditExecutable": false
+      "signExecutable": false
     },
     "linux": {
       "category": "Development",

@@ -8376,6 +8376,7 @@ def _cmd_update_check(branch: str = "main", *, branch_explicit: bool = False):
     """
     from hermes_cli.config import (
         detect_install_method,
+        format_desktop_bundle_update_message,
         format_unsupported_install_warning,
         is_unsupported_install_method,
     )
@@ -8389,6 +8390,9 @@ def _cmd_update_check(branch: str = "main", *, branch_explicit: bool = False):
         # ".git is missing" would point them at the wrong remediation.
         from hermes_cli.config import format_docker_update_message
         print(format_docker_update_message())
+        sys.exit(1)
+    if method == "desktop-bundle":
+        print(format_desktop_bundle_update_message())
         sys.exit(1)
     if method == "pip":
         from hermes_cli.config import recommended_update_command
@@ -9263,6 +9267,7 @@ def cmd_update(args):
     """
     from hermes_cli.config import (
         detect_install_method,
+        format_desktop_bundle_update_message,
         format_docker_update_message,
         format_unsupported_install_warning,
         is_managed,
@@ -9291,6 +9296,9 @@ def cmd_update(args):
     # rationale and tag-pinning / config-persistence notes.
     if detect_install_method(PROJECT_ROOT) == "docker":
         print(format_docker_update_message())
+        sys.exit(1)
+    if detect_install_method(PROJECT_ROOT) == "desktop-bundle":
+        print(format_desktop_bundle_update_message())
         sys.exit(1)
 
     if getattr(args, "check", False):

@@ -145,11 +145,58 @@ $PythonVersion = "3.11"
 # source of truth shared by Test-Python's fallback and Resolve-AvailablePythonVersion.
 $PythonFallbackVersions = @("3.12", "3.13", "3.10")
 $NodeVersion = "22"
+$OfflineRuntimePath = $env:STOCKSENSE_OFFLINE_RUNTIME_PATH
+$DesktopRuntime = ($env:STOCKSENSE_DESKTOP_RUNTIME -eq "1")
+$script:OfflineRuntimeReady = $false
 
 # Stage-protocol version.  Bumped only for genuinely breaking changes to the
 # manifest schema, stage-name set semantics, or stdout JSON shape.  Adding a
 # new stage does NOT bump this -- drivers iterate the manifest dynamically.
 $InstallStageProtocolVersion = 1
+
+function Test-BundledRuntime {
+    return (
+        $OfflineRuntimePath `
+        -and (Test-Path (Join-Path $OfflineRuntimePath "manifest.json")) `
+        -and (Test-Path (Join-Path $OfflineRuntimePath "hermes-agent-source.zip")) `
+        -and (Test-Path (Join-Path $OfflineRuntimePath "python")) `
+        -and (Test-Path (Join-Path $OfflineRuntimePath "uv-cache"))
+    )
+}
+
+function Initialize-BundledRuntime {
+    if (-not (Test-BundledRuntime)) { return $false }
+
+    $managedRoot = Join-Path $HermesHome "bootstrap-cache\offline-runtime"
+    $readyMarker = Join-Path $managedRoot ".ready"
+    $managedManifest = Join-Path $managedRoot "manifest.json"
+    $bundledManifest = Join-Path $OfflineRuntimePath "manifest.json"
+    New-Item -ItemType Directory -Path (Join-Path $HermesHome "bin") -Force | Out-Null
+    New-Item -ItemType Directory -Path $managedRoot -Force | Out-Null
+
+    $manifestMatches = (Test-Path $managedManifest) -and (
+        (Get-FileHash -LiteralPath $bundledManifest -Algorithm SHA256).Hash -eq
+        (Get-FileHash -LiteralPath $managedManifest -Algorithm SHA256).Hash
+    )
+    if (-not (Test-Path $readyMarker) -or -not $manifestMatches) {
+        Remove-Item -LiteralPath (Join-Path $managedRoot "python") -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath (Join-Path $managedRoot "uv-cache") -Recurse -Force -ErrorAction SilentlyContinue
+        Copy-Item -LiteralPath (Join-Path $OfflineRuntimePath "python") -Destination (Join-Path $managedRoot "python") -Recurse -Force
+        Copy-Item -LiteralPath (Join-Path $OfflineRuntimePath "uv-cache") -Destination (Join-Path $managedRoot "uv-cache") -Recurse -Force
+        Copy-Item -LiteralPath $bundledManifest -Destination $managedManifest -Force
+        New-Item -ItemType File -Path $readyMarker -Force | Out-Null
+    }
+
+    $bundledUv = Join-Path $OfflineRuntimePath "bin\uv.exe"
+    if (Test-Path $bundledUv) {
+        Copy-Item -LiteralPath $bundledUv -Destination (Join-Path $HermesHome "bin\uv.exe") -Force
+    }
+
+    $env:UV_PYTHON_INSTALL_DIR = Join-Path $managedRoot "python"
+    $env:UV_CACHE_DIR = Join-Path $managedRoot "uv-cache"
+    $script:OfflineRuntimeReady = $true
+    return $true
+}
 
 # ============================================================================
 # Helper functions
@@ -449,6 +496,8 @@ function Install-Uv {
     # place, so install.ps1 and `hermes update` stay in sync.
     $managedUv = Join-Path $HermesHome "bin\uv.exe"
 
+    Initialize-BundledRuntime | Out-Null
+
     if (Test-Path $managedUv) {
         $script:UvCmd = $managedUv
         $version = & $managedUv --version
@@ -531,6 +580,7 @@ function Ensure-NodeExeOnPath {
 # Throws if uv is not findable — the caller's stage then surfaces a
 # clean error via the stage-driver's try/catch.
 function Resolve-UvCmd {
+    Initialize-BundledRuntime | Out-Null
     # Already resolved (default invocation path: Install-Uv ran earlier
     # in the same process and set $script:UvCmd).
     if ($script:UvCmd) {
@@ -595,6 +645,7 @@ function Resolve-AvailablePythonVersion {
 }
 
 function Test-Python {
+    Initialize-BundledRuntime | Out-Null
     Write-Info "Checking Python $PythonVersion..."
     
     # Let uv find or install Python
@@ -1273,6 +1324,33 @@ function Install-SystemPackages {
 function Install-Repository {
     Write-Info "Installing to $InstallDir..."
 
+    if (Test-BundledRuntime) {
+        $bundledManifest = Join-Path $OfflineRuntimePath "manifest.json"
+        $bundledSourceMarker = Join-Path $InstallDir ".stocksense-offline-runtime-manifest.json"
+        if (Test-Path (Join-Path $InstallDir "pyproject.toml")) {
+            $sourceMatches = (Test-Path $bundledSourceMarker) -and (
+                (Get-FileHash -LiteralPath $bundledManifest -Algorithm SHA256).Hash -eq
+                (Get-FileHash -LiteralPath $bundledSourceMarker -Algorithm SHA256).Hash
+            )
+            if (-not (Test-Path $bundledSourceMarker) -or $sourceMatches) {
+                Write-Success "Hermes source already installed"
+                return
+            }
+            Write-Info "A newer bundled Hermes source is available"
+        }
+        if (Test-Path $InstallDir) {
+            $bundledBackup = "$InstallDir.broken-" + (Get-Date -Format "yyyyMMdd-HHmmss")
+            Write-Warn "Moving incomplete installation to $bundledBackup"
+            Move-Item -LiteralPath $InstallDir -Destination $bundledBackup -Force
+        }
+        New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
+        Write-Info "Extracting bundled Hermes Agent source..."
+        Expand-Archive -LiteralPath (Join-Path $OfflineRuntimePath "hermes-agent-source.zip") -DestinationPath $InstallDir -Force
+        Copy-Item -LiteralPath $bundledManifest -Destination $bundledSourceMarker -Force
+        Write-Success "Bundled Hermes source installed"
+        return
+    }
+
     $didUpdate = $false
 
     if (Test-Path $InstallDir) {
@@ -1843,6 +1921,10 @@ function Install-Dependencies {
         # in the wrong directory and imports fail with ModuleNotFoundError.
         # (Mirrors the same flag in scripts/install.sh::install_deps.)
         $env:UV_PROJECT_ENVIRONMENT = "$InstallDir\venv"
+        if ($script:OfflineRuntimeReady) {
+            $env:UV_OFFLINE = "1"
+            Write-Info "Using bundled Python dependency cache (offline mode)"
+        }
         Invoke-NativeWithRelaxedErrorAction { & $UvCmd sync --extra all --locked }
         if ($LASTEXITCODE -eq 0) {
             Write-Success "Main package installed (hash-verified via uv.lock)"
@@ -1851,6 +1933,10 @@ function Install-Dependencies {
             # complete, hash-verified install.
             $skipPipFallback = $true
         } else {
+            if ($script:OfflineRuntimeReady) {
+                Remove-Item Env:UV_OFFLINE -ErrorAction SilentlyContinue
+                Write-Warn "Bundled dependency cache was incomplete; allowing network fallback."
+            }
             Write-Warn "uv.lock sync failed (lockfile may be stale), falling back to PyPI resolve..."
             $skipPipFallback = $false
         }
@@ -2166,6 +2252,8 @@ function Write-BootstrapMarker {
     # whole point. Use the .NET API directly for BOM-less UTF-8.
     $utf8NoBom = New-Object System.Text.UTF8Encoding $false
     [System.IO.File]::WriteAllText($markerPath, $json, $utf8NoBom)
+    $installMethod = if (Test-BundledRuntime) { "desktop-bundle" } else { "git" }
+    [System.IO.File]::WriteAllText((Join-Path $InstallDir ".install_method"), "$installMethod`n", $utf8NoBom)
 
     Write-Success "Bootstrap marker written: $markerPath"
 }
@@ -3172,8 +3260,13 @@ function Write-Completion {
     Write-Host "Open config in editor"
     Write-Host "   hermes gateway      " -NoNewline -ForegroundColor Green
     Write-Host "Start messaging gateway (Telegram, Discord, etc.)"
-    Write-Host "   hermes update       " -NoNewline -ForegroundColor Green
-    Write-Host "Update to latest version"
+    if (Test-BundledRuntime) {
+        Write-Host "   Desktop installer   " -NoNewline -ForegroundColor Green
+        Write-Host "Install a newer app release to update"
+    } else {
+        Write-Host "   hermes update       " -NoNewline -ForegroundColor Green
+        Write-Host "Update to latest version"
+    }
     Write-Host ""
     
     Write-Host "---------------------------------------------------------" -ForegroundColor Cyan
@@ -3309,7 +3402,13 @@ $InstallStages += @(
 # process), and throws cleanly if uv truly isn't installed yet.
 function Stage-Uv               { if (-not (Install-Uv))     { throw "uv installation failed" } }
 function Stage-Python           { Resolve-UvCmd; if (-not (Test-Python))    { throw "Python $PythonVersion not available" } }
-function Stage-Git              { if (-not (Install-Git))    { throw "Git not available and auto-install failed -- install from https://git-scm.com/download/win then re-run" } }
+function Stage-Git              {
+    if ($DesktopRuntime -and (Test-BundledRuntime)) {
+        $script:_StageSkippedReason = "Bundled source does not require Git during first launch"
+    } elseif (-not (Install-Git)) {
+        throw "Git not available and auto-install failed -- install from https://git-scm.com/download/win then re-run"
+    }
+}
 # Node is optional (browser tools degrade gracefully without it).  Surface
 # failure to the JSON contract as skipped=true / reason rather than ok=true,
 # so a GUI driver consuming the manifest can distinguish "node ready" from
@@ -3317,15 +3416,29 @@ function Stage-Git              { if (-not (Install-Git))    { throw "Git not av
 # existing Write-Completion behavior that prints a "Note: Node.js could
 # not be installed" hint instead of aborting.
 function Stage-Node             {
-    if (-not (Test-Node)) {
+    if ($DesktopRuntime) {
+        $script:_StageSkippedReason = "Browser automation dependencies are installed on demand"
+    } elseif (-not (Test-Node)) {
         $script:_StageSkippedReason = "Node.js not available; browser tools will be unavailable until node is installed manually from https://nodejs.org/en/download/"
     }
 }
-function Stage-SystemPackages   { Install-SystemPackages }
+function Stage-SystemPackages   {
+    if ($DesktopRuntime) {
+        $script:_StageSkippedReason = "ripgrep and ffmpeg are optional desktop capabilities"
+    } else {
+        Install-SystemPackages
+    }
+}
 function Stage-Repository       { Install-Repository }
 function Stage-Venv             { Resolve-UvCmd; Install-Venv }
 function Stage-Dependencies     { Resolve-UvCmd; Install-Dependencies }
-function Stage-NodeDeps         { Install-NodeDeps }
+function Stage-NodeDeps         {
+    if ($DesktopRuntime) {
+        $script:_StageSkippedReason = "Browser and TUI dependencies are installed on demand"
+    } else {
+        Install-NodeDeps
+    }
+}
 function Stage-Desktop          { Install-Desktop }
 function Stage-Path             { Set-PathVariable }
 function Stage-ConfigTemplates  { Copy-ConfigTemplates }

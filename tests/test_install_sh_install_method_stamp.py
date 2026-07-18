@@ -31,6 +31,9 @@ def test_install_sh_stamps_code_tree_not_home() -> None:
     assert text.count('echo "git" > "$INSTALL_DIR/.install_method"') >= 1, (
         "install.sh must stamp $INSTALL_DIR/.install_method (code-scoped)"
     )
+    assert 'echo "desktop-bundle" > "$INSTALL_DIR/.install_method"' in text, (
+        "offline desktop installs must not claim to be git checkouts"
+    )
 
     # Never stamps the shared data dir.
     assert not re.search(r'>\s*"\$HERMES_HOME/\.install_method"', text), (

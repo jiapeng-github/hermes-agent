@@ -1,17 +1,13 @@
 /**
  * after-pack.cjs — electron-builder afterPack hook.
  *
- * Stamps the Hermes icon + identity onto the packed Windows Hermes.exe via
- * rcedit (delegated to set-exe-identity.cjs). This runs for EVERY packed build
- * — first install, `hermes desktop`, the installer's --update rebuild, and a
- * dev's manual `npm run pack` — so the branded exe can never silently revert
- * to the stock "Electron" icon/name (the bug when the stamp lived only in
- * install.ps1, which the update path doesn't use).
+ * Provides a Windows-host fallback that stamps the Hermes icon + identity onto
+ * the packed Windows Hermes.exe via rcedit. Modern electron-builder performs
+ * the primary resource edit using pure JavaScript before this hook runs.
  *
- * Windows-only: rcedit edits PE resources, irrelevant on macOS/Linux where the
- * app identity comes from the bundle Info.plist / desktop entry. Best-effort:
- * a stamp failure must never fail an otherwise-good build (worst case is the
- * stock icon, not a broken app), so we log and resolve rather than throw.
+ * The fallback only runs on a native Windows builder, avoiding Wine command
+ * compatibility problems during macOS cross-builds. It is best-effort so a
+ * stamp failure never fails an otherwise-good build.
  *
  * electron-builder passes a context with:
  *   - electronPlatformName: 'win32' | 'darwin' | 'linux'
@@ -24,7 +20,7 @@ const path = require('node:path')
 const { stampExeIdentity } = require('./set-exe-identity.cjs')
 
 exports.default = async function afterPack(context) {
-  if (context.electronPlatformName !== 'win32') {
+  if (context.electronPlatformName !== 'win32' || process.platform !== 'win32') {
     return
   }
 

@@ -375,6 +375,42 @@ function resolveStockMcpDefaultsPath() {
   return candidates.find(candidate => candidate && fileExists(candidate)) || null
 }
 
+function resolveOfflineRuntimePath() {
+  const expectedTarget = process.platform === 'win32' && process.arch === 'x64'
+    ? 'windows-x64'
+    : process.platform === 'darwin' && process.arch === 'arm64'
+      ? 'macos-arm64'
+      : null
+  if (!expectedTarget) return null
+
+  const candidates = [
+    process.resourcesPath ? path.join(process.resourcesPath, 'offline-runtime') : null,
+    path.join(APP_ROOT, 'build', 'offline-runtime')
+  ]
+  for (const candidate of candidates) {
+    if (!candidate) continue
+    try {
+      const manifest = JSON.parse(fs.readFileSync(path.join(candidate, 'manifest.json'), 'utf8'))
+      if (manifest.bundled !== true || manifest.target !== expectedTarget || !manifest.files) continue
+      const root = path.resolve(candidate)
+      const valid = Object.entries(manifest.files).every(([relative, expected]) => {
+        const file = path.resolve(root, relative)
+        if (!file.startsWith(`${root}${path.sep}`) || typeof expected !== 'string') return false
+        try {
+          const actual = crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex')
+          return actual === expected
+        } catch {
+          return false
+        }
+      })
+      if (valid) return candidate
+    } catch {
+      void 0
+    }
+  }
+  return null
+}
+
 const DESKTOP_CONNECTION_CONFIG_PATH = path.join(app.getPath('userData'), 'connection.json')
 const DESKTOP_UPDATE_CONFIG_PATH = path.join(app.getPath('userData'), 'updates.json')
 const DESKTOP_WINDOW_STATE_PATH = path.join(app.getPath('userData'), 'window-state.json')
@@ -3188,6 +3224,7 @@ async function ensureRuntime(backend) {
       hermesHome: HERMES_HOME,
       logRoot: path.join(HERMES_HOME, 'logs'),
       stockMcpDefaultsPath: resolveStockMcpDefaultsPath(),
+      offlineRuntimePath: resolveOfflineRuntimePath(),
       abortSignal: bootstrapAbortController.signal,
       onEvent: ev => {
         // Tee every bootstrap event to (a) the desktop log for forensics

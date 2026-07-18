@@ -5,6 +5,9 @@
 // npm workspace hoisting is non-deterministic — require.resolve finds electron
 // wherever it landed. Dist present → -c.electronDist=<abs>/dist; absent → let
 // electron-builder fetch via @electron/get (electronVersion + ELECTRON_MIRROR).
+//
+// Cross-platform builds (e.g. --win on darwin) must NOT reuse the local Electron
+// dist — the host platform's binary doesn't match the target.
 
 const fs = require("node:fs")
 const path = require("node:path")
@@ -35,19 +38,50 @@ function electronBuilderCli() {
   return path.join(path.dirname(pkgJson), rel)
 }
 
+function runtimeFlavor() {
+  const manifestPath = path.resolve(__dirname, "..", "build", "offline-runtime", "manifest.json")
+  try {
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"))
+    return manifest && manifest.bundled === true ? "offline" : "network"
+  } catch {
+    return "network"
+  }
+}
+
+const args = process.argv.slice(2)
+
+// Detect cross-platform build: if any target platform flag differs from the
+// host platform, skip the local electron dist.
+const crossTarget = args.some(a => {
+  if (a === '--win' || a === '--linux') return process.platform !== 'win32'
+  if (a === '--mac' || a === '--macos') return process.platform !== 'darwin'
+  return false
+})
+const noCross = !args.includes('--win') && !args.includes('--linux') && !args.includes('--mac')
+
 const dist = electronDistDir()
-const args = []
-if (dist && fs.existsSync(distBinary(dist))) {
-  args.push(`-c.electronDist=${dist}`)
+const builderArgs = []
+if (!args.some(arg => arg.includes("artifactName"))) {
+  const flavor = runtimeFlavor()
+  builderArgs.push(`-c.artifactName=StockSense-\${version}-\${os}-\${arch}-${flavor}.\${ext}`)
+  console.log(`[run-electron-builder] packaging ${flavor} runtime flavor`)
+}
+if (dist && fs.existsSync(distBinary(dist)) && (noCross || !crossTarget)) {
+  builderArgs.push(`-c.electronDist=${dist}`)
+} else if (crossTarget) {
+  console.warn(
+    "[run-electron-builder] cross-platform build detected; letting electron-builder " +
+      "fetch the target platform's Electron binary via @electron/get."
+  )
 } else {
   console.warn(
     "[run-electron-builder] no local electron dist; electron-builder will fetch " +
       "via @electron/get (electronVersion + ELECTRON_MIRROR)."
   )
 }
-args.push(...process.argv.slice(2))
+builderArgs.push(...args)
 
-const result = spawnSync(process.execPath, [electronBuilderCli(), ...args], {
+const result = spawnSync(process.execPath, [electronBuilderCli(), ...builderArgs], {
   stdio: "inherit",
 })
 if (result.error) {

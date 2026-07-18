@@ -58,6 +58,9 @@ else
 fi
 PYTHON_VERSION="3.11"
 NODE_VERSION="22"
+OFFLINE_RUNTIME_PATH="${STOCKSENSE_OFFLINE_RUNTIME_PATH:-}"
+DESKTOP_RUNTIME="${STOCKSENSE_DESKTOP_RUNTIME:-0}"
+OFFLINE_RUNTIME_READY=false
 
 # FHS-style root install layout (set by resolve_install_layout when applicable):
 #   code at /usr/local/lib/hermes-agent, command at /usr/local/bin/hermes,
@@ -80,6 +83,43 @@ STAGE_NAME=""
 JSON_OUTPUT=false
 NON_INTERACTIVE=false
 INCLUDE_DESKTOP=false
+
+has_offline_runtime() {
+    [ -n "$OFFLINE_RUNTIME_PATH" ] \
+        && [ -f "$OFFLINE_RUNTIME_PATH/manifest.json" ] \
+        && [ -f "$OFFLINE_RUNTIME_PATH/hermes-agent-source.zip" ] \
+        && [ -d "$OFFLINE_RUNTIME_PATH/python" ] \
+        && [ -d "$OFFLINE_RUNTIME_PATH/uv-cache" ]
+}
+
+prepare_offline_runtime() {
+    has_offline_runtime || return 1
+
+    local managed_root="$HERMES_HOME/bootstrap-cache/offline-runtime"
+    local ready_marker="$managed_root/.ready"
+    local managed_manifest="$managed_root/manifest.json"
+    mkdir -p "$HERMES_HOME/bin" "$managed_root"
+
+    if [ ! -f "$ready_marker" ] \
+        || [ ! -f "$managed_manifest" ] \
+        || ! cmp -s "$OFFLINE_RUNTIME_PATH/manifest.json" "$managed_manifest"; then
+        rm -rf "$managed_root/python" "$managed_root/uv-cache"
+        cp -R "$OFFLINE_RUNTIME_PATH/python" "$managed_root/python"
+        cp -R "$OFFLINE_RUNTIME_PATH/uv-cache" "$managed_root/uv-cache"
+        cp "$OFFLINE_RUNTIME_PATH/manifest.json" "$managed_manifest"
+        touch "$ready_marker"
+    fi
+
+    if [ -x "$OFFLINE_RUNTIME_PATH/bin/uv" ]; then
+        cp "$OFFLINE_RUNTIME_PATH/bin/uv" "$HERMES_HOME/bin/uv"
+        chmod 755 "$HERMES_HOME/bin/uv"
+    fi
+
+    export UV_PYTHON_INSTALL_DIR="$managed_root/python"
+    export UV_CACHE_DIR="$managed_root/uv-cache"
+    OFFLINE_RUNTIME_READY=true
+    return 0
+}
 
 # Detect non-interactive mode (e.g. curl | bash)
 # When stdin is not a terminal, read -p will fail with EOF,
@@ -557,6 +597,8 @@ install_uv() {
     # place, so install.sh and `hermes update` stay in sync.
     local _managed_uv="$HERMES_HOME/bin/uv"
 
+    prepare_offline_runtime >/dev/null 2>&1 || true
+
     if [ -x "$_managed_uv" ]; then
         UV_CMD="$_managed_uv"
         UV_VERSION=$($UV_CMD --version 2>/dev/null)
@@ -627,6 +669,7 @@ check_python() {
         return 0
     fi
 
+    prepare_offline_runtime >/dev/null 2>&1 || true
     log_info "Checking Python $PYTHON_VERSION..."
 
     # Let uv handle Python — it can download and manage Python versions
@@ -1175,6 +1218,35 @@ show_manual_install_hint() {
 clone_repo() {
     log_info "Installing to $INSTALL_DIR..."
 
+    if has_offline_runtime; then
+        local bundled_source_marker="$INSTALL_DIR/.stocksense-offline-runtime-manifest.json"
+        if [ -f "$INSTALL_DIR/pyproject.toml" ]; then
+            if [ ! -f "$bundled_source_marker" ] \
+                || cmp -s "$OFFLINE_RUNTIME_PATH/manifest.json" "$bundled_source_marker"; then
+                log_success "Hermes source already installed"
+                cd "$INSTALL_DIR"
+                return 0
+            fi
+            log_info "A newer bundled Hermes source is available"
+        fi
+        if [ -e "$INSTALL_DIR" ]; then
+            local bundled_backup="$INSTALL_DIR.broken-$(date +%Y%m%d-%H%M%S)"
+            log_warn "Moving incomplete installation to $bundled_backup"
+            mv "$INSTALL_DIR" "$bundled_backup"
+        fi
+        mkdir -p "$INSTALL_DIR"
+        log_info "Extracting bundled Hermes Agent source..."
+        if command -v ditto >/dev/null 2>&1; then
+            ditto -x -k "$OFFLINE_RUNTIME_PATH/hermes-agent-source.zip" "$INSTALL_DIR"
+        else
+            unzip -q "$OFFLINE_RUNTIME_PATH/hermes-agent-source.zip" -d "$INSTALL_DIR"
+        fi
+        cp "$OFFLINE_RUNTIME_PATH/manifest.json" "$bundled_source_marker"
+        cd "$INSTALL_DIR"
+        log_success "Bundled Hermes source installed"
+        return 0
+    fi
+
     # An interrupted previous clone leaves a .git with no initial commit, where
     # the update path's `git stash` / `git checkout` abort with "You do not
     # have the initial commit yet" and fail the install (#40998). Move such a
@@ -1481,10 +1553,18 @@ install_deps() {
         #                  This respects the curation in pyproject.toml.
         # uv's own progress UI handles TTY detection and downgrades
         # gracefully when stdout/stderr aren't terminals.
+        if [ "$OFFLINE_RUNTIME_READY" = true ]; then
+            export UV_OFFLINE=1
+            log_info "Using bundled Python dependency cache (offline mode)"
+        fi
         if UV_PROJECT_ENVIRONMENT="$INSTALL_DIR/venv" $UV_CMD sync --extra all --locked; then
             log_success "Main package installed (hash-verified via uv.lock)"
             log_success "All dependencies installed"
             return 0
+        fi
+        if [ "$OFFLINE_RUNTIME_READY" = true ]; then
+            unset UV_OFFLINE
+            log_warn "Bundled dependency cache was incomplete; allowing network fallback."
         fi
         log_warn "uv.lock sync failed (see uv output above), falling back to PyPI resolve..."
     else
@@ -2409,7 +2489,11 @@ print_success() {
     echo -e "   ${GREEN}hermes config${NC}       View/edit configuration"
     echo -e "   ${GREEN}hermes config edit${NC}  Open config in editor"
     echo -e "   ${GREEN}hermes gateway install${NC} Install gateway service (messaging + cron)"
-    echo -e "   ${GREEN}hermes update${NC}       Update to latest version"
+    if has_offline_runtime; then
+        echo -e "   ${GREEN}Desktop installer${NC}   Install a newer app release to update"
+    else
+        echo -e "   ${GREEN}hermes update${NC}       Update to latest version"
+    fi
     echo ""
 
     echo -e "${CYAN}─────────────────────────────────────────────────────────${NC}"
@@ -2965,15 +3049,19 @@ run_stage_body() {
             resolve_install_layout
             install_uv
             check_python
-            check_git
-            check_node
-            check_network_prerequisites
-            install_system_packages
+            if [ "$DESKTOP_RUNTIME" = "1" ] && has_offline_runtime; then
+                log_success "Bundled desktop runtime prerequisites ready"
+            else
+                check_git
+                check_node
+                check_network_prerequisites
+                install_system_packages
+            fi
             ;;
         repository)
             detect_os
             resolve_install_layout
-            check_git
+            if ! has_offline_runtime; then check_git; fi
             clone_repo
             ;;
         venv)
@@ -2996,8 +3084,12 @@ run_stage_body() {
             detect_os
             resolve_install_layout
             require_install_dir
-            check_node
-            install_node_deps
+            if [ "$DESKTOP_RUNTIME" = "1" ]; then
+                log_info "Skipping optional browser/TUI dependencies during desktop bootstrap"
+            else
+                check_node
+                install_node_deps
+            fi
             ;;
         path)
             detect_os
@@ -3043,7 +3135,11 @@ run_stage_body() {
             # bind-mounted into a Docker gateway too), so a stamp there gets
             # clobbered by the container's 'docker' stamp and wrongly blocks
             # 'hermes update' on this host install. See detect_install_method().
-            echo "git" > "$INSTALL_DIR/.install_method"
+            if has_offline_runtime; then
+                echo "desktop-bundle" > "$INSTALL_DIR/.install_method"
+            else
+                echo "git" > "$INSTALL_DIR/.install_method"
+            fi
             ;;
         *)
             log_error "Unknown stage: $stage"

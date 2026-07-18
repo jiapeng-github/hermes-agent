@@ -5,27 +5,16 @@
 //
 // WHY THIS EXISTS
 // ---------------
-// apps/desktop/package.json sets build.win.signAndEditExecutable=false. That
-// flag is load-bearing: turning electron-builder's own exe-editing ON also
-// re-enables its signtool step, which fetches winCodeSign-2.6.0.7z, whose
-// macOS symlinks crash 7-Zip on non-admin Windows (no Developer Mode = no
-// SeCreateSymbolicLinkPrivilege). That is an unfixable dead end — we do NOT
-// try to extract winCodeSign.
-//
-// The cost of disabling signAndEditExecutable is that electron-builder also
-// skips rcedit, so the unpacked Hermes.exe keeps the stock Electron icon and
-// "Electron" taskbar name. This script restores the icon + identity by calling
-// rcedit DIRECTLY. rcedit is a pure PE resource editor: no signing, no certs,
-// no winCodeSign, no symlinks.
+// apps/desktop/package.json sets build.win.signExecutable=false. Modern
+// electron-builder still applies icon and version resources with its pure-JS
+// resedit path while skipping signing and winCodeSign downloads. This script
+// remains as a Windows-host fallback for older builder installations.
 //
 // HOW IT RUNS
 // -----------
-// Primarily as an electron-builder `afterPack` hook (scripts/after-pack.cjs),
-// so EVERY packed build — first install, `hermes desktop`, the installer's
-// --update rebuild, or a dev's manual `npm run pack` — gets a branded exe from
-// one place. Previously this stamp lived only in install.ps1, so the update
-// path (which rebuilds via `hermes desktop --build-only`, never install.ps1)
-// shipped a stock "Electron" exe. Keeping it in afterPack closes that gap.
+// It is invoked by the electron-builder `afterPack` hook on Windows hosts.
+// Cross-builds use electron-builder's platform-independent resource editor,
+// because rcedit's Wine launcher is not reliable across Wine distributions.
 //
 // Also runnable standalone for ad-hoc re-stamping:
 //   node scripts/set-exe-identity.cjs <path-to-Hermes.exe>

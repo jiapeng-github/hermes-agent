@@ -80,6 +80,32 @@ test('resolveInstallScript prefers a cached script without touching the network'
   }
 })
 
+test('resolveInstallScript prefers the bundled offline installer before cache or network', async () => {
+  const home = mkTmpHome()
+  const runtime = fs.mkdtempSync(path.join(os.tmpdir(), 'stocksense-runtime-test-'))
+  try {
+    const bundled = path.join(runtime, SCRIPT_NAME)
+    fs.writeFileSync(bundled, '# bundled installer\n')
+
+    const result = await resolveInstallScript({
+      installStamp: { commit: 'a'.repeat(40) },
+      sourceRepoRoot: null,
+      hermesHome: home,
+      offlineRuntimePath: runtime,
+      emit: () => {},
+      _download: async () => {
+        throw new Error('network should not be used')
+      }
+    })
+
+    assert.equal(result.source, 'bundle')
+    assert.equal(result.path, bundled)
+  } finally {
+    fs.rmSync(home, { recursive: true, force: true })
+    fs.rmSync(runtime, { recursive: true, force: true })
+  }
+})
+
 test('resolveInstallScript falls back to the installed agent checkout on a 404', async () => {
   const home = mkTmpHome()
   try {

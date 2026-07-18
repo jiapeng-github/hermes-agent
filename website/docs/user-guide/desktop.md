@@ -282,11 +282,14 @@ npm run dev:fake-boot   # exercise the startup overlay with deterministic delays
 Build installers:
 
 ```bash
-npm run dist:mac     # DMG + zip
-npm run dist:win     # NSIS + MSI
-npm run dist:linux   # AppImage + deb + rpm
+npm run dist:mac          # macOS arm64 offline DMG + zip
+npm run dist:mac:thin     # macOS arm64 network-bootstrap DMG + zip
+npm run dist:win          # Windows x64 offline NSIS exe
+npm run dist:win:thin     # Windows x64 network-bootstrap NSIS exe
 npm run pack         # unpacked app under release/ (no installer)
 ```
+
+Desktop releases support `macos-arm64` and `windows-x64`. `STOCKSENSE_BUNDLE_RUNTIME` defaults to `1`, producing an offline installer with uv, Python 3.11, the locked Python dependency cache, and a source archive. Set it to `0`, or use a `:thin` command, to produce the original lightweight installer that downloads dependencies on first launch. Artifact names carry an `offline` or `network` suffix. Build offline installers on their matching native host because Python runtimes and wheels are platform-specific. Default apps use the operating system browser, so Playwright Chromium and other browser-automation dependencies are installed only when those tools are first enabled.
 
 macOS/Windows signing and notarization run automatically when the relevant credentials are present in the environment (`CSC_LINK` / `CSC_KEY_PASSWORD` / `APPLE_*` for macOS, `WIN_CSC_*` for Windows).
 

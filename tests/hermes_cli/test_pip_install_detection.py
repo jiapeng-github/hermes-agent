@@ -172,6 +172,19 @@ def test_recommended_update_command_docker():
     assert "docker pull" in recommended_update_command_for_method("docker")
 
 
+def test_desktop_bundle_install_method_and_update_guidance(tmp_path):
+    from hermes_cli.config import (
+        detect_install_method,
+        format_desktop_bundle_update_message,
+        recommended_update_command_for_method,
+    )
+
+    (tmp_path / ".install_method").write_text("desktop-bundle\n")
+    assert detect_install_method(project_root=tmp_path) == "desktop-bundle"
+    assert "desktop app" in recommended_update_command_for_method("desktop-bundle")
+    assert "desktop app" in format_desktop_bundle_update_message()
+
+
 def test_banner_warns_on_pip_install(tmp_path):
     """The welcome banner surfaces a warning when the install method is pip."""
     import io

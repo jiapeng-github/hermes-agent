@@ -370,7 +370,7 @@ def _install_method_project_root(project_root: Optional[Path] = None) -> Path:
 
 
 def detect_install_method(project_root: Optional[Path] = None) -> str:
-    """Detect how Hermes was installed: 'docker', 'nixos', 'homebrew', 'git', or 'pip'.
+    """Detect how Hermes was installed, including desktop offline bundles.
 
     Resolution order:
     1. Code-scoped stamp ``<install tree>/.install_method`` (next to the
@@ -525,6 +525,8 @@ def recommended_update_command_for_method(method: str) -> str:
         return "brew upgrade hermes-agent"
     if method == "docker":
         return "docker pull nousresearch/hermes-agent:latest"
+    if method == "desktop-bundle":
+        return "install the latest desktop app release"
     if method == "pip":
         if is_uv_tool_install():
             return "uv tool upgrade hermes-agent"
@@ -533,6 +535,14 @@ def recommended_update_command_for_method(method: str) -> str:
             return "uv pip install --upgrade hermes-agent"
         return "pip install --upgrade hermes-agent"
     return "hermes update"
+
+
+def format_desktop_bundle_update_message() -> str:
+    """Explain how immutable desktop-bundled runtimes receive updates."""
+    return (
+        "This Hermes runtime was installed from the desktop app's offline bundle. "
+        "Install the latest desktop app release to update it."
+    )
 
 
 def recommended_update_command() -> str:

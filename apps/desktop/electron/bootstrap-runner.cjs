@@ -183,6 +183,7 @@ async function resolveInstallScript({
   installStamp,
   sourceRepoRoot,
   hermesHome,
+  offlineRuntimePath,
   emit,
   _download = downloadInstallScript
 }) {
@@ -193,6 +194,17 @@ async function resolveInstallScript({
   if (localScript) {
     emit({ type: 'log', line: `[bootstrap] using local ${installScriptName()} at ${localScript}` })
     return { path: localScript, source: 'local', kind: installScriptKind() }
+  }
+
+  if (offlineRuntimePath) {
+    const bundled = path.join(offlineRuntimePath, installScriptName())
+    try {
+      fs.accessSync(bundled, fs.constants.R_OK)
+      emit({ type: 'log', line: `[bootstrap] using bundled ${installScriptName()} at ${bundled}` })
+      return { path: bundled, source: 'bundle', kind: installScriptKind() }
+    } catch {
+      // Fall through to the pinned network/cached installer.
+    }
   }
 
   // 2. Packaged path: download from GitHub at the pinned commit (1B's stamp).
@@ -294,7 +306,11 @@ function resolveWindowsPowerShell() {
   return 'powershell.exe'
 }
 
-function spawnPowerShell(scriptPath, args, { emit, stageName, abortSignal, hermesHome, stockMcpDefaultsPath } = {}) {
+function spawnPowerShell(
+  scriptPath,
+  args,
+  { emit, stageName, abortSignal, hermesHome, stockMcpDefaultsPath, offlineRuntimePath } = {}
+) {
   return new Promise((resolve, reject) => {
     const ps = process.platform === 'win32' ? resolveWindowsPowerShell() : 'pwsh'
     const fullArgs = ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptPath, ...args]
@@ -309,7 +325,9 @@ function spawnPowerShell(scriptPath, args, { emit, stageName, abortSignal, herme
           // Pass HERMES_HOME through so install.ps1 respects the caller's
           // choice rather than re-computing the default.
           HERMES_HOME: hermesHome || process.env.HERMES_HOME || '',
-          STOCKSENSE_MCP_DEFAULTS_PATH: stockMcpDefaultsPath || ''
+          STOCKSENSE_MCP_DEFAULTS_PATH: stockMcpDefaultsPath || '',
+          STOCKSENSE_OFFLINE_RUNTIME_PATH: offlineRuntimePath || '',
+          STOCKSENSE_DESKTOP_RUNTIME: '1'
         }
       })
     )
@@ -377,14 +395,20 @@ function spawnPowerShell(scriptPath, args, { emit, stageName, abortSignal, herme
   })
 }
 
-function spawnBash(scriptPath, args, { emit, stageName, abortSignal, hermesHome, stockMcpDefaultsPath } = {}) {
+function spawnBash(
+  scriptPath,
+  args,
+  { emit, stageName, abortSignal, hermesHome, stockMcpDefaultsPath, offlineRuntimePath } = {}
+) {
   return new Promise((resolve, reject) => {
     const child = spawn('bash', [scriptPath, ...args], {
       stdio: ['ignore', 'pipe', 'pipe'],
       env: {
         ...process.env,
         HERMES_HOME: hermesHome || process.env.HERMES_HOME || '',
-        STOCKSENSE_MCP_DEFAULTS_PATH: stockMcpDefaultsPath || ''
+        STOCKSENSE_MCP_DEFAULTS_PATH: stockMcpDefaultsPath || '',
+        STOCKSENSE_OFFLINE_RUNTIME_PATH: offlineRuntimePath || '',
+        STOCKSENSE_DESKTOP_RUNTIME: '1'
       }
     })
 
@@ -530,7 +554,18 @@ function parseStageResult(stdout) {
   return null
 }
 
-async function runStage({ scriptPath, installerKind, stage, emit, hermesHome, activeRoot, abortSignal, installStamp, stockMcpDefaultsPath }) {
+async function runStage({
+  scriptPath,
+  installerKind,
+  stage,
+  emit,
+  hermesHome,
+  activeRoot,
+  abortSignal,
+  installStamp,
+  stockMcpDefaultsPath,
+  offlineRuntimePath
+}) {
   const startedAt = Date.now()
   emit({ type: 'stage', name: stage.name, state: 'running' })
 
@@ -549,7 +584,8 @@ async function runStage({ scriptPath, installerKind, stage, emit, hermesHome, ac
     stageName: stage.name,
     abortSignal,
     hermesHome,
-    stockMcpDefaultsPath
+    stockMcpDefaultsPath,
+    offlineRuntimePath
   })
 
   const durationMs = Date.now() - startedAt
@@ -623,7 +659,8 @@ async function runBootstrap(opts) {
     onEvent,
     abortSignal,
     writeMarker, // callback to write the bootstrap-complete marker; main.cjs provides
-    stockMcpDefaultsPath
+    stockMcpDefaultsPath,
+    offlineRuntimePath
   } = opts
 
   // Bail before spawning anything if the user already cancelled — otherwise an
@@ -669,7 +706,13 @@ async function runBootstrap(opts) {
 
   try {
     // 1. Resolve the platform installer.
-    const scriptInfo = await resolveInstallScript({ installStamp, sourceRepoRoot, hermesHome, emit })
+    const scriptInfo = await resolveInstallScript({
+      installStamp,
+      sourceRepoRoot,
+      hermesHome,
+      offlineRuntimePath,
+      emit
+    })
     const installerKind = scriptInfo.kind || 'powershell'
 
     // 2. Fetch manifest
@@ -705,7 +748,8 @@ async function runBootstrap(opts) {
         activeRoot,
         abortSignal,
         installStamp,
-        stockMcpDefaultsPath
+        stockMcpDefaultsPath,
+        offlineRuntimePath
       })
       if (ev.state === 'failed') {
         emit({ type: 'failed', stage: stage.name, error: ev.error || 'stage failed' })
