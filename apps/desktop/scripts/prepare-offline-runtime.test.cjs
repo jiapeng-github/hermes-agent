@@ -5,8 +5,14 @@ const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
 const test = require('node:test')
+const { unzipSync } = require('fflate')
 
-const { TARGETS, bundleRuntimeEnabled, rebaseCopiedSymlinks } = require('./prepare-offline-runtime.cjs')
+const {
+  TARGETS,
+  bundleRuntimeEnabled,
+  prepareSourceBundle,
+  rebaseCopiedSymlinks
+} = require('./prepare-offline-runtime.cjs')
 
 test('offline desktop release matrix is limited to the two supported native targets', () => {
   assert.deepEqual(Object.keys(TARGETS).sort(), ['macos-arm64', 'windows-x64'])
@@ -31,6 +37,33 @@ test('runtime bundle switch defaults on and accepts explicit offline/network val
   assert.equal(bundleRuntimeEnabled('0'), false)
   assert.equal(bundleRuntimeEnabled('network'), false)
   assert.throws(() => bundleRuntimeEnabled('maybe'), /Invalid STOCKSENSE_BUNDLE_RUNTIME/)
+})
+
+test('network installer bundles pinned source without native runtime files', () => {
+  const output = fs.mkdtempSync(path.join(os.tmpdir(), 'stocksense-source-bundle-'))
+  try {
+    prepareSourceBundle('windows-x64', output)
+
+    const manifest = JSON.parse(fs.readFileSync(path.join(output, 'manifest.json'), 'utf8'))
+    assert.equal(manifest.target, 'windows-x64')
+    assert.equal(manifest.bundled, false)
+    assert.equal(manifest.source_bundled, true)
+    assert.ok(manifest.files['install.ps1'])
+    assert.ok(manifest.files['hermes-agent-source.zip'])
+    assert.ok(fs.statSync(path.join(output, 'hermes-agent-source.zip')).size > 0)
+    assert.equal(fs.existsSync(path.join(output, 'python')), false)
+    assert.equal(fs.existsSync(path.join(output, 'uv-cache')), false)
+
+    const entries = Object.keys(unzipSync(fs.readFileSync(path.join(output, 'hermes-agent-source.zip'))))
+    assert.ok(entries.includes('pyproject.toml'))
+    assert.ok(entries.some(entry => entry.startsWith('hermes_cli/apps/catalog/watchlist/')))
+    assert.ok(entries.some(entry => entry.startsWith('skills/stock-analysis/')))
+    assert.equal(entries.some(entry => entry.startsWith('apps/desktop/')), false)
+    assert.equal(entries.some(entry => entry.startsWith('tests/')), false)
+    assert.equal(entries.some(entry => entry.startsWith('website/')), false)
+  } finally {
+    fs.rmSync(output, { recursive: true, force: true })
+  }
 })
 
 test(

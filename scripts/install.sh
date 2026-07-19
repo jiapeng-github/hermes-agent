@@ -92,6 +92,12 @@ has_offline_runtime() {
         && [ -d "$OFFLINE_RUNTIME_PATH/uv-cache" ]
 }
 
+has_bundled_source() {
+    [ -n "$OFFLINE_RUNTIME_PATH" ] \
+        && [ -f "$OFFLINE_RUNTIME_PATH/manifest.json" ] \
+        && [ -f "$OFFLINE_RUNTIME_PATH/hermes-agent-source.zip" ]
+}
+
 prepare_offline_runtime() {
     has_offline_runtime || return 1
 
@@ -1218,7 +1224,7 @@ show_manual_install_hint() {
 clone_repo() {
     log_info "Installing to $INSTALL_DIR..."
 
-    if has_offline_runtime; then
+    if has_bundled_source; then
         local bundled_source_marker="$INSTALL_DIR/.stocksense-offline-runtime-manifest.json"
         if [ -f "$INSTALL_DIR/pyproject.toml" ]; then
             if [ ! -f "$bundled_source_marker" ] \
@@ -2489,7 +2495,7 @@ print_success() {
     echo -e "   ${GREEN}hermes config${NC}       View/edit configuration"
     echo -e "   ${GREEN}hermes config edit${NC}  Open config in editor"
     echo -e "   ${GREEN}hermes gateway install${NC} Install gateway service (messaging + cron)"
-    if has_offline_runtime; then
+    if has_bundled_source; then
         echo -e "   ${GREEN}Desktop installer${NC}   Install a newer app release to update"
     else
         echo -e "   ${GREEN}hermes update${NC}       Update to latest version"
@@ -3051,6 +3057,8 @@ run_stage_body() {
             check_python
             if [ "$DESKTOP_RUNTIME" = "1" ] && has_offline_runtime; then
                 log_success "Bundled desktop runtime prerequisites ready"
+            elif [ "$DESKTOP_RUNTIME" = "1" ] && has_bundled_source; then
+                log_success "Bundled Hermes source ready; runtime dependencies will use the network"
             else
                 check_git
                 check_node
@@ -3061,7 +3069,7 @@ run_stage_body() {
         repository)
             detect_os
             resolve_install_layout
-            if ! has_offline_runtime; then check_git; fi
+            if ! has_bundled_source; then check_git; fi
             clone_repo
             ;;
         venv)
@@ -3135,7 +3143,7 @@ run_stage_body() {
             # bind-mounted into a Docker gateway too), so a stamp there gets
             # clobbered by the container's 'docker' stamp and wrongly blocks
             # 'hermes update' on this host install. See detect_install_method().
-            if has_offline_runtime; then
+            if has_bundled_source; then
                 echo "desktop-bundle" > "$INSTALL_DIR/.install_method"
             else
                 echo "git" > "$INSTALL_DIR/.install_method"

@@ -164,6 +164,14 @@ function Test-BundledRuntime {
     )
 }
 
+function Test-BundledSource {
+    return (
+        $OfflineRuntimePath `
+        -and (Test-Path (Join-Path $OfflineRuntimePath "manifest.json")) `
+        -and (Test-Path (Join-Path $OfflineRuntimePath "hermes-agent-source.zip"))
+    )
+}
+
 function Initialize-BundledRuntime {
     if (-not (Test-BundledRuntime)) { return $false }
 
@@ -1324,7 +1332,7 @@ function Install-SystemPackages {
 function Install-Repository {
     Write-Info "Installing to $InstallDir..."
 
-    if (Test-BundledRuntime) {
+    if (Test-BundledSource) {
         $bundledManifest = Join-Path $OfflineRuntimePath "manifest.json"
         $bundledSourceMarker = Join-Path $InstallDir ".stocksense-offline-runtime-manifest.json"
         if (Test-Path (Join-Path $InstallDir "pyproject.toml")) {
@@ -2252,7 +2260,7 @@ function Write-BootstrapMarker {
     # whole point. Use the .NET API directly for BOM-less UTF-8.
     $utf8NoBom = New-Object System.Text.UTF8Encoding $false
     [System.IO.File]::WriteAllText($markerPath, $json, $utf8NoBom)
-    $installMethod = if (Test-BundledRuntime) { "desktop-bundle" } else { "git" }
+    $installMethod = if (Test-BundledSource) { "desktop-bundle" } else { "git" }
     [System.IO.File]::WriteAllText((Join-Path $InstallDir ".install_method"), "$installMethod`n", $utf8NoBom)
 
     Write-Success "Bootstrap marker written: $markerPath"
@@ -3260,7 +3268,7 @@ function Write-Completion {
     Write-Host "Open config in editor"
     Write-Host "   hermes gateway      " -NoNewline -ForegroundColor Green
     Write-Host "Start messaging gateway (Telegram, Discord, etc.)"
-    if (Test-BundledRuntime) {
+    if (Test-BundledSource) {
         Write-Host "   Desktop installer   " -NoNewline -ForegroundColor Green
         Write-Host "Install a newer app release to update"
     } else {
@@ -3403,7 +3411,7 @@ $InstallStages += @(
 function Stage-Uv               { if (-not (Install-Uv))     { throw "uv installation failed" } }
 function Stage-Python           { Resolve-UvCmd; if (-not (Test-Python))    { throw "Python $PythonVersion not available" } }
 function Stage-Git              {
-    if ($DesktopRuntime -and (Test-BundledRuntime)) {
+    if ($DesktopRuntime -and (Test-BundledSource)) {
         $script:_StageSkippedReason = "Bundled source does not require Git during first launch"
     } elseif (-not (Install-Git)) {
         throw "Git not available and auto-install failed -- install from https://git-scm.com/download/win then re-run"

@@ -391,7 +391,16 @@ function resolveOfflineRuntimePath() {
     if (!candidate) continue
     try {
       const manifest = JSON.parse(fs.readFileSync(path.join(candidate, 'manifest.json'), 'utf8'))
-      if (manifest.bundled !== true || manifest.target !== expectedTarget || !manifest.files) continue
+      if (
+        (manifest.bundled !== true && manifest.source_bundled !== true) ||
+        manifest.target !== expectedTarget ||
+        !manifest.files
+      ) continue
+      const installScript = expectedTarget === 'windows-x64' ? 'install.ps1' : 'install.sh'
+      const requiredFiles = ['hermes-agent-source.zip', installScript]
+      if (manifest.source_bundled === true && requiredFiles.some(file => typeof manifest.files[file] !== 'string')) {
+        continue
+      }
       const root = path.resolve(candidate)
       const valid = Object.entries(manifest.files).every(([relative, expected]) => {
         const file = path.resolve(root, relative)

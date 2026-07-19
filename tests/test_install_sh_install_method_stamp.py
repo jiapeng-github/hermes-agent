@@ -22,6 +22,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 INSTALL_SH = REPO_ROOT / "scripts" / "install.sh"
+INSTALL_PS1 = REPO_ROOT / "scripts" / "install.ps1"
 
 
 def test_install_sh_stamps_code_tree_not_home() -> None:
@@ -32,7 +33,7 @@ def test_install_sh_stamps_code_tree_not_home() -> None:
         "install.sh must stamp $INSTALL_DIR/.install_method (code-scoped)"
     )
     assert 'echo "desktop-bundle" > "$INSTALL_DIR/.install_method"' in text, (
-        "offline desktop installs must not claim to be git checkouts"
+        "desktop installs with bundled source must not claim to be git checkouts"
     )
 
     # Never stamps the shared data dir.
@@ -41,3 +42,14 @@ def test_install_sh_stamps_code_tree_not_home() -> None:
         "dir may be shared with a Docker gateway whose 'docker' stamp would "
         "clobber it and block host-side `hermes update`"
     )
+
+
+def test_desktop_installers_use_bundled_source_without_git() -> None:
+    sh_text = INSTALL_SH.read_text()
+    ps_text = INSTALL_PS1.read_text()
+
+    assert "if has_bundled_source; then" in sh_text
+    assert "if ! has_bundled_source; then check_git; fi" in sh_text
+    assert "if (Test-BundledSource)" in ps_text
+    assert "$DesktopRuntime -and (Test-BundledSource)" in ps_text
+    assert 'if (Test-BundledSource) { "desktop-bundle" } else { "git" }' in ps_text

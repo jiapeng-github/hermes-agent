@@ -16,6 +16,49 @@ const TARGETS = {
 }
 const FALSE_VALUES = new Set(['0', 'false', 'no', 'off', 'network', 'thin'])
 const TRUE_VALUES = new Set(['1', 'true', 'yes', 'on', 'offline', 'bundled'])
+const SOURCE_ARCHIVE_PATHS = [
+  '.env.example',
+  'LICENSE',
+  'MANIFEST.in',
+  'acp_adapter',
+  'acp_registry',
+  'agent',
+  'batch_runner.py',
+  'cli-config.yaml.example',
+  'cli.py',
+  'constraints-termux.txt',
+  'cron',
+  'gateway',
+  'hermes',
+  'hermes_bootstrap.py',
+  'hermes_cli',
+  'hermes_constants.py',
+  'hermes_logging.py',
+  'hermes_state.py',
+  'hermes_time.py',
+  'locales',
+  'mcp_serve.py',
+  'mini_swe_runner.py',
+  'model_tools.py',
+  'optional-mcps',
+  'optional-skills',
+  'package-lock.json',
+  'package.json',
+  'plugins',
+  'providers',
+  'pyproject.toml',
+  'run_agent.py',
+  'scripts',
+  'setup.py',
+  'skills',
+  'tools',
+  'toolset_distributions.py',
+  'toolsets.py',
+  'trajectory_compressor.py',
+  'tui_gateway',
+  'utils.py',
+  'uv.lock'
+]
 
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
@@ -92,29 +135,49 @@ function rebaseCopiedSymlinks(sourceRoot, destinationRoot) {
   }
 }
 
-function writeManifest(target, bundled) {
-  const files = bundled
+function writeManifest(target, bundled, { outputRoot = OUTPUT_ROOT, sourceBundled = bundled } = {}) {
+  const files = bundled || sourceBundled
     ? Object.fromEntries(
-        walkFiles(OUTPUT_ROOT)
+        walkFiles(outputRoot)
           .filter(file => path.basename(file) !== 'manifest.json')
-          .map(file => [path.relative(OUTPUT_ROOT, file).replaceAll(path.sep, '/'), sha256(file)])
+          .map(file => [path.relative(outputRoot, file).replaceAll(path.sep, '/'), sha256(file)])
       )
     : {}
   const manifest = {
     schema_version: 1,
     target,
     bundled,
+    source_bundled: sourceBundled,
     browser_tools_bundled: false,
     python: '3.11',
     files
   }
-  fs.writeFileSync(path.join(OUTPUT_ROOT, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`)
+  fs.writeFileSync(path.join(outputRoot, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`)
 }
 
 function preparePlaceholder() {
   fs.rmSync(OUTPUT_ROOT, { recursive: true, force: true })
   fs.mkdirSync(OUTPUT_ROOT, { recursive: true })
-  writeManifest(null, false)
+  writeManifest(null, false, { sourceBundled: false })
+}
+
+function prepareSourceBundle(targetName, outputRoot = OUTPUT_ROOT) {
+  const target = TARGETS[targetName]
+  if (!target) throw new Error(`Unsupported source bundle target: ${targetName || '<none>'}`)
+
+  fs.rmSync(outputRoot, { recursive: true, force: true })
+  fs.mkdirSync(outputRoot, { recursive: true })
+  fs.copyFileSync(path.join(REPO_ROOT, 'scripts', target.script), path.join(outputRoot, target.script))
+  run('git', [
+    'archive',
+    '--format=zip',
+    `--output=${path.join(outputRoot, 'hermes-agent-source.zip')}`,
+    'HEAD',
+    '--',
+    ...SOURCE_ARCHIVE_PATHS
+  ])
+  writeManifest(targetName, false, { outputRoot, sourceBundled: true })
+  console.log(`[prepare-offline-runtime] prepared bundled source for ${targetName} at ${outputRoot}`)
 }
 
 function defaultTarget() {
@@ -186,7 +249,7 @@ function prepareBundle(targetName) {
   rebaseCopiedSymlinks(prepPython, path.join(OUTPUT_ROOT, 'python'))
   rebaseCopiedSymlinks(prepUvCache, path.join(OUTPUT_ROOT, 'uv-cache'))
 
-  writeManifest(targetName, true)
+  writeManifest(targetName, true, { sourceBundled: true })
   console.log(`[prepare-offline-runtime] prepared ${targetName} at ${OUTPUT_ROOT}`)
 }
 
@@ -198,8 +261,8 @@ function main(args = process.argv.slice(2)) {
   const targetIndex = args.indexOf('--target')
   const target = targetIndex >= 0 ? args[targetIndex + 1] : process.env.STOCKSENSE_RUNTIME_TARGET || defaultTarget()
   if (args.includes('--package-mode') && !bundleRuntimeEnabled()) {
-    preparePlaceholder()
-    console.log('[prepare-offline-runtime] network installer selected; bundled runtime omitted')
+    prepareSourceBundle(target)
+    console.log('[prepare-offline-runtime] network installer selected; bundled runtime omitted, source included')
     return
   }
   prepareBundle(target)
@@ -209,4 +272,12 @@ if (require.main === module) {
   main()
 }
 
-module.exports = { TARGETS, bundleRuntimeEnabled, defaultTarget, main, rebaseCopiedSymlinks }
+module.exports = {
+  SOURCE_ARCHIVE_PATHS,
+  TARGETS,
+  bundleRuntimeEnabled,
+  defaultTarget,
+  main,
+  prepareSourceBundle,
+  rebaseCopiedSymlinks
+}
