@@ -1678,30 +1678,53 @@ function findGitBash() {
     return findOnPath('bash')
   }
 
-  // install.ps1 drops PortableGit at %LOCALAPPDATA%\hermes\git\... — checked
-  // first so users who installed via install.ps1 are detected before we
-  // start probing system-wide locations.
+  // 1. install.ps1's Stage-Git writes the abs path to bash.exe into
+  //    HERMES_GIT_BASH_PATH (managed PortableGit and external installs).
+  const gitBashEnv = process.env.HERMES_GIT_BASH_PATH
+  if (gitBashEnv && fileExists(gitBashEnv)) return gitBashEnv
+
+  // 2. install.ps1 drops PortableGit at %LOCALAPPDATA%\hermes\git\...
   const localAppData = process.env.LOCALAPPDATA || ''
-  const candidates = []
   if (localAppData) {
-    candidates.push(path.join(localAppData, 'hermes', 'git', 'bin', 'bash.exe'))
-    candidates.push(path.join(localAppData, 'hermes', 'git', 'usr', 'bin', 'bash.exe'))
+    const managed = [
+      path.join(localAppData, 'hermes', 'git', 'bin', 'bash.exe'),
+      path.join(localAppData, 'hermes', 'git', 'usr', 'bin', 'bash.exe')
+    ]
+    for (const c of managed) { if (fileExists(c)) return c }
   }
 
-  // Standard Git for Windows install locations.
-  candidates.push(path.join(process.env['ProgramFiles'] || 'C:\\Program Files', 'Git', 'bin', 'bash.exe'))
-  candidates.push(path.join(process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)', 'Git', 'bin', 'bash.exe'))
+  // 3. Ask git itself where it's installed.  Works regardless of drive
+  //    letter (C:\, D:\, ...) or custom install paths.
+  try {
+    const execPath = require('node:child_process')
+      .execSync('git --exec-path', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
+      .trim()
+    // git --exec-path → <root>/mingw64/libexec/git-core  (Git for Windows)
+    //                  → <root>/libexec/git-core           (other builds)
+    // Walk up to the install root, then into bin/bash.exe.
+    const roots = [path.resolve(execPath, '..', '..', '..'), path.resolve(execPath, '..', '..')]
+    for (const root of roots) {
+      const bash = path.join(root, 'bin', 'bash.exe')
+      if (fileExists(bash)) return bash
+      const usrBash = path.join(root, 'usr', 'bin', 'bash.exe')
+      if (fileExists(usrBash)) return usrBash
+    }
+  } catch { /* git not on PATH */ }
+
+  // 4. Standard Git for Windows locations — keep as fallback for when
+  //    git is not on PATH but the user installed to the default location.
+  const candidates = [
+    path.join(process.env['ProgramFiles'] || 'C:\\Program Files', 'Git', 'bin', 'bash.exe'),
+    path.join(process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)', 'Git', 'bin', 'bash.exe')
+  ]
   if (localAppData) {
     candidates.push(path.join(localAppData, 'Programs', 'Git', 'bin', 'bash.exe'))
   }
-
   for (const candidate of candidates) {
     if (fileExists(candidate)) return candidate
   }
 
-  // Last resort — bash on PATH (covers WSL bash, MSYS2, custom installs).
-  // On WSL hosts findOnPath itself filters out Windows-binary paths via
-  // isWindowsBinaryPathInWsl, so we won't hand back a wsl.exe shim either.
+  // 5. Last resort — bash on PATH (WSL, MSYS2, custom installs).
   return findOnPath('bash')
 }
 
