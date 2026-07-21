@@ -1,14 +1,14 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { atom } from 'nanostores'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { I18nProvider } from '@/i18n'
 import type { EnvVarInfo, OAuthProvider } from '@/types/hermes'
 
 const listOAuthProviders = vi.fn()
 const disconnectOAuthProvider = vi.fn()
 const getEnvVars = vi.fn()
 const startManualProviderOAuth = vi.fn()
+const startManualLocalEndpoint = vi.fn()
 const onboarding = atom({ manual: false })
 
 vi.mock('@/hermes', () => ({
@@ -19,7 +19,8 @@ vi.mock('@/hermes', () => ({
 
 vi.mock('@/store/onboarding', () => ({
   $desktopOnboarding: onboarding,
-  startManualProviderOAuth: (providerId: string) => startManualProviderOAuth(providerId)
+  startManualProviderOAuth: (providerId: string) => startManualProviderOAuth(providerId),
+  startManualLocalEndpoint: (reason: null | string) => startManualLocalEndpoint(reason)
 }))
 
 function provider(id: string, loggedIn: boolean, patch: Partial<OAuthProvider> = {}): OAuthProvider {
@@ -74,12 +75,12 @@ afterEach(() => {
 
 async function renderProvidersSettings() {
   const { ProvidersSettings } = await import('./providers-settings')
+  let result: ReturnType<typeof render>
+  await act(async () => {
+    result = render(<ProvidersSettings onClose={vi.fn()} onViewChange={vi.fn()} view="accounts" />)
+  })
 
-  return render(
-    <I18nProvider configClient={null} initialLocale="en">
-      <ProvidersSettings onClose={vi.fn()} onViewChange={vi.fn()} view="accounts" />
-    </I18nProvider>
-  )
+  return result!
 }
 
 describe('ProvidersSettings', () => {
@@ -87,7 +88,9 @@ describe('ProvidersSettings', () => {
     await renderProvidersSettings()
 
     const remove = await screen.findByRole('button', { name: 'Remove Nous Portal' })
-    fireEvent.click(remove)
+    await act(async () => {
+      fireEvent.click(remove)
+    })
 
     await waitFor(() => expect(disconnectOAuthProvider).toHaveBeenCalledWith('nous'))
     expect(listOAuthProviders).toHaveBeenCalledTimes(2)
@@ -96,7 +99,9 @@ describe('ProvidersSettings', () => {
   it('keeps provider selection separate from account removal', async () => {
     await renderProvidersSettings()
 
-    fireEvent.click(await screen.findByText('Nous Portal'))
+    await act(async () => {
+      fireEvent.click(await screen.findByText('Nous Portal'))
+    })
 
     expect(startManualProviderOAuth).toHaveBeenCalledWith('nous')
     expect(disconnectOAuthProvider).not.toHaveBeenCalled()
@@ -137,11 +142,9 @@ describe('ProvidersSettings', () => {
     listOAuthProviders.mockResolvedValue({ providers: [] })
 
     const { ProvidersSettings } = await import('./providers-settings')
-    render(
-      <I18nProvider configClient={null} initialLocale="en">
-        <ProvidersSettings onClose={vi.fn()} onViewChange={vi.fn()} view="keys" />
-      </I18nProvider>
-    )
+    await act(async () => {
+      render(<ProvidersSettings onClose={vi.fn()} onViewChange={vi.fn()} view="keys" />)
+    })
 
     expect(await screen.findByText('WidgetAI')).toBeTruthy()
   })
@@ -158,11 +161,7 @@ describe('ProvidersSettings', () => {
     listOAuthProviders.mockResolvedValue({ providers: [] })
 
     const { ProvidersSettings } = await import('./providers-settings')
-    render(
-      <I18nProvider configClient={null} initialLocale="en">
-        <ProvidersSettings onClose={vi.fn()} onViewChange={vi.fn()} view="keys" />
-      </I18nProvider>
-    )
+    render(<ProvidersSettings onClose={vi.fn()} onViewChange={vi.fn()} view="keys" />)
 
     // Equal priority → alphabetical tiebreak: Acme, Middle, Zebra.
     await screen.findByText('Acme')
@@ -171,14 +170,37 @@ describe('ProvidersSettings', () => {
 
     // Typing narrows the list to matching providers only.
     const search = screen.getByPlaceholderText('Search providers…')
-    fireEvent.change(search, { target: { value: 'mid' } })
+    await act(async () => {
+      fireEvent.change(search, { target: { value: 'mid' } })
+    })
 
     await waitFor(() => expect(screen.queryByText('Acme')).toBeNull())
     expect(screen.getByText('Middle')).toBeTruthy()
     expect(screen.queryByText('Zebra')).toBeNull()
 
     // A non-matching query shows the empty-state copy.
-    fireEvent.change(search, { target: { value: 'nonesuch-xyz' } })
+    await act(async () => {
+      fireEvent.change(search, { target: { value: 'nonesuch-xyz' } })
+    })
     expect(await screen.findByText('No providers match your search.')).toBeTruthy()
+  })
+
+  it('offers a Local / custom endpoint entry in the API-keys tab that opens the custom-endpoint flow', async () => {
+    // Regression: the composer pill and the providers "have an API key"
+    // affordance both dead-end on the env-var-driven key catalog, which never
+    // lists a custom endpoint — so without this row there is no reachable
+    // Desktop GUI path to add one. See issue #62817.
+    getEnvVars.mockResolvedValue({})
+    listOAuthProviders.mockResolvedValue({ providers: [] })
+
+    const { ProvidersSettings } = await import('./providers-settings')
+    render(<ProvidersSettings onClose={vi.fn()} onViewChange={vi.fn()} view="keys" />)
+
+    const row = await screen.findByText('Local / custom endpoint')
+    expect(screen.getByText(/OpenAI-compatible endpoint/)).toBeTruthy()
+
+    fireEvent.click(row)
+
+    await waitFor(() => expect(startManualLocalEndpoint).toHaveBeenCalledWith(null))
   })
 })

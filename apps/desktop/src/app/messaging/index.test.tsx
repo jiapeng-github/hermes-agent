@@ -1,9 +1,8 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { I18nProvider } from '@/i18n'
 import type { MessagingPlatformInfo } from '@/types/hermes'
 
 const getMessagingPlatforms = vi.fn()
@@ -54,14 +53,16 @@ afterEach(() => {
 
 async function renderMessaging() {
   const { MessagingView } = await import('./index')
-
-  return render(
-    <MemoryRouter>
-      <I18nProvider configClient={null} initialLocale="en">
+  let result: ReturnType<typeof render>
+  await act(async () => {
+    result = render(
+      <MemoryRouter>
         <MessagingView />
-      </I18nProvider>
-    </MemoryRouter>
-  )
+      </MemoryRouter>
+    )
+  })
+
+  return result!
 }
 
 describe('MessagingView setup-guide link', () => {
@@ -85,7 +86,9 @@ describe('MessagingView setup-guide link', () => {
     await renderMessaging()
 
     const link = await screen.findByText('Open setup guide')
-    fireEvent.click(link)
+    await act(async () => {
+      fireEvent.click(link)
+    })
 
     await waitFor(() => expect(openExternalLink).toHaveBeenCalledWith(docsUrl))
   })

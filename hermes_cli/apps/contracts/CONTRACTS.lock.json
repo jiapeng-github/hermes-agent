@@ -4,10 +4,10 @@
   "hash_algorithm": "sha256",
   "files": {
     "app-manifest.schema.json": "883ccf793746e8264c69184fd5b1bee7e34c0ace02e2027729357028052532e8",
-    "happ-format-v1.md": "21f966cfa8a9e46201209a476cf2151f0aa73cc82b9e2c71baba1ebaecd3ec3c",
+    "happ-format-v1.md": "8cf3f9173059a567cef5f3228dbe2b4e0a97b45d50b263bd4b505e43e27cc376",
     "happ-package.schema.json": "7b3ac1045dcb1011bea0f112c3c6aa937141530730e1560d47e14e1a9976c395",
     "management-api.openapi.yaml": "c73318e1f7d976cd1518ae6de67b0bdaa3358d20a277e77bad4c6af56223e3a1",
-    "runtime-event-protocol-v1.md": "6bc233e1bc41cb4afc71c6df3eddebc8b2f65b44417e1cb1543fab84b2e9fa41",
+    "runtime-event-protocol-v1.md": "66c94cefafab83f3c233d20f8717518d05f3aa1cad4e419762bb0c8e008cd255",
     "runtime-event.schema.json": "7fa8e50354ea2902da8bb2bcde05766bb37983bae1949c74fc4acb8989cd86e9"
   }
 }

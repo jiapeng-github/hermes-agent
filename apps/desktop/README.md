@@ -7,7 +7,7 @@
   <a href="https://github.com/NousResearch/hermes-agent/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License: MIT"></a>
 </p>
 
-**The native desktop app for [StockSense](../../README.md) — the self-improving AI agent from [Nous Research](https://nousresearch.com).** Same agent, same skills, same memory as the CLI and gateway, in a polished native window — chat with streaming tool output, side-by-side previews, a file browser, voice, and settings, no terminal required. Available for **macOS, Windows, and Linux**.
+**The native desktop app for [StockSense Agent](../../README.md) — the self-improving AI agent from [Nous Research](https://nousresearch.com).** Same agent, same skills, same memory as the CLI and gateway, in a polished native window — chat with streaming tool output, side-by-side previews, a file browser, voice, and settings, no terminal required. Available for **macOS, Windows, and Linux**.
 
 <table>
 <tr><td><b>Chat with the full agent</b></td><td>Streaming responses, live tool activity, structured tool summaries, and the same conversation history as every other StockSense surface.</td></tr>
@@ -27,7 +27,7 @@
 Already have the StockSense CLI? Just run:
 
 ```bash
-stocksense desktop
+hermes desktop
 ```
 
 It builds and launches the GUI against your existing install — same config, keys, sessions, and skills. On first launch StockSense walks you through picking a provider and model; nothing else to configure.
@@ -67,6 +67,8 @@ npm run dev          # Vite renderer + Electron, which boots the Python backend
 Point the app at a specific source checkout, or sandbox it away from your real config:
 
 ```bash
+# throwaway HERMES_HOME, separate Electron userData, distinct app name to avoid the single-instance lock
+../scripts/dev-sandbox.sh npm run dev
 HERMES_DESKTOP_HERMES_ROOT=/path/to/clone npm run dev
 HERMES_HOME=/tmp/throwaway npm run dev
 npm run dev:fake-boot   # exercise the startup overlay with deterministic delays
@@ -75,41 +77,73 @@ npm run dev:fake-boot   # exercise the startup overlay with deterministic delays
 ### Building installers
 
 ```bash
-npm run dist:mac          # macOS arm64 offline DMG + zip
-npm run dist:mac:thin     # macOS arm64 network-bootstrap DMG + zip
-npm run dist:win          # Windows x64 offline NSIS exe
-npm run dist:win:thin     # Windows x64 network-bootstrap NSIS exe
+npm run dist:mac     # DMG + zip
+npm run dist:win     # NSIS + MSI
+npm run dist:linux   # AppImage + deb + rpm
 npm run pack         # unpacked app under release/ (no installer)
 ```
 
-The release matrix intentionally supports only `macos-arm64` and `windows-x64`. `STOCKSENSE_BUNDLE_RUNTIME` controls whether release builds include the native runtime. It defaults to `1`; set it to `0` for the original lightweight installer that downloads dependencies on first launch. The `:thin` commands above are cross-platform shortcuts for the `0` setting. Artifacts include an `offline` or `network` suffix so the two flavors do not overwrite each other.
-
-Every release includes the pinned Hermes source archive and platform installer, so first launch never depends on cloning or downloading source from GitHub. Offline release commands additionally prepare uv, Python 3.11, and the locked Python dependency cache before Electron Builder runs. Because Python runtimes and wheels are platform-specific, prepare and package offline installers on their matching native host; cross-building the Windows offline installer from macOS is not supported. Thin installers omit platform Python resources and download only the runtime dependencies during bootstrap.
-
-On Apple Silicon macOS, `npm run dist:win:thin` can cross-build the Windows x64 NSIS installer when Wine and Rosetta 2 are available. The build stages `win32-x64` native Node bindings explicitly instead of copying the macOS host bindings. If GitHub downloads time out, use the Electron and Electron Builder binary mirrors:
-
-```bash
-ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ \
-ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/ \
-npm run dist:win:thin
-```
-
-This cross-build path intentionally produces the `network` flavor. Run `npm run dist:win` on a Windows x64 host when the installer must include the Windows Python runtime and wheel cache.
-
-The bundled runtime is used on first launch before any network fallback. Node workspace dependencies, Playwright Chromium, ripgrep, and ffmpeg are not installed during desktop bootstrap. Default apps open in the user's system browser, so no browser binary is required in the installer; browser automation dependencies remain an on-demand installation. Installers are built and uploaded to GitHub Releases manually. macOS/Windows signing and notarization happen automatically when the relevant credentials are present in the environment (`CSC_LINK` / `CSC_KEY_PASSWORD` / `APPLE_*` for macOS, `WIN_CSC_*` for Windows).
-
-Downloaded release inputs are retained under `build/offline-runtime-prep/<target>` so a failed release preparation can resume without downloading Python and completed wheels again. The final verified resource tree is assembled under `build/offline-runtime` only after `uv sync` succeeds.
-
-Equivalent parameter form:
-
-```bash
-STOCKSENSE_BUNDLE_RUNTIME=1 npm run dist:mac  # offline, also the default
-STOCKSENSE_BUNDLE_RUNTIME=0 npm run dist:mac  # network bootstrap
-```
+Installers are built and uploaded to GitHub Releases manually. macOS/Windows signing & notarization happen automatically when the relevant credentials are present in the environment (`CSC_LINK` / `CSC_KEY_PASSWORD` / `APPLE_*` for macOS, `WIN_CSC_*` for Windows).
 
 ### How it works
 
-The packaged app ships the Electron shell and a native React chat surface. On first launch it can install the StockSense runtime into `HERMES_HOME` (`~/.hermes`, or `%LOCALAPPDATA%\hermes` on Windows) — the **same layout a CLI install uses**, so the two are interchangeable. Backend resolution first honours `HERMES_DESKTOP_HERMES_ROOT`, then a completed managed install, then a probed `hermes` on `PATH` (unless `HERMES_DESKTOP_IGNORE_EXISTING=1` is set), and finally an explicit `HERMES_DESKTOP_HERMES` command override for packagers/troubleshooting. The renderer (React, in `src/`) talks to a headless backend the app launches for you — a `hermes serve` process that serves the `tui_gateway` JSON-RPC/WebSocket API — through the framework-agnostic client in [`apps/shared`](../shared/) (the same client the web dashboard consumes), and reuses the agent runtime rather than embedding `hermes --tui`. The app is **self-contained**: it runs its own `hermes serve` backend and never opens or requires the web dashboard UI. (For backward compatibility, a runtime that predates the `serve` command automatically falls back to a headless `dashboard --no-open` — see `electron/backend-command.cjs` — so mid-upgrade installs never break.) The install, backend-resolution, and self-update logic all live in `electron/main.cjs`.
+The packaged app ships the Electron shell and a native React chat surface. On
+first launch it can install the StockSense Agent runtime into `HERMES_HOME`
+(`~/.hermes`, or `%LOCALAPPDATA%\hermes` on Windows), using the same layout as a
+CLI install.
+
+The app has three boundaries:
+
+- **Electron** resolves and validates a runnable backend, owns native
+  filesystem/git/window capabilities, and exposes a narrow preload bridge.
+- **React** owns the Desktop routes, panes, interaction state, and
+  `@assistant-ui/react` transcript.
+- **StockSense Agent** runs as a headless `hermes serve` process and exposes the
+  `tui_gateway` JSON-RPC/WebSocket API. The renderer connects through
+  [`apps/shared`](../shared/), which is also used by the browser dashboard.
+
+Backend resolution is an ordered ladder:
+
+1. `HERMES_DESKTOP_HERMES_ROOT`
+2. the current source checkout during development
+3. a completed managed install
+4. `HERMES_DESKTOP_HERMES`, or `hermes` on `PATH`
+5. a system Python that can import the StockSense runtime
+6. the first-launch bootstrap installer
+
+Candidates are probed before use; an existing shim or interpreter is not enough.
+A runtime that predates `serve` falls back to headless
+`dashboard --no-open`. This is compatibility for the backend command only and
+does not launch or embed the dashboard UI.
+
+The Electron orchestration entry point is `electron/main.ts`; pure resolution,
+probe, hardening, and platform policies live in focused modules beside it. The
+renderer is under `src/`, with shared atoms in `src/store` and transport/native
+adapters in `src/lib`.
+
+Before changing the app, read:
+
+- [`AGENTS.md`](./AGENTS.md): architecture, state ownership, resolver/fallback,
+  transport, performance, and testing rules.
+- [`DESIGN.md`](./DESIGN.md): visual system, information architecture, motion,
+  direct manipulation, and keyboard behavior.
+
+### Connections, projects, and switching
+
+Desktop supports a managed local backend, explicit remote gateways, and StockSense
+Cloud connections. Remote and cloud modes use the same remote-capability path;
+authentication and discovery differ, not the renderer feature model.
+
+Projects are the workspace abstraction. A project may own multiple folders,
+repositories, worktrees, and sessions; a bare new chat remains detached unless
+the user enters a project or configures a default project directory. Use the
+Projects UI rather than adding a second per-session folder-picker workflow.
+
+Changing profiles or connection modes is a soft workspace switch, not another
+cold boot. The shell and current management overlay remain mounted while
+gateway-bound nanostores are wiped, query-backed data is invalidated, and the
+new connection repopulates skeletons. This prevents rows or transcripts from
+the previous gateway bleeding into the next one.
 
 ### Verification
 
@@ -119,8 +153,12 @@ Run before opening a PR (lint may surface pre-existing warnings but must exit cl
 npm run fix
 npm run typecheck
 npm run lint
-npm run test:desktop:all
+npm run test:ui
+npm run test:desktop:platforms
 ```
+
+Run `npm run test:desktop:all` for install, boot, update, packaging, or other
+release-path changes.
 
 ### Troubleshooting
 
@@ -146,7 +184,7 @@ Remove-Item "$env:LOCALAPPDATA\hermes\hermes-agent\.hermes-bootstrap-complete"
 Remove-Item -Recurse -Force "$env:LOCALAPPDATA\hermes\hermes-agent\venv"
 ```
 
-> The default Hermes home on Windows is `%LOCALAPPDATA%\hermes`. Set the `HERMES_HOME` env var if you've relocated it.
+> The default StockSense home on Windows is `%LOCALAPPDATA%\hermes`. Set the `HERMES_HOME` env var if you've relocated it.
 
 ---
 
