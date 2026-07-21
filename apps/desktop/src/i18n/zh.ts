@@ -1664,7 +1664,7 @@ export const zh: Translations = {
       'company-analysis': '公司分析',
       watchlist: '自选股',
       skills: '技能与工具',
-      'app-market': '应用市场',
+      'app-market': '应用',
       messaging: '消息平台',
       artifacts: '产物'
     },

@@ -169,7 +169,7 @@ export function AppMarketView({ onCreateApp, onEditApp }: AppMarketViewProps) {
       <header className="sticky top-0 z-20 border-b border-(--ui-stroke-tertiary) bg-(--ui-chat-surface-background)/95 px-5 pb-3 pt-[calc(var(--titlebar-height)+0.7rem)] backdrop-blur-md">
         <div className="mx-auto flex max-w-[75rem] flex-wrap items-center gap-3">
           <div className="mr-auto min-w-0">
-            <h1 className="text-base font-semibold text-foreground">应用市场</h1>
+            <h1 className="text-base font-semibold text-foreground">应用</h1>
             <p className="mt-0.5 text-xs text-(--ui-text-tertiary)">浏览、创建和管理由 Stock Agent 提供服务的 Web 应用</p>
           </div>
           <div className="relative min-w-[12rem] flex-1 sm:max-w-[20rem]">
@@ -205,7 +205,7 @@ export function AppMarketView({ onCreateApp, onEditApp }: AppMarketViewProps) {
 
         <div className="mb-3 flex items-center justify-between">
           <span className="text-xs font-medium text-(--ui-text-secondary)">全部应用 · {visibleApps.length}</span>
-          <span className="text-[0.6875rem] text-(--ui-text-tertiary)">应用市场不会主动请求行情数据</span>
+          <span className="text-[0.6875rem] text-(--ui-text-tertiary)">应用不会主动请求行情数据</span>
         </div>
 
         {loading ? (

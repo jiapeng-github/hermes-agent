@@ -442,7 +442,7 @@ export function CommandPalette() {
             icon: Package,
             id: 'nav-app-market',
             keywords: ['apps', 'applications', 'market', 'happ', '应用', '应用市场'],
-            label: t.sidebar.nav['app-market'] ?? '应用市场',
+            label: t.sidebar.nav['app-market'] ?? '应用',
             run: go(APP_MARKET_ROUTE)
           },
           {
