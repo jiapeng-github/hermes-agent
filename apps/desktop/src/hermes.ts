@@ -28,6 +28,9 @@ import type {
   IndustryMonitorRefreshResponse,
   IndustryMonitorSnapshot,
   LogsResponse,
+  MarketplaceAppOperation,
+  MarketplaceAppsResponse,
+  MarketplaceAppSummary,
   McpCatalogResponse,
   McpServerSummary,
   MemoryProviderConfig,
@@ -177,6 +180,9 @@ export type {
   HermesConfig,
   HermesConfigRecord,
   LogsResponse,
+  MarketplaceAppOperation,
+  MarketplaceAppsResponse,
+  MarketplaceAppSummary,
   McpCatalogEntry,
   McpCatalogResponse,
   McpServerSummary,
@@ -1497,6 +1503,46 @@ export function updateSkillsFromHub(): Promise<ActionResponse> {
     path: '/api/skills/hub/update',
     method: 'POST',
     body: {}
+  })
+}
+
+// ---------------------------------------------------------------------------
+// StockSense application market — the desktop only talks to the local Hermes
+// gateway; the gateway owns remote catalog access and .happ verification.
+// ---------------------------------------------------------------------------
+
+export function listMarketplaceApps(query = ''): Promise<MarketplaceAppsResponse> {
+  const params = new URLSearchParams({ q: query })
+  return window.hermesDesktop.api<MarketplaceAppsResponse>({
+    ...profileScoped(),
+    path: `/api/apps/market?${params.toString()}`,
+    timeoutMs: HUB_REQUEST_TIMEOUT_MS
+  })
+}
+
+export function startMarketplaceAppInstall(appId: string, version?: string): Promise<MarketplaceAppOperation> {
+  return window.hermesDesktop.api<MarketplaceAppOperation>({
+    ...profileScoped(),
+    path: `/api/apps/market/${encodeURIComponent(appId)}/operations`,
+    method: 'POST',
+    body: version ? { version } : {},
+    timeoutMs: HUB_REQUEST_TIMEOUT_MS
+  })
+}
+
+export function getMarketplaceAppOperation(operationId: string): Promise<MarketplaceAppOperation> {
+  return window.hermesDesktop.api<MarketplaceAppOperation>({
+    ...profileScoped(),
+    path: `/api/apps/market/operations/${encodeURIComponent(operationId)}`,
+    timeoutMs: HUB_REQUEST_TIMEOUT_MS
+  })
+}
+
+export function cancelMarketplaceAppOperation(operationId: string): Promise<void> {
+  return window.hermesDesktop.api<void>({
+    ...profileScoped(),
+    path: `/api/apps/market/operations/${encodeURIComponent(operationId)}`,
+    method: 'DELETE'
   })
 }
 

@@ -1011,6 +1011,19 @@ DEFAULT_CONFIG = {
     "fallback_providers": [],
     "credential_pool_strategies": {},
     "toolsets": ["hermes-cli"],
+    # Remote StockSense catalog settings. Disabled until an operator configures
+    # the first-party market URL; market browsing never relies on an env var.
+    "marketplace": {
+        "enabled": False,
+        "base_url": "",
+        "channel": "stable",
+        "request_timeout_seconds": 15,
+        "catalog_cache_minutes": 5,
+        "offline_cache_hours": 24,
+        "allow_community_sources": True,
+        "require_artifact_signature": True,
+        "trusted_keys": {},
+    },
     # Global active chat session cap across CLI, TUI/dashboard, and messaging.
     # None/0 = unbounded.
     "max_concurrent_sessions": None,

@@ -11968,6 +11968,121 @@ class AppImportConfirmationRequest(BaseModel):
     grants: Dict[str, Any]
 
 
+class MarketAppInstallRequest(BaseModel):
+    version: Optional[str] = None
+
+
+def _app_market_operations(request: Request):
+    """Return one local, process-scoped async operation coordinator."""
+    from hermes_cli.apps.marketplace import AppMarketplaceOperations
+
+    operations = getattr(request.app.state, "app_market_operations", None)
+    if operations is None:
+        operations = AppMarketplaceOperations()
+        request.app.state.app_market_operations = operations
+    return operations
+
+
+@app.get("/api/apps/market/categories")
+async def list_market_app_categories(request: Request):
+    from hermes_cli.apps.errors import AppDomainError
+
+    try:
+        return await asyncio.to_thread(_app_market_operations(request).list_categories)
+    except AppDomainError as exc:
+        return _app_api_error(exc)
+
+
+@app.get("/api/apps/market")
+async def list_market_apps(
+    request: Request,
+    q: str = "",
+    category: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 24,
+):
+    from hermes_cli.apps.errors import AppDomainError
+    from hermes_cli.apps.manager import AppManager
+
+    try:
+        result = await asyncio.to_thread(
+            _app_market_operations(request).list_apps,
+            q=q[:200],
+            category=category,
+            page=max(page, 1),
+            page_size=min(max(page_size, 1), 50),
+            compatible_only=True,
+        )
+        local = await asyncio.to_thread(AppManager().list_apps)
+        installed = {item["id"]: item["version"] for item in local["items"]}
+        result["installed"] = installed
+        return result
+    except AppDomainError as exc:
+        return _app_api_error(exc)
+
+
+@app.get("/api/apps/market/{market_app_id}")
+async def get_market_app(market_app_id: str, request: Request, version: Optional[str] = None):
+    from hermes_cli.apps.errors import AppDomainError
+
+    try:
+        return await asyncio.to_thread(
+            _app_market_operations(request).get_app, market_app_id, version=version
+        )
+    except AppDomainError as exc:
+        return _app_api_error(exc)
+
+
+@app.get("/api/apps/market/{market_app_id}/icon")
+async def get_market_app_icon(market_app_id: str, request: Request, version: Optional[str] = None):
+    from hermes_cli.apps.errors import AppDomainError
+
+    try:
+        content, content_type = await asyncio.to_thread(
+            _app_market_operations(request).get_icon, market_app_id, version=version
+        )
+        return Response(content=content, media_type=content_type, headers={"Cache-Control": "private, max-age=300"})
+    except AppDomainError as exc:
+        return _app_api_error(exc)
+
+
+@app.post("/api/apps/market/{market_app_id}/operations", status_code=202)
+async def start_market_app_install(
+    market_app_id: str,
+    request: Request,
+    body: MarketAppInstallRequest,
+):
+    from hermes_cli.apps.errors import AppDomainError
+
+    try:
+        return await asyncio.to_thread(
+            _app_market_operations(request).start_install, market_app_id, version=body.version
+        )
+    except AppDomainError as exc:
+        return _app_api_error(exc)
+
+
+@app.get("/api/apps/market/operations/{operation_id}")
+async def get_market_app_install(operation_id: str, request: Request):
+    from hermes_cli.apps.errors import AppDomainError
+
+    try:
+        return await asyncio.to_thread(_app_market_operations(request).get_operation, operation_id)
+    except AppDomainError as exc:
+        return _app_api_error(exc)
+
+
+@app.delete("/api/apps/market/operations/{operation_id}", status_code=204)
+async def cancel_market_app_install(operation_id: str, request: Request):
+    from hermes_cli.apps.errors import AppDomainError
+
+    try:
+        await asyncio.to_thread(_app_market_operations(request).cancel, operation_id)
+    except AppDomainError as exc:
+        return _app_api_error(exc)
+    return Response(status_code=204)
+
+
 @app.get("/api/apps")
 async def list_local_apps(request: Request, query: Optional[str] = None):
     """Return installed and bundled applications for the active Profile."""
@@ -12215,6 +12330,14 @@ def _app_api_error(exc):
         "APP_PERMISSION_REQUIRED": 403,
         "APP_RUNTIME_INCOMPATIBLE": 409,
         "APP_VERSION_CONFLICT": 409,
+        "APP_REQUEST_CANCELLED": 409,
+        "MARKET_DISABLED": 503,
+        "MARKET_UNAVAILABLE": 503,
+        "MARKET_ARTIFACT_EXPIRED": 409,
+        "MARKET_ARTIFACT_TOO_LARGE": 413,
+        "MARKET_ARTIFACT_REJECTED": 422,
+        "MARKET_ARTIFACT_HASH_MISMATCH": 422,
+        "MARKET_SIGNATURE_INVALID": 422,
     }.get(exc.code, 400)
     return JSONResponse(
         {
@@ -14180,11 +14303,12 @@ _SKILL_HUB_SOURCE_LABELS = {
     "claude-marketplace": "Claude Marketplace",
     "lobehub": "LobeHub",
     "browse-sh": "browse.sh",
+    "stocksense-market": "StockSense Market",
 }
 
 
 def _skill_meta_to_payload(m) -> dict:
-    return {
+    payload = {
         "name": m.name,
         "description": m.description,
         "source": m.source,
@@ -14193,6 +14317,11 @@ def _skill_meta_to_payload(m) -> dict:
         "repo": m.repo,
         "tags": list(m.tags or []),
     }
+    extra = getattr(m, "extra", {}) or {}
+    for key in ("category", "version", "publisher", "compatibility", "permissions"):
+        if key in extra:
+            payload[key] = extra[key]
+    return payload
 
 
 def _installed_hub_identifiers(profile: Optional[str] = None) -> dict:
@@ -14271,6 +14400,12 @@ async def list_skills_hub_sources(profile: Optional[str] = None):
                         ]
                     except Exception:
                         featured = []
+            if sid == "stocksense-market":
+                entry["available"] = True
+                try:
+                    featured.extend(_skill_meta_to_payload(m) for m in src.search("", limit=12))
+                except Exception:
+                    entry["available"] = False
             out.append(entry)
         # Tell the UI which sources are worth searching individually (for its
         # progressive per-source fan-out). Mirror parallel_search_sources: when

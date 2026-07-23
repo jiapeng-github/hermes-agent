@@ -9,7 +9,7 @@ import { AppMarketView } from './index'
 const PREVIEW_APPS = [
   {
     id: 'ai.hermes.industry-monitor',
-    name: '行业轮动于资金流向监控',
+    name: '行业轮动和资金流向监控',
     description: 'A 股市场广度、热点题材、行业轮动、资金流与北向成交监控。',
     version: '1.0.0',
     enabled: true,

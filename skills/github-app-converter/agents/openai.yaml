@@ -1,0 +1,7 @@
+interface:
+  display_name: "GitHub 应用转换器"
+  short_description: "安全评估 GitHub 项目并转换为 StockSense 应用"
+  default_prompt: "Use $github-app-converter to assess this GitHub repository and prepare a safe StockSense App conversion plan."
+
+policy:
+  allow_implicit_invocation: true

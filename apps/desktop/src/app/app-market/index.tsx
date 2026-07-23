@@ -14,8 +14,27 @@ import {
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import type { AppImportPlan } from '@/global'
+import {
+  cancelMarketplaceAppOperation,
+  getMarketplaceAppOperation,
+  listMarketplaceApps,
+  startMarketplaceAppInstall,
+  type MarketplaceAppOperation,
+  type MarketplaceAppSummary
+} from '@/hermes'
 import { launchAppInBrowser } from '@/lib/app-launch'
-import { Download, ExternalLink, MoreHorizontal, Package, Pencil, Plus, Search, Trash2, Upload } from '@/lib/icons'
+import {
+  Download,
+  ExternalLink,
+  Loader2,
+  MoreHorizontal,
+  Package,
+  Pencil,
+  Plus,
+  Search,
+  Trash2,
+  Upload
+} from '@/lib/icons'
 
 export interface AppSummary {
   id: string
@@ -48,7 +67,22 @@ const STATUS_LABEL: Record<AppSummary['status'], string> = {
   busy: '运行中'
 }
 
+function marketErrorMessage(reason: unknown, fallback: string): string {
+  const message = reason instanceof Error ? reason.message : ''
+
+  if (message.includes('MARKET_DISABLED')) {
+    return '应用市场尚未配置。请在设置中启用市场服务后重试。'
+  }
+
+  if (message.includes('MARKET_UNAVAILABLE')) {
+    return '暂时无法连接应用市场，请稍后重试。'
+  }
+
+  return message || fallback
+}
+
 export function AppMarketView({ onCreateApp, onEditApp }: AppMarketViewProps) {
+  const [mode, setMode] = useState<'installed' | 'market'>('installed')
   const [apps, setApps] = useState<AppSummary[]>([])
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(true)
@@ -57,6 +91,10 @@ export function AppMarketView({ onCreateApp, onEditApp }: AppMarketViewProps) {
   const [importPlan, setImportPlan] = useState<AppImportPlan | null>(null)
   const [importing, setImporting] = useState(false)
   const [removeTarget, setRemoveTarget] = useState<AppSummary | null>(null)
+  const [marketApps, setMarketApps] = useState<MarketplaceAppSummary[]>([])
+  const [marketInstalled, setMarketInstalled] = useState<Record<string, string>>({})
+  const [marketLoading, setMarketLoading] = useState(false)
+  const [marketOperation, setMarketOperation] = useState<MarketplaceAppOperation | null>(null)
 
   async function loadApps() {
     setLoading(true)
@@ -75,6 +113,54 @@ export function AppMarketView({ onCreateApp, onEditApp }: AppMarketViewProps) {
   useEffect(() => {
     void loadApps()
   }, [])
+
+  useEffect(() => {
+    if (mode !== 'market') {
+      return
+    }
+
+    let active = true
+    setMarketLoading(true)
+    setError(null)
+    const timer = window.setTimeout(() => {
+      void listMarketplaceApps(query)
+        .then(result => {
+          if (!active) return
+          setMarketApps(result.items)
+          setMarketInstalled(result.installed)
+        })
+        .catch(reason => active && setError(marketErrorMessage(reason, '应用市场加载失败。')))
+        .finally(() => active && setMarketLoading(false))
+    }, 250)
+
+    return () => {
+      active = false
+      window.clearTimeout(timer)
+    }
+  }, [mode, query])
+
+  useEffect(() => {
+    if (!marketOperation || !['queued', 'resolving', 'downloading', 'analyzing'].includes(marketOperation.state)) {
+      return
+    }
+
+    const timer = window.setInterval(() => {
+      void getMarketplaceAppOperation(marketOperation.operation_id)
+        .then(operation => {
+          setMarketOperation(operation)
+          if (operation.state === 'completed' && operation.import_plan) {
+            setImportPlan(operation.import_plan)
+            setNotice(null)
+          }
+          if (operation.state === 'failed') {
+            setError(operation.error?.message ?? '应用市场安装准备失败。')
+          }
+        })
+        .catch(reason => setError(reason instanceof Error ? reason.message : '无法获取应用安装状态。'))
+    }, 800)
+
+    return () => window.clearInterval(timer)
+  }, [marketOperation])
 
   const visibleApps = useMemo(() => {
     const folded = query.trim().toLocaleLowerCase()
@@ -130,10 +216,12 @@ export function AppMarketView({ onCreateApp, onEditApp }: AppMarketViewProps) {
 
   async function discardImport() {
     if (importPlan) {
-      await window.hermesDesktop.api({
-        path: `/api/apps/imports/${encodeURIComponent(importPlan.import_id)}`,
-        method: 'DELETE'
-      }).catch(() => undefined)
+      await window.hermesDesktop
+        .api({
+          path: `/api/apps/imports/${encodeURIComponent(importPlan.import_id)}`,
+          method: 'DELETE'
+        })
+        .catch(() => undefined)
     }
 
     setImportPlan(null)
@@ -164,32 +252,76 @@ export function AppMarketView({ onCreateApp, onEditApp }: AppMarketViewProps) {
     await loadApps()
   }
 
+  async function installFromMarket(app: MarketplaceAppSummary) {
+    setError(null)
+    setNotice(null)
+
+    try {
+      const operation = await startMarketplaceAppInstall(app.id, app.version)
+      setMarketOperation(operation)
+    } catch (reason) {
+      setError(marketErrorMessage(reason, '无法开始安装应用。'))
+    }
+  }
+
+  async function cancelMarketInstall() {
+    if (!marketOperation) return
+    await cancelMarketplaceAppOperation(marketOperation.operation_id).catch(() => undefined)
+    setMarketOperation(null)
+  }
+
+  const marketBusy = Boolean(
+    marketOperation && ['queued', 'resolving', 'downloading', 'analyzing'].includes(marketOperation.state)
+  )
+
   return (
     <div className="h-full min-h-0 overflow-y-auto bg-(--ui-chat-surface-background) [scrollbar-gutter:stable]">
       <header className="sticky top-0 z-20 border-b border-(--ui-stroke-tertiary) bg-(--ui-chat-surface-background)/95 px-5 pb-3 pt-[calc(var(--titlebar-height)+0.7rem)] backdrop-blur-md">
-        <div className="mx-auto flex max-w-[75rem] flex-wrap items-center gap-3">
-          <div className="mr-auto min-w-0">
-            <h1 className="text-base font-semibold text-foreground">应用</h1>
-            <p className="mt-0.5 text-xs text-(--ui-text-tertiary)">浏览、创建和管理由 Stock Agent 提供服务的 Web 应用</p>
+        <div className="mx-auto max-w-[75rem]">
+          <div className="flex min-h-8 flex-wrap items-center gap-3">
+            <div className="mr-auto min-w-0">
+              <h1 className="text-base font-semibold text-foreground">应用</h1>
+              <p className="mt-0.5 text-xs text-(--ui-text-tertiary)">
+                浏览、创建和管理由 Stock Agent 提供服务的 Web 应用
+              </p>
+            </div>
+            {mode === 'installed' && (
+              <div className="flex items-center gap-2">
+                <Button onClick={() => void chooseImport()} size="sm" variant="outline">
+                  <Upload className="size-3.5" />
+                  导入
+                </Button>
+                <Button onClick={onCreateApp} size="sm">
+                  <Plus className="size-3.5" />
+                  创建应用
+                </Button>
+              </div>
+            )}
           </div>
-          <div className="relative min-w-[12rem] flex-1 sm:max-w-[20rem]">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-(--ui-text-tertiary)" />
-            <Input
-              aria-label="搜索应用"
-              className="h-8 pl-8"
-              onChange={event => setQuery(event.target.value)}
-              placeholder="搜索应用"
-              value={query}
-            />
+          <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-(--ui-stroke-tertiary) pt-3">
+            <div className="flex items-center rounded-md border border-(--ui-stroke-tertiary) p-0.5 text-xs">
+              <Button
+                onClick={() => setMode('installed')}
+                size="xs"
+                variant={mode === 'installed' ? 'secondary' : 'ghost'}
+              >
+                已安装
+              </Button>
+              <Button onClick={() => setMode('market')} size="xs" variant={mode === 'market' ? 'secondary' : 'ghost'}>
+                应用市场
+              </Button>
+            </div>
+            <div className="relative w-full sm:ml-auto sm:w-[20rem]">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-(--ui-text-tertiary)" />
+              <Input
+                aria-label="搜索应用"
+                className="h-8 pl-8"
+                onChange={event => setQuery(event.target.value)}
+                placeholder="搜索应用"
+                value={query}
+              />
+            </div>
           </div>
-          <Button onClick={() => void chooseImport()} size="sm" variant="outline">
-            <Upload className="size-3.5" />
-            导入
-          </Button>
-          <Button onClick={onCreateApp} size="sm">
-            <Plus className="size-3.5" />
-            创建应用
-          </Button>
         </div>
       </header>
 
@@ -204,14 +336,93 @@ export function AppMarketView({ onCreateApp, onEditApp }: AppMarketViewProps) {
         )}
 
         <div className="mb-3 flex items-center justify-between">
-          <span className="text-xs font-medium text-(--ui-text-secondary)">全部应用 · {visibleApps.length}</span>
-          <span className="text-[0.6875rem] text-(--ui-text-tertiary)">应用不会主动请求行情数据</span>
+          <span className="text-xs font-medium text-(--ui-text-secondary)">
+            {mode === 'installed' ? `全部应用 · ${visibleApps.length}` : `应用市场 · ${marketApps.length}`}
+          </span>
+          <span className="text-[0.6875rem] text-(--ui-text-tertiary)">
+            {mode === 'installed' ? '应用不会主动请求行情数据' : '安装前将展示所需权限'}
+          </span>
         </div>
 
-        {loading ? (
+        {mode === 'market' ? (
+          marketLoading ? (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {[0, 1, 2].map(item => (
+                <div
+                  className="h-36 animate-pulse rounded-md border border-(--ui-stroke-tertiary) bg-(--ui-bg-elevated)"
+                  key={item}
+                />
+              ))}
+            </div>
+          ) : marketApps.length ? (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {marketApps.map(app => {
+                const installedVersion = marketInstalled[app.id]
+                const installing = marketBusy && marketOperation?.market_app_id === app.id
+                return (
+                  <article
+                    className="flex min-h-36 flex-col rounded-md border border-(--ui-stroke-tertiary) bg-(--ui-bg-elevated) p-3.5 shadow-sm"
+                    key={app.id}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="grid size-10 shrink-0 place-items-center overflow-hidden rounded-md bg-primary/10 text-primary">
+                        {app.icon_url ? (
+                          <img
+                            alt=""
+                            className="size-full object-cover"
+                            src={`/api/apps/market/${encodeURIComponent(app.id)}/icon?version=${encodeURIComponent(app.version)}`}
+                          />
+                        ) : (
+                          <Package className="size-5" />
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h2 className="line-clamp-2 text-sm font-semibold text-foreground break-words">{app.name}</h2>
+                        <p className="mt-0.5 truncate font-mono text-[0.625rem] text-(--ui-text-tertiary)">{app.id}</p>
+                      </div>
+                    </div>
+                    <p className="mt-2.5 line-clamp-2 text-xs leading-5 text-(--ui-text-secondary)">
+                      {app.summary || app.description}
+                    </p>
+                    <div className="mt-auto flex items-center gap-2 pt-2.5">
+                      {app.category && <Badge variant="muted">{app.category}</Badge>}
+                      <span className="text-[0.6875rem] text-(--ui-text-tertiary)">v{app.version}</span>
+                      {installedVersion ? (
+                        <Badge className="ml-auto" variant="default">
+                          已安装
+                        </Badge>
+                      ) : (
+                        <Button
+                          className="ml-auto"
+                          disabled={marketBusy}
+                          onClick={() => void installFromMarket(app)}
+                          size="sm"
+                        >
+                          {installing && <Loader2 className="size-3.5 animate-spin" />}
+                          {installing ? '准备中…' : '安装'}
+                        </Button>
+                      )}
+                    </div>
+                  </article>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="grid min-h-52 place-items-center rounded-md border border-dashed border-(--ui-stroke-secondary) text-center">
+              <div>
+                <Package className="mx-auto size-6 text-(--ui-text-tertiary)" />
+                <p className="mt-2 text-sm font-medium">没有可用的市场应用</p>
+                <p className="mt-1 text-xs text-(--ui-text-tertiary)">请检查应用市场服务配置后重试。</p>
+              </div>
+            </div>
+          )
+        ) : loading ? (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {[0, 1, 2].map(item => (
-              <div className="h-36 animate-pulse rounded-md border border-(--ui-stroke-tertiary) bg-white dark:bg-(--ui-bg-elevated)" key={item} />
+              <div
+                className="h-36 animate-pulse rounded-md border border-(--ui-stroke-tertiary) bg-(--ui-bg-elevated)"
+                key={item}
+              />
             ))}
           </div>
         ) : visibleApps.length ? (
@@ -221,7 +432,7 @@ export function AppMarketView({ onCreateApp, onEditApp }: AppMarketViewProps) {
 
               return (
                 <article
-                  className="group flex min-h-36 flex-col rounded-md border border-(--ui-stroke-tertiary) bg-white p-3.5 shadow-sm transition-colors hover:border-primary/30 dark:bg-(--ui-bg-elevated)"
+                  className="group flex min-h-36 flex-col rounded-md border border-(--ui-stroke-tertiary) bg-(--ui-bg-elevated) p-3.5 shadow-sm transition-colors hover:border-primary/30"
                   key={app.id}
                 >
                   <div className="flex items-start gap-3">
@@ -307,20 +518,47 @@ export function AppMarketView({ onCreateApp, onEditApp }: AppMarketViewProps) {
             <div className="space-y-3 text-xs">
               <div className="rounded-md border border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary) p-3">
                 <div className="font-semibold text-foreground">{importPlan.app.name}</div>
-                <div className="mt-1 font-mono text-[0.6875rem] text-(--ui-text-tertiary)">{importPlan.app.id} · v{importPlan.app.version}</div>
+                <div className="mt-1 font-mono text-[0.6875rem] text-(--ui-text-tertiary)">
+                  {importPlan.app.id} · v{importPlan.app.version}
+                </div>
                 <p className="mt-2 text-(--ui-text-secondary)">{importPlan.app.description}</p>
               </div>
               <div className="space-y-1 text-(--ui-text-secondary)">
                 <p>来源：{importPlan.signature_state === 'valid_trusted' ? '已验证签名' : '本地未签名包'}</p>
                 <p>智能体分析：{importPlan.requested_permissions.agent ? '需要授权' : '不需要'}</p>
                 <p>MCP：{importPlan.requested_permissions.mcp_servers.join('、') || '不需要'}</p>
-                <p>存储：{importPlan.requested_permissions.storage.mode} · {importPlan.requested_permissions.storage.quota_mb} MB</p>
+                <p>
+                  存储：{importPlan.requested_permissions.storage.mode} ·{' '}
+                  {importPlan.requested_permissions.storage.quota_mb} MB
+                </p>
               </div>
             </div>
           )}
           <DialogFooter>
-            <Button disabled={importing} onClick={() => void discardImport()} variant="ghost">取消</Button>
-            <Button disabled={importing} onClick={() => void confirmImport()}>{importing ? '安装中…' : '确认安装'}</Button>
+            <Button disabled={importing} onClick={() => void discardImport()} variant="ghost">
+              取消
+            </Button>
+            <Button disabled={importing} onClick={() => void confirmImport()}>
+              {importing ? '安装中…' : '确认安装'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog onOpenChange={open => !open && void cancelMarketInstall()} open={marketBusy}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>正在准备应用安装</DialogTitle>
+            <DialogDescription>正在从应用市场下载并校验应用包，随后会展示权限确认。</DialogDescription>
+          </DialogHeader>
+          <div className="flex items-center gap-2 text-sm text-(--ui-text-secondary)">
+            <Loader2 className="size-4 animate-spin" />
+            {marketOperation?.state === 'analyzing' ? '正在分析应用权限…' : '正在安全下载应用包…'}
+          </div>
+          <DialogFooter>
+            <Button onClick={() => void cancelMarketInstall()} variant="ghost">
+              取消
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

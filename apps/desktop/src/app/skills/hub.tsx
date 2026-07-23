@@ -112,9 +112,16 @@ function HubSkillRow({
           <span className={cn('rounded px-1.5 py-0.5 text-[0.6rem]', trustTone(skill.trust_level))}>
             {h.trust[skill.trust_level] ?? skill.trust_level}
           </span>
+          {skill.category && (
+            <span className="rounded bg-(--ui-bg-tertiary) px-1.5 py-0.5 text-[0.6rem] text-(--ui-text-secondary)">
+              {skill.category}
+            </span>
+          )}
+          {skill.version && <span className="font-mono text-[0.6rem] text-(--ui-text-tertiary)">v{skill.version}</span>}
           {installed && <span className="text-[0.6rem] text-emerald-400">{h.installed}</span>}
         </div>
         <p className="mt-0.5 line-clamp-2 text-[0.68rem] text-muted-foreground/70">{skill.description}</p>
+        {skill.publisher && <p className="mt-1 text-[0.6rem] text-(--ui-text-tertiary)">{skill.publisher}</p>}
       </div>
       <div className="flex shrink-0 items-center gap-1">
         <Button onClick={() => onPreview(skill)} size="xs" variant="text">

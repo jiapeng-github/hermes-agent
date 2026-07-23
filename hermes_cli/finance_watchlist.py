@@ -21,13 +21,7 @@ MX_SERVER_NAME = "mx-ds-mcp"
 MCP_PROTOCOL_VERSION = "2025-03-26"
 MAX_WATCHLIST_SIZE = 30
 
-DEFAULT_WATCHLIST = [
-    {"code": "600519", "name": "贵州茅台", "exchange": "SH", "industry": "食品饮料"},
-    {"code": "300750", "name": "宁德时代", "exchange": "SZ", "industry": "电力设备"},
-    {"code": "002594", "name": "比亚迪", "exchange": "SZ", "industry": "汽车"},
-    {"code": "600036", "name": "招商银行", "exchange": "SH", "industry": "银行"},
-    {"code": "688981", "name": "中芯国际", "exchange": "SH", "industry": "电子"},
-]
+DEFAULT_WATCHLIST: List[Dict[str, Any]] = []
 
 PROFILE_QUERY_TEMPLATE = (
     "筛选名称或代码为{query}的A股上市公司，字段包括代码、名称、最新价、涨跌幅、"

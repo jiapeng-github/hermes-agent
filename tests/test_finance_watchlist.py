@@ -17,6 +17,10 @@ from hermes_cli.finance_watchlist import (
 
 
 class FinanceWatchlistTest(unittest.TestCase):
+    def test_new_profile_starts_with_empty_watchlist(self):
+        with tempfile.TemporaryDirectory() as home:
+            self.assertEqual(_read_entries(home), [])
+
     def test_add_and_remove_stock_persist_in_profile_directory(self):
         resolved = {
             "code": "601318",

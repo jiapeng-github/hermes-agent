@@ -52,7 +52,7 @@
     const data = state.data || {}
     const refreshing = Boolean(data.refresh?.refreshing)
     el('status').textContent = `${data.as_of ? `数据 ${data.as_of}` : '等待交易数据'} · ${refreshing ? '后台刷新中' : '快照已就绪'}`
-    el('headline').textContent = data.summary?.headline || '行业轮动与资金流向'
+    el('headline').textContent = data.summary?.headline || '行业轮动和资金流向'
     replace(el('details'), (data.summary?.details || []).map(item => text('p', item)))
     renderBreadth()
     renderIndices()

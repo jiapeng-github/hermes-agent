@@ -7,7 +7,9 @@ from hermes_cli.apps.catalog import WATCHLIST_APP_ID
 from hermes_cli.apps.manager import AppManager
 
 
-def test_authenticated_management_launch_and_stop_routes(monkeypatch, _isolate_hermes_home) -> None:
+def test_authenticated_management_launch_and_stop_routes(
+    monkeypatch, _isolate_hermes_home
+) -> None:
     from hermes_cli.web_server import app, _SESSION_HEADER_NAME, _SESSION_TOKEN
 
     launch = {
@@ -115,3 +117,18 @@ def test_builtin_uninstall_is_rejected(_isolate_hermes_home) -> None:
 
     assert response.status_code == 409
     assert response.json()["error"]["code"] == "APP_VERSION_CONFLICT"
+
+
+def test_market_routes_are_authenticated_and_explicitly_disabled_by_default(
+    _isolate_hermes_home,
+) -> None:
+    from hermes_cli.web_server import app, _SESSION_HEADER_NAME, _SESSION_TOKEN
+
+    with TestClient(app) as client:
+        unauthenticated = client.get("/api/apps/market")
+        client.headers[_SESSION_HEADER_NAME] = _SESSION_TOKEN
+        disabled = client.get("/api/apps/market")
+
+    assert unauthenticated.status_code == 401
+    assert disabled.status_code == 503
+    assert disabled.json()["error"]["code"] == "MARKET_DISABLED"

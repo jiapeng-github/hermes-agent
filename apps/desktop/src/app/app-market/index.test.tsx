@@ -36,7 +36,7 @@ const builtinFinanceApps = [
   {
     ...builtinApp,
     id: 'ai.hermes.industry-monitor',
-    name: '行业轮动于资金流向监控',
+    name: '行业轮动和资金流向监控',
     description: 'A 股市场广度、热点题材、行业轮动、资金流与北向成交监控'
   },
   {
@@ -81,15 +81,15 @@ describe('AppMarketView', () => {
     render(<AppMarketView onCreateApp={onCreateApp} onEditApp={onEditApp} />)
 
     expect(await screen.findByText('自选股盯盘看板')).toBeTruthy()
-    expect(screen.getByText('行业轮动于资金流向监控')).toBeTruthy()
+    expect(screen.getByText('行业轮动和资金流向监控')).toBeTruthy()
     expect(screen.getByText('上市公司基本面分析')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: '创建应用' }))
-    fireEvent.click(screen.getByRole('button', { name: '打开 行业轮动于资金流向监控' }))
+    fireEvent.click(screen.getByRole('button', { name: '打开 行业轮动和资金流向监控' }))
 
     expect(onCreateApp).toHaveBeenCalledOnce()
     await waitFor(() => expect(openLaunchUrl).toHaveBeenCalledWith('http://127.0.0.1:49182/launch/code'))
 
-    const manageButton = screen.getByRole('button', { name: '管理 行业轮动于资金流向监控' })
+    const manageButton = screen.getByRole('button', { name: '管理 行业轮动和资金流向监控' })
     fireEvent.pointerDown(manageButton, { button: 0, ctrlKey: false })
     const exportItem = await screen.findByText('导出 .happ')
     expect(exportItem.getAttribute('data-disabled')).not.toBeNull()

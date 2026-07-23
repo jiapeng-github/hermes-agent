@@ -1,5 +1,5 @@
 (() => {
-  const state = { data: null, query: '宁德时代', loading: false, timer: null }
+  const state = { data: null, query: '', loading: false, timer: null }
   const el = id => document.getElementById(id)
 
   document.addEventListener('DOMContentLoaded', initialize)
@@ -7,16 +7,20 @@
   async function initialize() {
     const [bootstrap, saved] = await Promise.all([
       window.HermesApp.bootstrap(),
-      window.HermesApp.storageGet('company-analysis.last-query', '宁德时代')
+      window.HermesApp.storageGet('company-analysis.last-query', '')
     ])
     document.documentElement.dataset.theme = bootstrap.theme
-    state.query = typeof saved === 'string' && saved.trim() ? saved.trim() : '宁德时代'
+    state.query = typeof saved === 'string' && saved.trim() ? saved.trim() : ''
     el('query').value = state.query
     el('search-form').addEventListener('submit', search)
     el('refresh').addEventListener('click', refresh)
     el('article-close').addEventListener('click', () => el('article-dialog').close())
     el('article-dialog').addEventListener('click', event => { if (event.target === el('article-dialog')) el('article-dialog').close() })
-    await load(true)
+    if (state.query) {
+      await load(true)
+    } else {
+      el('status').textContent = '请输入公司名称或股票代码'
+    }
   }
 
   async function search(event) {
@@ -29,7 +33,7 @@
   }
 
   async function refresh() {
-    if (state.loading) return
+    if (state.loading || !state.query) return
     el('status').textContent = '妙想 MCP 正在后台刷新'
     try {
       await window.HermesApp.run('refresh', { query: state.query })
@@ -40,7 +44,10 @@
   }
 
   async function load(autoRefresh) {
-    if (state.loading) return
+    if (state.loading || !state.query) {
+      if (!state.query) el('status').textContent = '请输入公司名称或股票代码'
+      return
+    }
     state.loading = true
     el('refresh').classList.add('loading')
     el('status').textContent = `正在读取 ${state.query} 的分析快照`

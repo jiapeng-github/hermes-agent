@@ -2,7 +2,7 @@
   "name": "stocksense",
   "productName": "StockSense",
   "private": true,
-  "version": "0.17.0",
+  "version": "0.19.0",
   "description": "Native desktop shell for StockSense.",
   "author": "Nous Research",
   "type": "module",

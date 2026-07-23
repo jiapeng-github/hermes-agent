@@ -1,3 +1,5 @@
+import type { AppImportPlan } from '@/global'
+
 export interface ConfigFieldSchema {
   category?: string
   description?: string
@@ -1052,6 +1054,11 @@ export interface SkillHubResult {
   trust_level: string
   repo: string | null
   tags: string[]
+  category?: string
+  version?: string
+  publisher?: string
+  compatibility?: Record<string, unknown>
+  permissions?: string[]
 }
 
 export interface SkillHubInstalledEntry {
@@ -1072,6 +1079,44 @@ export interface SkillHubSearchResponse {
   source_counts: Record<string, number>
   timed_out: string[]
   installed: Record<string, SkillHubInstalledEntry>
+}
+
+export interface MarketplaceAppSummary {
+  id: string
+  name: string
+  summary: string
+  description?: string
+  version: string
+  category?: string
+  publisher?: string
+  icon_url?: string
+  tags?: string[]
+  compatibility?: Record<string, unknown>
+  permissions?: string[]
+}
+
+export interface MarketplaceAppsResponse {
+  items: MarketplaceAppSummary[]
+  next_cursor?: string | null
+  cache_state: 'fresh' | 'stale'
+  cached_at?: string | null
+  installed: Record<string, string>
+}
+
+export interface MarketplaceAppOperation {
+  operation_id: string
+  market_app_id: string
+  version: string | null
+  state: 'queued' | 'resolving' | 'downloading' | 'analyzing' | 'completed' | 'failed' | 'cancelled'
+  created_at: string
+  updated_at: string
+  import_plan?: AppImportPlan
+  error?: {
+    code: string
+    message: string
+    retryable: boolean
+    details: Record<string, unknown>
+  }
 }
 
 /** `GET /api/skills/hub/preview` — SKILL.md + manifest without installing. */

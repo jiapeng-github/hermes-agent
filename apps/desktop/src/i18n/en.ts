@@ -923,7 +923,7 @@ export const en: Translations = {
     tabSkills: 'Skills',
     tabToolsets: 'Tools',
     tabMcp: 'MCP',
-    tabHub: 'Browse Hub',
+    tabHub: 'Skill Market',
     all: 'All',
     searchSkills: 'Search skills...',
     searchToolsets: 'Search tools...',
@@ -976,15 +976,15 @@ export const en: Translations = {
     skillArchivedTitle: 'Skill archived',
     skillArchivedMessage: 'Restorable via hermes curator restore.',
     hub: {
-      searchPlaceholder: 'Search the skill hub',
+      searchPlaceholder: 'Search the skill market',
       search: 'Search',
       searching: 'Searching...',
-      connectingHubs: 'Connecting to skill hubs...',
-      connectedHubs: 'Connected hubs:',
+      connectingHubs: 'Connecting to skill markets...',
+      connectedHubs: 'Connected sources:',
       featured: 'Featured skills',
       landingHint:
-        'Search the hub to browse installable skills from the official index, GitHub, and community sources.',
-      noResults: 'No matching skills found in the hub.',
+        'Browse installable skills from the StockSense market, official index, GitHub, and community sources.',
+      noResults: 'No matching skills found in the market.',
       resultCount: (count, ms) => `${count} result${count === 1 ? '' : 's'}${ms !== null ? ` in ${ms}ms` : ''}`,
       timedOut: sources => `Timed out: ${sources}`,
       installed: 'Installed',
@@ -1018,10 +1018,10 @@ export const en: Translations = {
       updateStarted: 'Updating installed skills...',
       actionFailed: 'Skill action failed',
       actionLog: 'Action log',
-      loadFailed: 'Skill hub failed to load',
+      loadFailed: 'Skill market failed to load',
       previewFailed: 'Skill preview failed',
       scanFailed: 'Security scan failed',
-      searchFailed: 'Hub search failed'
+      searchFailed: 'Skill market search failed'
     }
   },
 
@@ -1989,7 +1989,8 @@ export const en: Translations = {
     maybeLater: 'Maybe later',
     moreChanges: count => `+ ${count} more change${count === 1 ? '' : 's'} included.`,
     manualTitle: 'Update from your terminal',
-    manualBody: 'You installed StockSense from the command line, so updates run there too. Paste this into your terminal:',
+    manualBody:
+      'You installed StockSense from the command line, so updates run there too. Paste this into your terminal:',
     manualPickedUp: 'StockSense will pick up the new version next time you launch it.',
     guiSkewTitle: 'Update the desktop app',
     guiSkewBody:
@@ -2083,7 +2084,8 @@ export const en: Translations = {
       xai: { short: 'Grok models', description: 'Direct access to xAI Grok models.' },
       local: {
         short: 'self-hosted',
-        description: 'Point StockSense at a local or self-hosted OpenAI-compatible endpoint (vLLM, llama.cpp, Ollama, etc).'
+        description:
+          'Point StockSense at a local or self-hosted OpenAI-compatible endpoint (vLLM, llama.cpp, Ollama, etc).'
       }
     },
     backToSignIn: 'Back to sign in',
@@ -2391,7 +2393,8 @@ export const en: Translations = {
       showConsole: 'Show preview console',
       hideDevTools: 'Hide preview DevTools',
       openDevTools: 'Open preview DevTools',
-      finishedRestarting: message => `StockSense finished restarting the preview server${message ? `: ${message}` : ''}`,
+      finishedRestarting: message =>
+        `StockSense finished restarting the preview server${message ? `: ${message}` : ''}`,
       failedRestarting: message => `Server restart failed: ${message}`,
       unknownError: 'unknown error',
       restartedTitle: 'Preview server restarted',

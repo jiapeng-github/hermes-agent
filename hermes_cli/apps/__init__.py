@@ -2,6 +2,7 @@
 
 from .errors import AppDomainError, ManifestIssue, ManifestValidationError
 from .manager import AppManager
+from .marketplace import AppMarketplaceOperations
 from .manifest import load_manifest, parse_manifest, validate_manifest_files
 from .models import AppManifest
 from .package import (
@@ -20,6 +21,7 @@ __all__ = [
     "AppDomainError",
     "AppManifest",
     "AppManager",
+    "AppMarketplaceOperations",
     "AppPaths",
     "AppRegistry",
     "AppWorkspaceService",

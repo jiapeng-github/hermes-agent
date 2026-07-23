@@ -1121,7 +1121,7 @@ export const zh: Translations = {
     tabSkills: '技能',
     tabToolsets: '工具集',
     tabMcp: 'MCP',
-    tabHub: '浏览技能中心',
+    tabHub: '技能市场',
     all: '全部',
     searchSkills: '搜索技能…',
     searchToolsets: '搜索工具集…',
@@ -1173,14 +1173,14 @@ export const zh: Translations = {
     skillArchivedTitle: '技能已归档',
     skillArchivedMessage: '可通过 hermes curator restore 恢复。',
     hub: {
-      searchPlaceholder: '搜索技能中心',
+      searchPlaceholder: '搜索技能市场',
       search: '搜索',
       searching: '搜索中…',
-      connectingHubs: '正在连接技能中心…',
+      connectingHubs: '正在连接技能市场…',
       connectedHubs: '已连接的来源：',
       featured: '精选技能',
-      landingHint: '搜索技能中心，浏览来自官方索引、GitHub 和社区来源的可安装技能。',
-      noResults: '技能中心没有匹配的技能。',
+      landingHint: '浏览来自 StockSense 市场、官方索引、GitHub 和社区来源的可安装技能。',
+      noResults: '技能市场没有匹配的技能。',
       resultCount: (count, ms) => `${count} 个结果${ms !== null ? `（${ms}ms）` : ''}`,
       timedOut: sources => `超时：${sources}`,
       installed: '已安装',
@@ -1214,10 +1214,10 @@ export const zh: Translations = {
       updateStarted: '正在更新已安装技能…',
       actionFailed: '技能操作失败',
       actionLog: '操作日志',
-      loadFailed: '技能中心加载失败',
+      loadFailed: '技能市场加载失败',
       previewFailed: '技能预览失败',
       scanFailed: '安全扫描失败',
-      searchFailed: '技能中心搜索失败'
+      searchFailed: '技能市场搜索失败'
     }
   },
 
@@ -1574,8 +1574,7 @@ export const zh: Translations = {
       matrix: '用机器人账户登录你的 homeserver，然后复制访问令牌、用户 ID 和 homeserver URL。',
       signal: '在可访问的位置运行 signal-cli REST 桥接，然后把 天机 指向该 URL 和已注册的电话号码。',
       whatsapp: '启动 天机 自带的 WhatsApp 桥接，首次运行时扫描二维码，然后启用该平台。',
-      bluebubbles:
-        '在装有 iMessage 的 Mac 上运行 BlueBubbles Server，暴露其 API，然后用服务器密码把 天机 指向该 URL。',
+      bluebubbles: '在装有 iMessage 的 Mac 上运行 BlueBubbles Server，暴露其 API，然后用服务器密码把 天机 指向该 URL。',
       homeassistant: '在 Home Assistant 中打开你的个人资料并创建长期访问令牌。把它连同你的 HA URL 一起粘贴到这里。',
       email: '使用专用邮箱。对于 Gmail/Workspace,创建应用专用密码并使用 imap.gmail.com / smtp.gmail.com。',
       sms: '从 Twilio 控制台获取你的 Account SID 和 Auth Token，以及一个可发送短信的电话号码。',
@@ -1586,8 +1585,7 @@ export const zh: Translations = {
       weixin:
         '运行 `hermes gateway setup`，选择 Weixin，然后使用个人微信账号扫描并确认二维码。天机 会通过腾讯 iLink Bot API 连接并保存凭据。',
       qqbot: '在 QQ 开放平台 (q.qq.com) 注册一个应用，复制 App ID 和 Client Secret。',
-      api_server:
-        '把 天机 暴露为兼容 OpenAI 的 API。设置一个鉴权密钥，然后把 Open WebUI / LobeChat 等指向 host:port。',
+      api_server: '把 天机 暴露为兼容 OpenAI 的 API。设置一个鉴权密钥，然后把 Open WebUI / LobeChat 等指向 host:port。',
       webhook: '运行一个 HTTP 服务器，供其他工具 (GitHub、GitLab、自定义应用)POST。用 secret 验证签名。'
     }
   },
@@ -2185,8 +2183,7 @@ export const zh: Translations = {
     copy: '复制',
     copied: '已复制',
     done: '完成',
-    applyingBody:
-      '天机 更新器会在自己的窗口中接管，并在完成后自动重新打开 天机。更新期间请不要自行重新打开 天机。',
+    applyingBody: '天机 更新器会在自己的窗口中接管，并在完成后自动重新打开 天机。更新期间请不要自行重新打开 天机。',
     applyingBodyBackend: '远程后端正在应用更新并将重启。恢复后 天机 会自动重新连接。',
     applyingClose: '此窗口会在更新期间关闭，随后 天机 会自动重新打开。',
     errorTitle: '更新未完成',

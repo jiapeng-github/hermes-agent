@@ -37,7 +37,7 @@ def test_finance_builtins_install_with_exact_runtime_owned_lineage(tmp_path: Pat
     }
     expected_names = {
         COMPANY_ANALYSIS_APP_ID: "上市公司基本面分析",
-        INDUSTRY_MONITOR_APP_ID: "行业轮动于资金流向监控",
+        INDUSTRY_MONITOR_APP_ID: "行业轮动和资金流向监控",
         WATCHLIST_APP_ID: "自选股盯盘看板",
     }
 
@@ -64,7 +64,7 @@ def test_concurrent_first_lists_reuse_one_atomic_builtin_install(tmp_path: Path)
     for app_id in expected:
         record = AppManager(paths).registry.get(app_id)
         assert record is not None
-        assert set(record.versions) == {"1.0.1"}
+        assert set(record.versions) == {"1.0.2"}
 
 
 def test_reserved_builtin_id_cannot_replace_user_lineage(tmp_path: Path) -> None:

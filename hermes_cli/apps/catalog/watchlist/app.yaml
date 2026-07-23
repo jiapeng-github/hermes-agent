@@ -1,7 +1,7 @@
 schema_version: 1
 id: ai.hermes.watchlist
 name: 自选股盯盘看板
-version: 1.0.1
+version: 1.0.2
 description: Profile 隔离的 A 股自选股盯盘、K 线详情与公司分析应用
 entry: dist/index.html
 icon: icon.png

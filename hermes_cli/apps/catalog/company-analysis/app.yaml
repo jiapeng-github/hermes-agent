@@ -1,7 +1,7 @@
 schema_version: 1
 id: ai.hermes.company-analysis
 name: 上市公司基本面分析
-version: 1.0.1
+version: 1.0.2
 description: 按公司名称或股票代码生成 A 股公司画像、财务趋势、估值与研报分析
 entry: dist/index.html
 icon: icon.png
