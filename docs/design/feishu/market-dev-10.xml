@@ -1,0 +1,12 @@
+<h1>10. 任务拆分与工期评估</h1>
+<table><thead><tr><th>里程碑</th><th>工作内容</th><th>估算</th></tr></thead><tbody><tr><td>M1 工程与数据库</td><td>新模块、POM、SQL、DO、Mapper、枚举、后台基础 CRUD。</td><td>2 人日</td></tr><tr><td>M2 验证与签名</td><td>文件服务适配、ZIP/.happ 校验、SHA-256、Ed25519、测试向量。</td><td>3 人日</td></tr><tr><td>M3 公开目录</td><td>分类、列表、详情、搜索、兼容过滤、ETag/304、Redis。</td><td>2.5 人日</td></tr><tr><td>M4 resolve 与下载</td><td>版本解析、短期 token、同源下载、下载日志。</td><td>2 人日</td></tr><tr><td>M5 管理前端</td><td>分类、Publisher、条目、版本、制品校验、发布、密钥页面。</td><td>3 人日</td></tr><tr><td>M6 联调与安全</td><td>Desktop 消费者契约、双平台、恶意制品与签名测试。</td><td>3 人日</td></tr></tbody></table>
+<p>单人串行约 15.5 人日；后端与前端并行约 10 至 12 个工作日。估算不包含生产 KMS、域名证书、对象存储和运维审批等待。推荐提交顺序为：数据库/模块骨架 → 管理 CRUD → 验证签名 → 公开目录 → resolve 下载 → 管理前端 → 消费者契约测试 → 部署说明。</p>
+<h1>11. Definition of Done</h1>
+<checkbox done="false">公开 /app-api/market/v1 与管理 /admin-api/market 响应边界符合 API 契约。</checkbox>
+<checkbox done="false">SQL 可在空库执行，数据表、菜单、权限和字典完整。</checkbox>
+<checkbox done="false">后台可完成草稿、上传、校验、签名、发布和下架的完整流程。</checkbox>
+<checkbox done="false">分类、列表和详情支持 ETag/304，发布和下架能失效缓存。</checkbox>
+<checkbox done="false">Skill 与 App 能由真实 Desktop 安装；App 保留两阶段导入确认。</checkbox>
+<checkbox done="false">SHA-256、Ed25519 和下载 token 通过跨语言固定测试向量。</checkbox>
+<checkbox done="false">私钥、下载 token 与完整 IP 不进入数据库明文或日志。</checkbox>
+<checkbox done="false">windows-x64 和 macos-arm64 的消费者契约和安全测试通过。</checkbox>

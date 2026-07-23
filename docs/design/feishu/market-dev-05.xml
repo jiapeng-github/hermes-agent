@@ -1,0 +1,10 @@
+<h1>5. 公开市场服务实现</h1>
+<p>公开 Controller 放在 controller.app.marketplace，使用 @PermitAll，直接返回 DTO 或 ResponseEntity，不使用 CommonResult。基础路径是 /app-api/market/v1。Catalog 查询只返回已发布、启用且兼容的条目；id 是客户端唯一主键，Skill 为 skill_bundle，App 为 happ。</p>
+<p>必须实现 categories、skills、skills/{id}、skills/{id}/resolve、apps、apps/{id}、apps/{id}/resolve，以及同源 artifacts/{artifactId}/download。列表参数为 q、category、page、page_size、channel、compatible_only；详情支持 channel、version。响应缓存采用稳定 ETag，匹配 If-None-Match 时返回 304；resolve 和下载地址不得缓存。</p>
+<p>resolve 校验版本、渠道、平台和客户端/Runtime 兼容性，然后返回 ArtifactDescriptor。下载 token 绑定 artifact、version、platform 与过期时间，建议 10 分钟。下载接口禁止重定向，必须流式输出准确 Content-Length。非 loopback 环境必须 HTTPS。</p>
+<h1>6. 后台管理与发布流程</h1>
+<p>管理 Controller 分为分类、发布方、条目、版本、签名密钥五组，延续 create/update/delete/get/page 路由风格。版本增加 upload-artifact、validate、publish、offline；上传采用 multipart/form-data，字段为 versionId 与 file。权限按 market:category:*、market:publisher:*、market:item:*、market:version:*、market:artifact:*、market:key:* 拆分。</p>
+<p>发布流程必须原子化：条目草稿 → 版本草稿 → 文件服务上传 → 安全校验 → SHA-256/大小计算 → 保存验证报告 → ACTIVE Ed25519 key 签名 → 管理员发布 → 更新 Item latest 指针 → 清理缓存。版本未通过校验、没有激活密钥、制品 kind 不匹配，或 App Manifest id 不匹配时不得发布。发布后不得改写摘要或签名，修复以新版本完成。</p>
+<h1>7. 管理前端</h1>
+<p>在 stocksense-ui/stocksense-ui-admin-vue3/src/api/market 下新增 category、publisher、item、version、signing-key API；在 src/views/market 下新增分类、发布方、条目、条目表单、版本、制品上传校验和签名密钥页面。当前前端目录是裁剪骨架，先按已有 API 与 views 入口补齐，不假设额外框架结构。</p>
+<p>版本页必须展示制品类型、大小、SHA-256、验证报告、签名 key、发布状态和发布时间。只有 READY、验证通过并且签名成功的版本可显示“发布”按钮；所有阻止发布的原因应逐项展示。密钥页面只显示 key_id、公钥、secret_ref、状态与轮换时间，绝不展示私钥。</p>

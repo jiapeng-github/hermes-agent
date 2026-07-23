@@ -1,0 +1,7 @@
+<h1>8. 安全、缓存与密钥</h1>
+<p>制品最大 50 MiB；校验扩展名、MIME、文件魔数、压缩比、总展开大小、文件数、路径穿越、绝对路径、符号链接、硬链接和设备文件。Skill ZIP 最多 200 文件、单文件最大 1 MiB，必须包含 UTF-8 SKILL.md。App 复用已冻结的 Manifest JSON Schema，禁止自定义后端代码，且服务端校验不替代客户端两阶段导入。</p>
+<p>签名 payload 固定为 kind、artifact_id、version、sha256、size_bytes 五行 UTF-8 文本，以 LF 连接、末尾无换行。将固定测试向量同时纳入 Java 与 Desktop/Python 消费者测试。生产安装包预置信任公钥；不得从同一市场服务动态信任新 key。轮换流程为先分发新公钥、保留旧 key、再服务端切换签名 key、最后退役旧 key。</p>
+<p>Redis key 建议按 categories、list(type/queryHash)、detail(type/id/channel/version) 划分。分类、发布方公开字段、条目可见字段、版本发布/下架和图标替换都要清理相应缓存。公开接口按 IP、路径、客户端版本限流；日志不得记录下载 token、API key、私钥或完整 IP。</p>
+<h1>9. 测试与 Desktop 联调</h1>
+<p>测试分四层：单元测试覆盖状态转换、SemVer、兼容性、签名 canonical payload、ETag、下载 token 和制品校验；Mapper/Service 集成测试覆盖发布事务、最新版本指针、逻辑删除与 TenantIgnore；Controller 契约测试覆盖裸 JSON、CommonResult、ETag/304、错误 HTTP 状态和无重定向下载；消费者契约测试直接运行 Hermes MarketplaceClient 与 .happ 导入链路。</p>
+<p>本地联调地址为 http://127.0.0.1:48080/app-api/market/v1。Desktop 配置 marketplace.enabled、base_url、channel、require_artifact_signature 和 trusted_keys。准备最小合法 Skill ZIP 与 .happ 各一份，覆盖 Windows x64 与 macOS arm64；还要覆盖过期 URL、未知 key、摘要不匹配、超大制品、无兼容版本、恶意压缩包和限流场景。</p>

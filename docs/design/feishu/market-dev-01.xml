@@ -1,0 +1,7 @@
+<h1>1. 工程目标与边界</h1>
+<p>本模块为 StockSense Desktop 提供远程技能市场和应用市场的可信目录、版本解析和制品分发能力。桌面端仍只调用本地 Hermes Gateway；Gateway 再调用远程市场。远程服务不接收 Profile、已安装列表、模型 API Key、MCP 凭据或设备唯一标识，也不执行 Skill 或 App。</p>
+<p>第一阶段支持匿名目录浏览、搜索、详情、resolve、同源下载、后台发布与版本下架。仅支持 windows-x64、macos-arm64；不支持远程 Gateway、账号/购买体系、第三方自助发布或携带自定义后端代码的 App。App 分发只提供 .happ，安装仍由 Desktop 的两阶段导入确认完成。</p>
+<p>公开 API 是外部协议，固定为 /app-api/market/v1 并返回裸 JSON、ETag、304 和 error envelope；后台管理 API 固定为 /admin-api/market，延续 CommonResult、PageResult、BaseDO 与权限注解。两者不可混用。</p>
+<h1>2. 现有工程基线</h1>
+<p>远程工程位于 /Users/penn/Projects/stocksense-admin，基于 RuoYi-Vue-Pro 风格，采用 Java 25、Spring Boot 4.1.0、Maven 多模块。当前已有 stocksense-module-system、stocksense-module-infra 与 stocksense-server；系统自动将 controller.admin 映射至 /admin-api，将 controller.app 映射至 /app-api。</p>
+<p>DO 使用 BaseDO 审计字段与逻辑删除，Mapper 使用 MyBatis Plus/BaseMapperX，管理端分页采用 PageParam 与 PageResult，管理 Controller 使用 CommonResult 和 @PreAuthorize(&quot;@ss.hasPermission('...')&quot;)。二进制文件应复用现有 infra_file 与文件服务，市场模块只保留 file_id、摘要、大小和验证元数据。</p>

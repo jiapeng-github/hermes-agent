@@ -1,0 +1,16 @@
+<h1>3. 模块与目录设计</h1>
+<p>新增独立 Maven 模块 stocksense-module-market；根 pom 加入 module，stocksense-server 引入其依赖。不要把市场逻辑写入 system 或 infra。市场模块通过现有或最小 FileStorageApi 访问文件服务，不直接跨模块操作 infra_file Mapper。</p>
+<pre lang="text" caption="建议目录"><code>stocksense-module-market/
+  controller/admin/{category,publisher,item,version,signingkey}
+  controller/app/marketplace
+  dal/dataobject
+  dal/mysql
+  enums
+  service/{catalog,artifact,publish,signature}
+  resources/mapper/market
+  test</code></pre>
+<p>公开侧核心服务为 MarketCatalogQueryService、MarketResolveService、MarketDownloadTokenService；管理侧核心服务为 MarketPublishService、MarketArtifactValidationService、MarketSignatureService。Controller 只适配协议，业务状态转换和缓存失效集中在 Service。</p>
+<h1>4. 数据库迁移与数据访问</h1>
+<p>新增 sql/mysql/market.sql，创建 market_category、market_publisher、market_item、market_item_version、market_artifact、market_signing_key、market_download_log，并初始化官方 Publisher、基础分类、菜单、按钮权限和字典。市场目录为平台公共数据：除下载日志外各 DO 继承 BaseDO 并标注 @TenantIgnore，不增加 tenant_id；不创建物理外键。</p>
+<table><thead><tr><th>实体</th><th>实现重点</th></tr></thead><tbody><tr><td>Category/Publisher</td><td>稳定 code 唯一，禁用优于复用删除后的 code。</td></tr><tr><td>Item</td><td>market_id 对外唯一；App 的 market_id 必须等于 .happ Manifest id；维护 stable/beta 最新版本指针。</td></tr><tr><td>ItemVersion</td><td>item_id + version 唯一；存 channel、兼容性、权限、Manifest 解析结果、artifact 引用和发布状态。</td></tr><tr><td>Artifact</td><td>一个版本一个生效制品；存 file_id、kind、sha256、size、签名、校验报告，禁止存私钥或二进制内容。</td></tr><tr><td>SigningKey</td><td>存 key_id、公钥、secret_ref、启停时间和状态；私钥只存在 KMS/Vault/受控密钥提供者。</td></tr><tr><td>DownloadLog</td><td>追加写，无逻辑删除；IP 与 UA 仅保存加盐哈希，写失败不影响下载。</td></tr></tbody></table>
+<p>JSON 字段 tags、compatibility、permissions、manifest、platforms、validation_report 使用工程已有 Jackson TypeHandler；禁止在 Mapper 或 Controller 手写 JSON 字符串。状态枚举：Item DRAFT/PUBLISHED/OFFLINE；Version DRAFT/VALIDATING/READY/PUBLISHED/OFFLINE/INVALID；Artifact PENDING/PASSED/FAILED；Signing key PENDING/ACTIVE/RETIRED。</p>
