@@ -932,7 +932,7 @@ export const zhHant = defineLocale({
     tabSkills: '技能',
     tabToolsets: '工具集',
     tabMcp: 'MCP',
-    tabHub: '技能市場',
+    tabHub: '技能中心',
     all: '全部',
     searchSkills: '搜尋技能...',
     searchToolsets: '搜尋工具集...',

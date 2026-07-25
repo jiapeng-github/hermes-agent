@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>个股三维深度分析报告</title>
+<link rel="stylesheet" href="/assets/app.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark">3D</span>
+    <div><h1>个股三维深度分析</h1><p id="status">输入公司名称或股票代码，生成三维研究快照</p></div>
+  </div>
+  <form id="search-form" class="search-form">
+    <label for="query">公司名称或股票代码</label>
+    <input id="query" value="" autocomplete="off" placeholder="例如 贵州茅台 / 600519">
+    <button type="submit">生成分析</button>
+    <button class="icon-button" id="refresh" type="button" title="刷新分析" aria-label="刷新分析">↻</button>
+  </form>
+</header>
+
+<div class="report-body">
+<div class="wrap">
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="code" id="company-code">等待搜索</div>
+    <h1 id="company-name">个股三维深度分析</h1>
+    <div class="ind"><span id="industry">行业待补充</span> · <span id="business">基本面、新闻面与资金面联合研判</span> · <span id="hero-date">等待数据</span></div>
+    <div class="price-row">
+      <div>
+        <span class="price-now neu" id="price-now">--</span>
+        <span class="price-unit"> 元</span>
+      </div>
+      <div class="price-chg neu" id="price-change">--</div>
+      <div class="day-quote" id="day-quote">成交数据等待中</div>
+    </div>
+    <div class="mini-stats" id="mini-stats"></div>
+  </div>
+
+  <!-- SCORE -->
+  <div class="card">
+    <h2><span class="num">★</span>综合评分与投资建议</h2>
+    <span class="tag">权重：基本面 35% · 新闻面 20% · 资金面 35% · 技术面(参考) 10%</span>
+    <div class="score-grid">
+      <div class="gauge">
+        <svg width="200" height="200" viewBox="0 0 200 200">
+          <circle cx="100" cy="100" r="80" fill="none" stroke="#eef0f3" stroke-width="16"/>
+          <circle id="score-ring" cx="100" cy="100" r="80" fill="none" stroke="#b8893f" stroke-width="16"
+            stroke-linecap="round" stroke-dasharray="502.65" stroke-dashoffset="502.65"
+            transform="rotate(-90 100 100)"/>
+        </svg>
+        <div class="ctr">
+          <div class="big" id="score">--</div>
+          <div class="lab">综合评分 / 10</div>
+          <span class="verdict" id="grade">等待数据</span>
+        </div>
+      </div>
+      <div class="bars" id="score-bars"></div>
+    </div>
+    <p class="explain" id="score-summary">评分说明：搜索后将依据结构化财务、研报摘要与估值资金数据生成研究快照。<br>*技术面为参考项，不计入综合评分权重，仅作趋势辅助判断。</p>
+  </div>
+
+  <!-- 基本面 -->
+  <div class="card">
+    <h2><span class="num">1</span>基本面 · 财务质地</h2>
+    <span class="tag" id="fundamental-tag">核心来源：妙想 MCP · 单位：人民币 / 同比口径</span>
+    <div class="metrics" id="fundamental-metrics"></div>
+
+    <div class="chart-title">归母净利润趋势（亿元）</div>
+    <div class="trend" id="profit-trend"></div>
+
+    <div class="metrics supplementary" id="supplementary-metrics"></div>
+  </div>
+
+  <!-- 新闻面 -->
+  <div class="card">
+    <h2><span class="num">2</span>新闻面 · 近30天舆情</h2>
+    <span class="tag">情绪倾向基于妙想 MCP 返回的公开资讯样本估算，仅供参考</span>
+    <div class="sent">
+      <div class="donut" id="sentiment-donut"></div>
+      <div class="legend" id="sentiment-legend"></div>
+    </div>
+    <div class="tl research-timeline" id="research"></div>
+  </div>
+
+  <!-- 资金面 -->
+  <div class="card">
+    <h2><span class="num">3</span>资金面 · 主力与北向</h2>
+    <span class="tag">核心来源：妙想 MCP 返回的交易活跃度与资金数据（涨红跌绿，按 A 股习惯）</span>
+    <div class="metrics capital-metrics" id="capital-metrics"></div>
+    <table>
+      <thead><tr><th>日期</th><th>主力净流入</th><th>收盘价</th><th>涨跌幅</th></tr></thead>
+      <tbody id="capital-table"></tbody>
+      <tfoot id="capital-total"></tfoot>
+    </table>
+    <p class="explain"><b class="ink">北向资金解读：</b><span id="capital-note">当前接口尚未返回完整北向持股或主力近 5 日序列时，本区域会明确提示数据缺口。</span></p>
+  </div>
+
+  <!-- 价格区间 -->
+  <div class="card">
+    <h2><span class="num">¥</span>合理价格区间参考</h2>
+    <span class="tag">基于当前可用价格区间与估值位置生成，非投资建议</span>
+    <div class="range-track">
+      <div class="range-mark" id="range-low"><span class="cap">保守 --</span></div>
+      <div class="range-mid" id="range-mid"><span class="cap">中枢 --</span></div>
+      <div class="range-mark" id="range-high"><span class="cap">乐观 --</span></div>
+    </div>
+    <div class="range-note"><span>← 保守（区间低位）</span><span id="valuation-signal">中性（估值中枢）</span><span>乐观（区间高位）→</span></div>
+    <div class="metrics supplementary" id="valuation-metrics"></div>
+    <p class="explain" id="valuation-note">等待妙想 MCP 返回价格区间与估值数据。</p>
+  </div>
+
+  <!-- 数据来源 -->
+  <div class="card">
+    <h2><span class="num">i</span>数据来源与可靠性</h2>
+    <div class="src">
+      <span>实时行情：<b>妙想 MCP</b> <i id="source-quote">等待</i></span>
+      <span>财务数据：<b>妙想 MCP</b> <i id="source-finance">等待</i></span>
+      <span>新闻舆情：<b>妙想 MCP</b> <i id="source-research">等待</i></span>
+      <span>资金数据：<b>妙想 MCP</b> <i id="source-capital">等待</i></span>
+      <span>数据时间：<b id="as-of">等待查询</b></span>
+    </div>
+  </div>
+
+  <div class="warn">
+    <b>⚠ 风险提示与非投资建议：</b><span id="footnote">本报告基于公开数据自动生成，仅供研究与学习参考，<b>不构成任何投资建议或买卖依据</b>。股价受宏观、行业、政策及市场情绪等多重因素影响，历史财务与资金数据不代表未来表现。投资者应独立判断、自担风险。</span>
+  </div>
+
+  <div class="foot">
+    <span id="report-footer">个股三维深度分析报告 · 数据存在时滞，请以交易所及公司公告为准</span>
+    <div class="links">
+      <a id="quote-link" href="#" target="_blank" rel="noreferrer">东方财富行情</a>
+      <a id="f10-link" href="#" target="_blank" rel="noreferrer">F10 资料</a>
+      <a id="flow-link" href="#" target="_blank" rel="noreferrer">资金流向</a>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<dialog id="article-dialog"><div class="dialog-shell"><header><div><h2 id="article-title"></h2><p id="article-meta"></p></div><button class="icon-button" id="article-close" aria-label="关闭">×</button></header><div id="article-body"></div></div></dialog>
+<script src="/assets/runtime.js"></script>
+<script src="/assets/app.js"></script>
+</body>
+</html>

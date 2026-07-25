@@ -20,6 +20,7 @@ from .workspace import validate_app_bundle
 
 INDUSTRY_MONITOR_APP_ID = "ai.hermes.industry-monitor"
 COMPANY_ANALYSIS_APP_ID = "ai.hermes.company-analysis"
+STOCK_DEEP_ANALYSIS_APP_ID = "ai.hermes.stock-deep-analysis"
 WATCHLIST_APP_ID = "ai.hermes.watchlist"
 INDUSTRY_MONITOR_SERVICE_HANDLERS = (
     "finance.industry.snapshot",
@@ -29,6 +30,7 @@ COMPANY_ANALYSIS_SERVICE_HANDLERS = (
     "finance.company.analysis",
     "finance.company.refresh",
 )
+STOCK_DEEP_ANALYSIS_SERVICE_HANDLERS = COMPANY_ANALYSIS_SERVICE_HANDLERS
 WATCHLIST_SERVICE_HANDLERS = (
     "finance.watchlist.snapshot",
     "finance.watchlist.refresh",
@@ -65,6 +67,11 @@ _CATALOG = {
         app_id=COMPANY_ANALYSIS_APP_ID,
         root=Path(__file__).parent / "catalog" / "company-analysis",
         service_handlers=COMPANY_ANALYSIS_SERVICE_HANDLERS,
+    ),
+    STOCK_DEEP_ANALYSIS_APP_ID: BuiltinApp(
+        app_id=STOCK_DEEP_ANALYSIS_APP_ID,
+        root=Path(__file__).parent / "catalog" / "stock-deep-analysis",
+        service_handlers=STOCK_DEEP_ANALYSIS_SERVICE_HANDLERS,
     ),
     WATCHLIST_APP_ID: BuiltinApp(
         app_id=WATCHLIST_APP_ID,
@@ -169,6 +176,8 @@ __all__ = [
     "COMPANY_ANALYSIS_SERVICE_HANDLERS",
     "INDUSTRY_MONITOR_APP_ID",
     "INDUSTRY_MONITOR_SERVICE_HANDLERS",
+    "STOCK_DEEP_ANALYSIS_APP_ID",
+    "STOCK_DEEP_ANALYSIS_SERVICE_HANDLERS",
     "WATCHLIST_APP_ID",
     "WATCHLIST_SERVICE_HANDLERS",
     "builtin_app",

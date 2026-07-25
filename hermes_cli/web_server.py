@@ -11968,33 +11968,33 @@ class AppImportConfirmationRequest(BaseModel):
     grants: Dict[str, Any]
 
 
-class MarketAppInstallRequest(BaseModel):
+class HubAppInstallRequest(BaseModel):
     version: Optional[str] = None
 
 
-def _app_market_operations(request: Request):
+def _app_hub_operations(request: Request):
     """Return one local, process-scoped async operation coordinator."""
-    from hermes_cli.apps.marketplace import AppMarketplaceOperations
+    from hermes_cli.apps.hub import AppHubOperations
 
-    operations = getattr(request.app.state, "app_market_operations", None)
+    operations = getattr(request.app.state, "app_hub_operations", None)
     if operations is None:
-        operations = AppMarketplaceOperations()
-        request.app.state.app_market_operations = operations
+        operations = AppHubOperations()
+        request.app.state.app_hub_operations = operations
     return operations
 
 
-@app.get("/api/apps/market/categories")
-async def list_market_app_categories(request: Request):
+@app.get("/api/apps/hub/categories")
+async def list_hub_app_categories(request: Request):
     from hermes_cli.apps.errors import AppDomainError
 
     try:
-        return await asyncio.to_thread(_app_market_operations(request).list_categories)
+        return await asyncio.to_thread(_app_hub_operations(request).list_categories)
     except AppDomainError as exc:
         return _app_api_error(exc)
 
 
-@app.get("/api/apps/market")
-async def list_market_apps(
+@app.get("/api/apps/hub")
+async def list_hub_apps(
     request: Request,
     q: str = "",
     category: Optional[str] = None,
@@ -12003,10 +12003,11 @@ async def list_market_apps(
 ):
     from hermes_cli.apps.errors import AppDomainError
     from hermes_cli.apps.manager import AppManager
+    from packaging.version import InvalidVersion, Version
 
     try:
         result = await asyncio.to_thread(
-            _app_market_operations(request).list_apps,
+            _app_hub_operations(request).list_apps,
             q=q[:200],
             category=category,
             page=max(page, 1),
@@ -12014,70 +12015,91 @@ async def list_market_apps(
             compatible_only=True,
         )
         local = await asyncio.to_thread(AppManager().list_apps)
-        installed = {item["id"]: item["version"] for item in local["items"]}
+        remote_versions = {
+            item.get("id"): item.get("version")
+            for item in result.get("items", [])
+            if isinstance(item, dict)
+            and isinstance(item.get("id"), str)
+            and isinstance(item.get("version"), str)
+        }
+        installed = {}
+        for item in local["items"]:
+            app_id = item["id"]
+            state = "installed"
+            remote_version = remote_versions.get(app_id)
+            if remote_version is not None:
+                try:
+                    if Version(remote_version) > Version(item["version"]):
+                        state = "update_available"
+                except InvalidVersion:
+                    pass
+            installed[app_id] = {
+                "version": item["version"],
+                "state": state,
+            }
         result["installed"] = installed
         return result
     except AppDomainError as exc:
         return _app_api_error(exc)
 
 
-@app.get("/api/apps/market/{market_app_id}")
-async def get_market_app(market_app_id: str, request: Request, version: Optional[str] = None):
+@app.get("/api/apps/hub/{hub_app_id}")
+async def get_hub_app(hub_app_id: str, request: Request, version: Optional[str] = None):
     from hermes_cli.apps.errors import AppDomainError
 
     try:
         return await asyncio.to_thread(
-            _app_market_operations(request).get_app, market_app_id, version=version
+            _app_hub_operations(request).get_app, hub_app_id, version=version
         )
     except AppDomainError as exc:
         return _app_api_error(exc)
 
 
-@app.get("/api/apps/market/{market_app_id}/icon")
-async def get_market_app_icon(market_app_id: str, request: Request, version: Optional[str] = None):
+@app.get("/api/apps/hub/{hub_app_id}/icon")
+async def get_hub_app_icon(hub_app_id: str, request: Request, version: Optional[str] = None):
     from hermes_cli.apps.errors import AppDomainError
 
     try:
         content, content_type = await asyncio.to_thread(
-            _app_market_operations(request).get_icon, market_app_id, version=version
+            _app_hub_operations(request).get_icon, hub_app_id, version=version
         )
         return Response(content=content, media_type=content_type, headers={"Cache-Control": "private, max-age=300"})
     except AppDomainError as exc:
         return _app_api_error(exc)
 
 
-@app.post("/api/apps/market/{market_app_id}/operations", status_code=202)
-async def start_market_app_install(
-    market_app_id: str,
+@app.post("/api/apps/hub/{hub_app_id}/operations", status_code=202)
+async def start_hub_app_install(
+    hub_app_id: str,
     request: Request,
-    body: MarketAppInstallRequest,
+    body: HubAppInstallRequest,
 ):
     from hermes_cli.apps.errors import AppDomainError
 
     try:
         return await asyncio.to_thread(
-            _app_market_operations(request).start_install, market_app_id, version=body.version
+            _app_hub_operations(request).start_install, hub_app_id, version=body.version
         )
     except AppDomainError as exc:
         return _app_api_error(exc)
 
 
-@app.get("/api/apps/market/operations/{operation_id}")
-async def get_market_app_install(operation_id: str, request: Request):
+@app.get("/api/apps/hub/operations/{operation_id}")
+async def get_hub_app_install(operation_id: str, request: Request):
     from hermes_cli.apps.errors import AppDomainError
 
     try:
-        return await asyncio.to_thread(_app_market_operations(request).get_operation, operation_id)
+        return await asyncio.to_thread(_app_hub_operations(request).get_operation, operation_id)
     except AppDomainError as exc:
         return _app_api_error(exc)
 
 
-@app.delete("/api/apps/market/operations/{operation_id}", status_code=204)
-async def cancel_market_app_install(operation_id: str, request: Request):
+@app.delete("/api/apps/hub/operations/{operation_id}", status_code=204)
+async def cancel_hub_app_install(operation_id: str, request: Request):
     from hermes_cli.apps.errors import AppDomainError
 
     try:
-        await asyncio.to_thread(_app_market_operations(request).cancel, operation_id)
+        await asyncio.to_thread(_app_hub_operations(request).cancel, operation_id)
     except AppDomainError as exc:
         return _app_api_error(exc)
     return Response(status_code=204)
@@ -12331,13 +12353,13 @@ def _app_api_error(exc):
         "APP_RUNTIME_INCOMPATIBLE": 409,
         "APP_VERSION_CONFLICT": 409,
         "APP_REQUEST_CANCELLED": 409,
-        "MARKET_DISABLED": 503,
-        "MARKET_UNAVAILABLE": 503,
-        "MARKET_ARTIFACT_EXPIRED": 409,
-        "MARKET_ARTIFACT_TOO_LARGE": 413,
-        "MARKET_ARTIFACT_REJECTED": 422,
-        "MARKET_ARTIFACT_HASH_MISMATCH": 422,
-        "MARKET_SIGNATURE_INVALID": 422,
+        "HUB_DISABLED": 503,
+        "HUB_UNAVAILABLE": 503,
+        "HUB_ARTIFACT_EXPIRED": 409,
+        "HUB_ARTIFACT_TOO_LARGE": 413,
+        "HUB_ARTIFACT_REJECTED": 422,
+        "HUB_ARTIFACT_HASH_MISMATCH": 422,
+        "HUB_SIGNATURE_INVALID": 422,
     }.get(exc.code, 400)
     return JSONResponse(
         {
@@ -14303,7 +14325,7 @@ _SKILL_HUB_SOURCE_LABELS = {
     "claude-marketplace": "Claude Marketplace",
     "lobehub": "LobeHub",
     "browse-sh": "browse.sh",
-    "stocksense-market": "StockSense Market",
+    "stocksense-hub": "StockSense Hub",
 }
 
 
@@ -14356,7 +14378,9 @@ def _installed_hub_identifiers(profile: Optional[str] = None) -> dict:
 
 
 @app.get("/api/skills/hub/sources")
-async def list_skills_hub_sources(profile: Optional[str] = None):
+async def list_skills_hub_sources(
+    profile: Optional[str] = None, source: Optional[str] = None
+):
     """List the configured skill-hub sources and installed-skill provenance.
 
     Gives the dashboard something to show BEFORE a search runs — which hubs
@@ -14367,10 +14391,16 @@ async def list_skills_hub_sources(profile: Optional[str] = None):
     """
 
     def _run():
-        from tools.skills_hub import create_source_router
-
         with _config_profile_scope(profile):
-            sources = create_source_router()
+            if source == "stocksense-hub":
+                from tools.stocksense_hub_source import StockSenseHubSource
+
+                hub_source = StockSenseHubSource.from_active_config()
+                sources = [hub_source] if hub_source is not None else []
+            else:
+                from tools.skills_hub import create_source_router
+
+                sources = create_source_router()
         out = []
         index_available = False
         featured = []
@@ -14400,7 +14430,7 @@ async def list_skills_hub_sources(profile: Optional[str] = None):
                         ]
                     except Exception:
                         featured = []
-            if sid == "stocksense-market":
+            if sid == "stocksense-hub":
                 entry["available"] = True
                 try:
                     featured.extend(_skill_meta_to_payload(m) for m in src.search("", limit=12))
@@ -14417,7 +14447,10 @@ async def list_skills_hub_sources(profile: Optional[str] = None):
             {"github", "skills-sh", "clawhub", "claude-marketplace", "lobehub", "well-known"}
         )
         for entry in out:
-            entry["searchable"] = not (index_available and entry["id"] in _api_source_ids)
+            entry["searchable"] = (
+                entry["id"] == "stocksense-hub"
+                or not (index_available and entry["id"] in _api_source_ids)
+            )
         return {
             "sources": out,
             "index_available": index_available,

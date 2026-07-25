@@ -964,7 +964,7 @@ export const ja = defineLocale({
     tabSkills: 'スキル',
     tabToolsets: 'ツールセット',
     tabMcp: 'MCP',
-    tabHub: 'スキルマーケット',
+    tabHub: 'スキルセンター',
     all: 'すべて',
     searchSkills: 'スキルを検索...',
     searchToolsets: 'ツールセットを検索...',

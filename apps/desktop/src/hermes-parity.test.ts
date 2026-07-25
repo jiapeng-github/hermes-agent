@@ -35,7 +35,12 @@ describe('Hermes REST parity helpers (hub / mcp / maintenance)', () => {
   it('loads hub sources with a network-tolerant timeout', async () => {
     await getSkillHubSources()
 
-    expect(api).toHaveBeenCalledWith(expect.objectContaining({ path: '/api/skills/hub/sources', timeoutMs: 45_000 }))
+    expect(api).toHaveBeenCalledWith(
+      expect.objectContaining({
+        path: '/api/skills/hub/sources?source=stocksense-hub',
+        timeoutMs: 45_000
+      })
+    )
   })
 
   it('encodes hub search params', async () => {

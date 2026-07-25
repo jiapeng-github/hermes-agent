@@ -14,6 +14,9 @@ const PREVIEW_APPS = [
     version: '1.0.0',
     enabled: true,
     source_editable: false,
+    lineage: 'builtin',
+    installed_at: '2026-07-25T00:00:00+08:00',
+    updated_at: '2026-07-25T00:00:00+08:00',
     trust_state: 'builtin',
     status: 'ready',
     requested_permissions: {
@@ -34,6 +37,32 @@ const PREVIEW_APPS = [
     version: '1.0.0',
     enabled: true,
     source_editable: false,
+    lineage: 'builtin',
+    installed_at: '2026-07-25T00:00:00+08:00',
+    updated_at: '2026-07-25T00:00:00+08:00',
+    trust_state: 'builtin',
+    status: 'ready',
+    requested_permissions: {
+      agent: false,
+      mcp_servers: [],
+      storage: { mode: 'persistent', quota_mb: 1 }
+    },
+    granted_permissions: {
+      agent: false,
+      mcp_servers: [],
+      storage: { mode: 'persistent', quota_mb: 1 }
+    }
+  },
+  {
+    id: 'ai.hermes.stock-deep-analysis',
+    name: '个股三维深度分析',
+    description: '基于妙想 MCP 的基本面、资讯研报与估值资金三维个股研究应用。',
+    version: '1.0.2',
+    enabled: true,
+    source_editable: false,
+    lineage: 'builtin',
+    installed_at: '2026-07-25T00:00:00+08:00',
+    updated_at: '2026-07-25T00:00:00+08:00',
     trust_state: 'builtin',
     status: 'ready',
     requested_permissions: {
@@ -54,6 +83,9 @@ const PREVIEW_APPS = [
     version: '1.0.0',
     enabled: true,
     source_editable: false,
+    lineage: 'builtin',
+    installed_at: '2026-07-25T00:00:00+08:00',
+    updated_at: '2026-07-25T00:00:00+08:00',
     trust_state: 'builtin',
     status: 'ready',
     requested_permissions: {
@@ -74,6 +106,9 @@ const PREVIEW_APPS = [
     version: '0.4.0',
     enabled: true,
     source_editable: true,
+    lineage: 'user',
+    installed_at: '2026-07-25T00:00:00+08:00',
+    updated_at: '2026-07-25T00:00:00+08:00',
     trust_state: 'local_untrusted',
     status: 'ready',
     requested_permissions: {
@@ -94,6 +129,9 @@ const PREVIEW_APPS = [
     version: '0.2.0',
     enabled: false,
     source_editable: true,
+    lineage: 'user',
+    installed_at: '2026-07-25T00:00:00+08:00',
+    updated_at: '2026-07-25T00:00:00+08:00',
     trust_state: 'local_untrusted',
     status: 'disabled',
     requested_permissions: {

@@ -157,6 +157,7 @@ def test_cli_fixture_completes_create_modify_export_import_and_rollback(
         "local.stockagent.cli-fixture",
         "ai.hermes.industry-monitor",
         "ai.hermes.company-analysis",
+        "ai.hermes.stock-deep-analysis",
         "ai.hermes.watchlist",
     ]
     code, inspected = _run(

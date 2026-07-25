@@ -1121,7 +1121,7 @@ export const zh: Translations = {
     tabSkills: '技能',
     tabToolsets: '工具集',
     tabMcp: 'MCP',
-    tabHub: '技能市场',
+    tabHub: '技能中心',
     all: '全部',
     searchSkills: '搜索技能…',
     searchToolsets: '搜索工具集…',
@@ -1173,14 +1173,14 @@ export const zh: Translations = {
     skillArchivedTitle: '技能已归档',
     skillArchivedMessage: '可通过 hermes curator restore 恢复。',
     hub: {
-      searchPlaceholder: '搜索技能市场',
+      searchPlaceholder: '搜索技能中心',
       search: '搜索',
       searching: '搜索中…',
-      connectingHubs: '正在连接技能市场…',
-      connectedHubs: '已连接的来源：',
+      connectingHubs: '正在连接技能中心…',
+      connectedHubs: '数据源：',
       featured: '精选技能',
-      landingHint: '浏览来自 StockSense 市场、官方索引、GitHub 和社区来源的可安装技能。',
-      noResults: '技能市场没有匹配的技能。',
+      landingHint: '浏览由 StockSense 技能中心提供的可安装技能。',
+      noResults: '技能中心没有匹配的技能。',
       resultCount: (count, ms) => `${count} 个结果${ms !== null ? `（${ms}ms）` : ''}`,
       timedOut: sources => `超时：${sources}`,
       installed: '已安装',
@@ -1214,10 +1214,10 @@ export const zh: Translations = {
       updateStarted: '正在更新已安装技能…',
       actionFailed: '技能操作失败',
       actionLog: '操作日志',
-      loadFailed: '技能市场加载失败',
+      loadFailed: '技能中心加载失败',
       previewFailed: '技能预览失败',
       scanFailed: '安全扫描失败',
-      searchFailed: '技能市场搜索失败'
+      searchFailed: '技能中心搜索失败'
     }
   },
 

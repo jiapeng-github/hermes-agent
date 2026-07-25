@@ -845,6 +845,31 @@ class TestSkillsHubSourcesEndpoint:
         assert body["featured"][0]["trust_level"] == "trusted"
         assert isinstance(body["installed"], dict)
 
+    def test_sources_can_select_only_stocksense_hub(self, monkeypatch):
+        class _Src:
+            def source_id(self):
+                return "stocksense-hub"
+
+            def search(self, q, limit=10):
+                return [_FakeMeta("stocksense-hub/featured-skill/1.0.0", "trusted")]
+
+        monkeypatch.setattr(
+            "tools.stocksense_hub_source.StockSenseHubSource.from_active_config",
+            classmethod(lambda cls: _Src()),
+        )
+
+        response = self.client.get(
+            "/api/skills/hub/sources?source=stocksense-hub"
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert [source["id"] for source in body["sources"]] == [
+            "stocksense-hub"
+        ]
+        assert body["sources"][0]["searchable"] is True
+        assert len(body["featured"]) == 1
+
 
 class TestSkillsHubPreviewEndpoint:
     @pytest.fixture(autouse=True)

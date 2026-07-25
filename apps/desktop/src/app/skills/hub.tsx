@@ -42,8 +42,8 @@ import {
 } from '@/store/hub-actions'
 import { notify, notifyError } from '@/store/notifications'
 
-// Dedup rank when the same skill surfaces from multiple sources — higher trust
-// wins. Mirrors the backend's unified_search `_TRUST_RANK`.
+// Keep the trust ordering for stable result presentation and future version
+// reconciliation inside the single StockSense source.
 const TRUST_RANK: Record<string, number> = { builtin: 2, trusted: 1, community: 0 }
 
 function trustTone(level: string): string {
@@ -151,8 +151,8 @@ export function SkillsHub({ query }: SkillsHubProps) {
   const { t } = useI18n()
   const h = t.skills.hub
 
-  // Sources + featured + the installed map — one cached fetch, revalidated on
-  // mount and re-fetched (from the store) after an action lands.
+  // Source metadata + featured skills + installed map arrive in one request.
+  // Desktop deliberately asks for the first-party StockSense source only.
   const sourcesQuery = useQuery({
     queryKey: HUB_SOURCES_KEY,
     queryFn: getSkillHubSources,
@@ -163,11 +163,9 @@ export function SkillsHub({ query }: SkillsHubProps) {
   // term and abandons stale terms for us (no hand-rolled sequence guard).
   const term = useDebounced(query.trim(), 350)
 
-  // Progressive per-source search: one query per source the backend says is
-  // worth hitting individually (it marks index-covered API sources unsearchable
-  // so we don't re-hammer ~70 GitHub calls). Each resolves independently, so the
-  // list fills in as sources return instead of blocking on the slowest one, and
-  // each source shows its own spinner. Stale terms key out and are abandoned.
+  // The response contains exactly one searchable source. Keeping this shaped as
+  // a query array preserves the existing action/result lifecycle without
+  // reconnecting the retired community market sources.
   const searchableSources = useMemo(
     () => (sourcesQuery.data?.sources ?? []).filter(source => source.searchable !== false),
     [sourcesQuery.data]
@@ -287,9 +285,25 @@ export function SkillsHub({ query }: SkillsHubProps) {
   const searching = anyFetching && results.length === 0
   const hasInstalled = Object.keys(installed).length > 0
 
+  if (sourcesQuery.isError || (!sourcesQuery.isLoading && sources.length === 0)) {
+    const reason = sourcesQuery.error instanceof Error ? sourcesQuery.error.message : h.loadFailed
+
+    return (
+      <div className="grid h-full min-h-48 place-items-center px-6 text-center">
+        <div className="max-w-md">
+          <p className="text-sm font-medium text-foreground">{h.loadFailed}</p>
+          <p className="mt-1 text-xs text-(--ui-text-tertiary)">{reason}</p>
+          <Button className="mt-3" onClick={() => void sourcesQuery.refetch()} size="sm" variant="outline">
+            {t.common.retry}
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {/* Connected hubs — label on its own line, chips below, roomy padding. */}
+      {/* The Skill Center has one first-party source. */}
       <div className="shrink-0 px-4 pt-5 pb-8 text-[0.68rem] text-(--ui-text-tertiary)">
         <span className="mb-1.5 block">{h.connectedHubs}</span>
         <div className="flex flex-wrap items-center gap-1.5">

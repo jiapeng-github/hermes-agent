@@ -923,7 +923,7 @@ export const en: Translations = {
     tabSkills: 'Skills',
     tabToolsets: 'Tools',
     tabMcp: 'MCP',
-    tabHub: 'Skill Market',
+    tabHub: 'Skill Center',
     all: 'All',
     searchSkills: 'Search skills...',
     searchToolsets: 'Search tools...',
@@ -976,15 +976,14 @@ export const en: Translations = {
     skillArchivedTitle: 'Skill archived',
     skillArchivedMessage: 'Restorable via hermes curator restore.',
     hub: {
-      searchPlaceholder: 'Search the skill market',
+      searchPlaceholder: 'Search the Skill Center',
       search: 'Search',
       searching: 'Searching...',
-      connectingHubs: 'Connecting to skill markets...',
-      connectedHubs: 'Connected sources:',
+      connectingHubs: 'Connecting to the Skill Center...',
+      connectedHubs: 'Source:',
       featured: 'Featured skills',
-      landingHint:
-        'Browse installable skills from the StockSense market, official index, GitHub, and community sources.',
-      noResults: 'No matching skills found in the market.',
+      landingHint: 'Browse installable skills provided by the StockSense Skill Center.',
+      noResults: 'No matching skills found in the Skill Center.',
       resultCount: (count, ms) => `${count} result${count === 1 ? '' : 's'}${ms !== null ? ` in ${ms}ms` : ''}`,
       timedOut: sources => `Timed out: ${sources}`,
       installed: 'Installed',
@@ -1018,10 +1017,10 @@ export const en: Translations = {
       updateStarted: 'Updating installed skills...',
       actionFailed: 'Skill action failed',
       actionLog: 'Action log',
-      loadFailed: 'Skill market failed to load',
+      loadFailed: 'Skill Center failed to load',
       previewFailed: 'Skill preview failed',
       scanFailed: 'Security scan failed',
-      searchFailed: 'Skill market search failed'
+      searchFailed: 'Skill Center search failed'
     }
   },
 

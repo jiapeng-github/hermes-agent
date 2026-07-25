@@ -12,6 +12,8 @@ from hermes_cli.apps.catalog import (
     COMPANY_ANALYSIS_SERVICE_HANDLERS,
     INDUSTRY_MONITOR_APP_ID,
     INDUSTRY_MONITOR_SERVICE_HANDLERS,
+    STOCK_DEEP_ANALYSIS_APP_ID,
+    STOCK_DEEP_ANALYSIS_SERVICE_HANDLERS,
     WATCHLIST_APP_ID,
     WATCHLIST_SERVICE_HANDLERS,
     builtin_app,
@@ -33,11 +35,13 @@ def test_finance_builtins_install_with_exact_runtime_owned_lineage(tmp_path: Pat
     expected = {
         COMPANY_ANALYSIS_APP_ID: COMPANY_ANALYSIS_SERVICE_HANDLERS,
         INDUSTRY_MONITOR_APP_ID: INDUSTRY_MONITOR_SERVICE_HANDLERS,
+        STOCK_DEEP_ANALYSIS_APP_ID: STOCK_DEEP_ANALYSIS_SERVICE_HANDLERS,
         WATCHLIST_APP_ID: WATCHLIST_SERVICE_HANDLERS,
     }
     expected_names = {
         COMPANY_ANALYSIS_APP_ID: "上市公司基本面分析",
         INDUSTRY_MONITOR_APP_ID: "行业轮动和资金流向监控",
+        STOCK_DEEP_ANALYSIS_APP_ID: "个股三维深度分析",
         WATCHLIST_APP_ID: "自选股盯盘看板",
     }
 
@@ -59,12 +63,14 @@ def test_concurrent_first_lists_reuse_one_atomic_builtin_install(tmp_path: Path)
     with ThreadPoolExecutor(max_workers=2) as pool:
         results = list(pool.map(lambda _item: AppManager(paths).list_apps(), range(2)))
 
-    expected = {COMPANY_ANALYSIS_APP_ID, INDUSTRY_MONITOR_APP_ID, WATCHLIST_APP_ID}
+    expected = {COMPANY_ANALYSIS_APP_ID, INDUSTRY_MONITOR_APP_ID, STOCK_DEEP_ANALYSIS_APP_ID, WATCHLIST_APP_ID}
     assert [{item["id"] for item in result["items"]} for result in results] == [expected, expected]
     for app_id in expected:
         record = AppManager(paths).registry.get(app_id)
         assert record is not None
-        assert set(record.versions) == {"1.0.2"}
+        definition = builtin_app(app_id)
+        assert definition is not None
+        assert set(record.versions) == {definition.load_manifest().version}
 
 
 def test_reserved_builtin_id_cannot_replace_user_lineage(tmp_path: Path) -> None:
@@ -89,7 +95,7 @@ def test_reserved_builtin_id_cannot_replace_user_lineage(tmp_path: Path) -> None
 
 @pytest.mark.parametrize(
     "app_id",
-    [COMPANY_ANALYSIS_APP_ID, INDUSTRY_MONITOR_APP_ID, WATCHLIST_APP_ID],
+    [COMPANY_ANALYSIS_APP_ID, INDUSTRY_MONITOR_APP_ID, STOCK_DEEP_ANALYSIS_APP_ID, WATCHLIST_APP_ID],
 )
 def test_builtin_action_schemas_are_draft_2020_12_and_local(app_id: str) -> None:
     definition = builtin_app(app_id)

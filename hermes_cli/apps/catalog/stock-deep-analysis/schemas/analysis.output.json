@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["ok", "status", "query", "resolved", "quote", "core_metrics", "financial_trend", "profitability", "valuation", "capital", "peers", "research", "rating", "summary", "gaps"],
+  "properties": {
+    "ok": { "type": "boolean" },
+    "status": { "type": "string" },
+    "query": { "type": "string" },
+    "resolved": { "type": "object" },
+    "quote": { "type": "object" },
+    "core_metrics": { "type": "array" },
+    "financial_trend": { "type": "object" },
+    "profitability": { "type": "object" },
+    "valuation": { "type": "object" },
+    "capital": { "type": "object" },
+    "peers": { "type": "array" },
+    "research": { "type": "object" },
+    "rating": { "type": "object" },
+    "summary": { "type": "object" },
+    "gaps": { "type": "array" }
+  },
+  "additionalProperties": true
+}

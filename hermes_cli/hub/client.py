@@ -1,4 +1,4 @@
-"""Safe, profile-local client for the StockSense remote marketplace."""
+"""Safe, profile-local client for the StockSense remote hub."""
 
 from __future__ import annotations
 
@@ -31,8 +31,8 @@ _MAX_ICON_BYTES = 512 * 1024
 _CACHE_SCHEMA_VERSION = 1
 
 
-class MarketplaceError(RuntimeError):
-    """Stable market failure propagated through the local management API."""
+class HubError(RuntimeError):
+    """Stable Hub failure propagated through the local management API."""
 
     def __init__(
         self,
@@ -50,7 +50,7 @@ class MarketplaceError(RuntimeError):
 
 
 @dataclass(frozen=True, slots=True)
-class MarketplaceConfig:
+class HubConfig:
     enabled: bool
     base_url: str
     channel: str
@@ -61,7 +61,7 @@ class MarketplaceConfig:
     trusted_keys: dict[str, str]
 
     @classmethod
-    def from_mapping(cls, value: Mapping[str, Any] | None) -> "MarketplaceConfig":
+    def from_mapping(cls, value: Mapping[str, Any] | None) -> "HubConfig":
         raw = value if isinstance(value, Mapping) else {}
         keys = raw.get("trusted_keys")
 
@@ -92,13 +92,13 @@ class MarketplaceConfig:
             return
         parsed = urlparse(self.base_url)
         if not parsed.scheme or not parsed.netloc:
-            raise MarketplaceError("MARKET_DISABLED", "市场服务地址尚未配置")
+            raise HubError("HUB_DISABLED", "中心服务地址尚未配置")
         if parsed.scheme != "https" and not _is_loopback_url(self.base_url):
-            raise MarketplaceError("MARKET_DISABLED", "市场服务必须使用 HTTPS")
+            raise HubError("HUB_DISABLED", "中心服务必须使用 HTTPS")
 
 
 @dataclass(frozen=True, slots=True)
-class MarketplaceResponse:
+class HubResponse:
     data: dict[str, Any]
     cache_state: str
     stored_at: str | None
@@ -123,7 +123,7 @@ def _safe_remote_url(value: str) -> str:
         return value
     if _is_loopback_url(value):
         return value
-    raise MarketplaceError("MARKET_ARTIFACT_REJECTED", "市场制品下载地址不安全")
+    raise HubError("HUB_ARTIFACT_REJECTED", "中心制品下载地址不安全")
 
 
 def _parse_timestamp(value: object) -> datetime | None:
@@ -136,11 +136,11 @@ def _parse_timestamp(value: object) -> datetime | None:
     return parsed if parsed.tzinfo is not None else None
 
 
-class MarketplaceCache:
+class HubCache:
     """Small ETag-aware JSON cache scoped to the active Hermes profile."""
 
     def __init__(self, root: Path | None = None) -> None:
-        self.root = root or (get_hermes_home() / "marketplace" / "cache")
+        self.root = root or (get_hermes_home() / "hub" / "cache")
 
     def _path(self, key: str) -> Path:
         digest = hashlib.sha256(key.encode("utf-8")).hexdigest()
@@ -178,21 +178,21 @@ class MarketplaceCache:
         )
 
 
-class MarketplaceClient:
-    """Fetch catalog metadata and verified artifacts without exposing it to the renderer."""
+class HubClient:
+    """Fetch Hub metadata and verified artifacts without exposing them to the renderer."""
 
     def __init__(
         self,
-        config: MarketplaceConfig,
+        config: HubConfig,
         *,
-        cache: MarketplaceCache | None = None,
+        cache: HubCache | None = None,
         client: httpx.Client | None = None,
         client_version: str = "unknown",
         runtime_version: str = "1.0.0",
     ) -> None:
         config.validate()
         self.config = config
-        self.cache = cache or MarketplaceCache()
+        self.cache = cache or HubCache()
         self._client = client or httpx.Client(
             timeout=httpx.Timeout(config.request_timeout_seconds),
             follow_redirects=False,
@@ -202,29 +202,29 @@ class MarketplaceClient:
         self._runtime_version = runtime_version
 
     @classmethod
-    def from_active_config(cls) -> "MarketplaceClient":
+    def from_active_config(cls) -> "HubClient":
         from hermes_cli.config import load_config
 
-        config = MarketplaceConfig.from_mapping(load_config().get("marketplace"))
+        config = HubConfig.from_mapping(load_config().get("hub"))
         return cls(config)
 
     def close(self) -> None:
         if self._owns_client:
             self._client.close()
 
-    def __enter__(self) -> "MarketplaceClient":
+    def __enter__(self) -> "HubClient":
         return self
 
     def __exit__(self, *_: object) -> None:
         self.close()
 
-    def list_skills(self, **params: str | int | bool | None) -> MarketplaceResponse:
+    def list_skills(self, **params: str | int | bool | None) -> HubResponse:
         self._require_enabled()
         return self._catalog_get("/skills", params)
 
     def get_skill(
         self, skill_id: str, *, version: str | None = None
-    ) -> MarketplaceResponse:
+    ) -> HubResponse:
         self._require_enabled()
         params: dict[str, str | int | bool | None] = {
             "channel": self.config.channel,
@@ -238,31 +238,31 @@ class MarketplaceClient:
         self._require_enabled()
         return self._resolve("skills", skill_id, version=version)
 
-    def list_apps(self, **params: str | int | bool | None) -> MarketplaceResponse:
+    def list_apps(self, **params: str | int | bool | None) -> HubResponse:
         self._require_enabled()
         return self._catalog_get("/apps", params)
 
-    def list_categories(self, kind: str) -> MarketplaceResponse:
+    def list_categories(self, kind: str) -> HubResponse:
         self._require_enabled()
         if kind not in {"skill", "app"}:
-            raise MarketplaceError("MARKET_UNAVAILABLE", "市场分类类型无效")
+            raise HubError("HUB_UNAVAILABLE", "中心分类类型无效")
         return self._catalog_get("/categories", {"type": kind})
 
     def get_app(
-        self, market_app_id: str, *, version: str | None = None
-    ) -> MarketplaceResponse:
+        self, hub_app_id: str, *, version: str | None = None
+    ) -> HubResponse:
         self._require_enabled()
         params: dict[str, str | int | bool | None] = {
             "channel": self.config.channel,
             "version": version,
         }
-        return self._catalog_get(f"/apps/{quote(market_app_id, safe='')}", params)
+        return self._catalog_get(f"/apps/{quote(hub_app_id, safe='')}", params)
 
     def resolve_app(
-        self, market_app_id: str, *, version: str | None = None
+        self, hub_app_id: str, *, version: str | None = None
     ) -> dict[str, Any]:
         self._require_enabled()
-        return self._resolve("apps", market_app_id, version=version)
+        return self._resolve("apps", hub_app_id, version=version)
 
     def download_artifact(
         self, descriptor: Mapping[str, Any], destination: Path
@@ -273,24 +273,24 @@ class MarketplaceClient:
         if len(expected_sha256) != 64 or any(
             char not in "0123456789abcdef" for char in expected_sha256
         ):
-            raise MarketplaceError("MARKET_ARTIFACT_REJECTED", "市场制品摘要无效")
+            raise HubError("HUB_ARTIFACT_REJECTED", "中心制品摘要无效")
         expected_size = descriptor.get("size_bytes")
         if (
             not isinstance(expected_size, int)
             or expected_size < 1
             or expected_size > _MAX_ARTIFACT_BYTES
         ):
-            raise MarketplaceError("MARKET_ARTIFACT_TOO_LARGE", "市场制品大小无效")
+            raise HubError("HUB_ARTIFACT_TOO_LARGE", "中心制品大小无效")
         self._verify_descriptor(descriptor)
         expires_at = _parse_timestamp(descriptor.get("expires_at"))
         if expires_at is None or expires_at <= _utc_now():
-            raise MarketplaceError(
-                "MARKET_ARTIFACT_EXPIRED", "市场制品下载票据已过期", retryable=True
+            raise HubError(
+                "HUB_ARTIFACT_EXPIRED", "中心制品下载票据已过期", retryable=True
             )
         url = _safe_remote_url(str(descriptor.get("download_url") or ""))
         destination.parent.mkdir(parents=True, exist_ok=True)
         if destination.exists():
-            raise MarketplaceError("MARKET_ARTIFACT_REJECTED", "市场制品暂存路径已存在")
+            raise HubError("HUB_ARTIFACT_REJECTED", "中心制品暂存路径已存在")
 
         digest = hashlib.sha256()
         written = 0
@@ -300,27 +300,27 @@ class MarketplaceClient:
                 "GET", url, headers={"Accept": "application/octet-stream"}
             ) as response:
                 if response.is_redirect:
-                    raise MarketplaceError(
-                        "MARKET_ARTIFACT_REJECTED", "市场制品下载不允许重定向"
+                    raise HubError(
+                        "HUB_ARTIFACT_REJECTED", "中心制品下载不允许重定向"
                     )
                 self._raise_for_status(response)
                 content_length = response.headers.get("content-length")
                 if content_length and (
                     not content_length.isdigit() or int(content_length) != expected_size
                 ):
-                    raise MarketplaceError(
-                        "MARKET_ARTIFACT_HASH_MISMATCH", "市场制品大小与目录不一致"
+                    raise HubError(
+                        "HUB_ARTIFACT_HASH_MISMATCH", "中心制品大小与目录不一致"
                     )
                 fd, name = tempfile.mkstemp(
-                    prefix=".market-", suffix=".download", dir=str(destination.parent)
+                    prefix=".hub-", suffix=".download", dir=str(destination.parent)
                 )
                 temp_path = Path(name)
                 with os.fdopen(fd, "wb") as handle:
                     for chunk in response.iter_bytes(64 * 1024):
                         written += len(chunk)
                         if written > _MAX_ARTIFACT_BYTES or written > expected_size:
-                            raise MarketplaceError(
-                                "MARKET_ARTIFACT_TOO_LARGE", "市场制品超过允许大小"
+                            raise HubError(
+                                "HUB_ARTIFACT_TOO_LARGE", "中心制品超过允许大小"
                             )
                         digest.update(chunk)
                         handle.write(chunk)
@@ -330,16 +330,16 @@ class MarketplaceClient:
             if written != expected_size or not hmac.compare_digest(
                 actual_sha256, expected_sha256
             ):
-                raise MarketplaceError(
-                    "MARKET_ARTIFACT_HASH_MISMATCH", "市场制品摘要校验失败"
+                raise HubError(
+                    "HUB_ARTIFACT_HASH_MISMATCH", "中心制品摘要校验失败"
                 )
             os.chmod(temp_path, 0o600)
             os.replace(temp_path, destination)
             temp_path = None
             return actual_sha256
         except httpx.HTTPError as exc:
-            raise MarketplaceError(
-                "MARKET_UNAVAILABLE", "市场制品下载失败", retryable=True
+            raise HubError(
+                "HUB_UNAVAILABLE", "中心制品下载失败", retryable=True
             ) from exc
         finally:
             if temp_path is not None:
@@ -353,9 +353,9 @@ class MarketplaceClient:
         self._require_enabled()
         url = urljoin(f"{self.config.base_url}/", value)
         parsed = urlparse(url)
-        market_host = urlparse(self.config.base_url).hostname
-        if not _safe_remote_url(url) or parsed.hostname != market_host:
-            raise MarketplaceError("MARKET_ARTIFACT_REJECTED", "市场图标地址不安全")
+        hub_host = urlparse(self.config.base_url).hostname
+        if not _safe_remote_url(url) or parsed.hostname != hub_host:
+            raise HubError("HUB_ARTIFACT_REJECTED", "中心图标地址不安全")
         try:
             response = self._client.get(
                 url,
@@ -364,29 +364,29 @@ class MarketplaceClient:
                 },
             )
             if response.is_redirect:
-                raise MarketplaceError(
-                    "MARKET_ARTIFACT_REJECTED", "市场图标下载不允许重定向"
+                raise HubError(
+                    "HUB_ARTIFACT_REJECTED", "中心图标下载不允许重定向"
                 )
             self._raise_for_status(response)
-        except MarketplaceError:
+        except HubError:
             raise
         except httpx.HTTPError as exc:
-            raise MarketplaceError(
-                "MARKET_UNAVAILABLE", "市场图标下载失败", retryable=True
+            raise HubError(
+                "HUB_UNAVAILABLE", "中心图标下载失败", retryable=True
             ) from exc
         content_type = response.headers.get("content-type", "").split(";", 1)[0].lower()
         if (
             not content_type.startswith("image/")
             or len(response.content) > _MAX_ICON_BYTES
         ):
-            raise MarketplaceError("MARKET_ARTIFACT_REJECTED", "市场图标格式或大小无效")
+            raise HubError("HUB_ARTIFACT_REJECTED", "中心图标格式或大小无效")
         return response.content, content_type
 
     def _catalog_get(
         self,
         path: str,
         params: Mapping[str, str | int | bool | None],
-    ) -> MarketplaceResponse:
+    ) -> HubResponse:
         filtered = {
             key: str(value).lower() if isinstance(value, bool) else str(value)
             for key, value in params.items()
@@ -398,7 +398,7 @@ class MarketplaceClient:
         )
         cached = self.cache.read(cache_key)
         if cached and self._fresh_cache(cached):
-            return MarketplaceResponse(
+            return HubResponse(
                 cached["payload"], "fresh", cached.get("stored_at")
             )
         headers = self._headers()
@@ -409,28 +409,28 @@ class MarketplaceClient:
                 f"{self.config.base_url}{path}", params=filtered, headers=headers
             )
             if response.status_code == 304 and cached:
-                return MarketplaceResponse(
+                return HubResponse(
                     cached["payload"], "fresh", cached.get("stored_at")
                 )
             self._raise_for_status(response)
             if len(response.content) > _MAX_CATALOG_BYTES:
-                raise MarketplaceError("MARKET_UNAVAILABLE", "市场目录响应过大")
+                raise HubError("HUB_UNAVAILABLE", "中心目录响应过大")
             payload = response.json()
             if not isinstance(payload, dict):
-                raise MarketplaceError("MARKET_UNAVAILABLE", "市场目录响应格式无效")
+                raise HubError("HUB_UNAVAILABLE", "中心目录响应格式无效")
             self.cache.write(
                 cache_key, etag=response.headers.get("etag"), payload=payload
             )
-            return MarketplaceResponse(payload, "fresh", _utc_now().isoformat())
-        except MarketplaceError:
+            return HubResponse(payload, "fresh", _utc_now().isoformat())
+        except HubError:
             raise
         except (httpx.HTTPError, ValueError) as exc:
             if cached and self._usable_stale_cache(cached):
-                return MarketplaceResponse(
+                return HubResponse(
                     cached["payload"], "stale", cached.get("stored_at")
                 )
-            raise MarketplaceError(
-                "MARKET_UNAVAILABLE", "市场服务暂时不可用", retryable=True
+            raise HubError(
+                "HUB_UNAVAILABLE", "中心服务暂时不可用", retryable=True
             ) from exc
 
     def _resolve(
@@ -439,7 +439,7 @@ class MarketplaceClient:
         body = {
             "version": version,
             "channel": self.config.channel,
-            "platform": _market_platform(),
+            "platform": _hub_platform(),
         }
         try:
             response = self._client.post(
@@ -449,14 +449,14 @@ class MarketplaceClient:
             )
             self._raise_for_status(response)
             value = response.json()
-        except MarketplaceError:
+        except HubError:
             raise
         except (httpx.HTTPError, ValueError) as exc:
-            raise MarketplaceError(
-                "MARKET_UNAVAILABLE", "市场制品解析失败", retryable=True
+            raise HubError(
+                "HUB_UNAVAILABLE", "中心制品解析失败", retryable=True
             ) from exc
         if not isinstance(value, dict):
-            raise MarketplaceError("MARKET_ARTIFACT_REJECTED", "市场制品描述格式无效")
+            raise HubError("HUB_ARTIFACT_REJECTED", "中心制品描述格式无效")
         return value
 
     def _verify_descriptor(self, descriptor: Mapping[str, Any]) -> None:
@@ -464,16 +464,16 @@ class MarketplaceClient:
         if signature is None and not self.config.require_artifact_signature:
             return
         if not isinstance(signature, Mapping):
-            raise MarketplaceError("MARKET_SIGNATURE_INVALID", "市场制品缺少签名")
+            raise HubError("HUB_SIGNATURE_INVALID", "中心制品缺少签名")
         if signature.get("algorithm") != "ed25519":
-            raise MarketplaceError(
-                "MARKET_SIGNATURE_INVALID", "市场制品签名算法不受支持"
+            raise HubError(
+                "HUB_SIGNATURE_INVALID", "中心制品签名算法不受支持"
             )
         key_id = str(signature.get("key_id") or "")
         encoded_key = self.config.trusted_keys.get(key_id)
         if not encoded_key:
-            raise MarketplaceError(
-                "MARKET_SIGNATURE_INVALID", "市场制品签名密钥不受信任"
+            raise HubError(
+                "HUB_SIGNATURE_INVALID", "中心制品签名密钥不受信任"
             )
         try:
             key = Ed25519PublicKey.from_public_bytes(
@@ -491,8 +491,8 @@ class MarketplaceClient:
                 signed,
             )
         except (ValueError, InvalidSignature) as exc:
-            raise MarketplaceError(
-                "MARKET_SIGNATURE_INVALID", "市场制品签名校验失败"
+            raise HubError(
+                "HUB_SIGNATURE_INVALID", "中心制品签名校验失败"
             ) from exc
 
     def _headers(self) -> dict[str, str]:
@@ -511,16 +511,16 @@ class MarketplaceClient:
             remote = {}
         error = remote.get("error") if isinstance(remote, dict) else {}
         code = (
-            str(error.get("code") or "MARKET_UNAVAILABLE")
+            str(error.get("code") or "HUB_UNAVAILABLE")
             if isinstance(error, Mapping)
-            else "MARKET_UNAVAILABLE"
+            else "HUB_UNAVAILABLE"
         )
         message = (
-            str(error.get("message") or "市场服务请求失败")
+            str(error.get("message") or "中心服务请求失败")
             if isinstance(error, Mapping)
-            else "市场服务请求失败"
+            else "中心服务请求失败"
         )
-        raise MarketplaceError(
+        raise HubError(
             code,
             message,
             retryable=response.status_code in {408, 429, 500, 502, 503, 504},
@@ -547,10 +547,10 @@ class MarketplaceClient:
 
     def _require_enabled(self) -> None:
         if not self.config.enabled:
-            raise MarketplaceError("MARKET_DISABLED", "远程市场尚未启用")
+            raise HubError("HUB_DISABLED", "远程中心尚未启用")
 
 
-def _market_platform() -> str:
+def _hub_platform() -> str:
     import platform
 
     machine = platform.machine().lower()

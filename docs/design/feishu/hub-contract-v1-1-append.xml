@@ -1,0 +1,30 @@
+<h1>12. v1.1 远程 Hub 服务实现冻结</h1>
+<p>本章自 2026-07-24 起优先于第 1 至 11 章中与其冲突的远程市场描述。它不改变 Desktop 到本地 Gateway 的边界，只冻结 StockSense Hub 的公开协议、管理协议、信任根和兼容策略。</p>
+<h2>12.1 有效入口、命名与响应边界</h2>
+<table><thead><tr><th>项目</th><th>冻结定义</th></tr></thead><tbody><tr><td>公共 Base URL</td><td>https://&lt;host&gt;/app-api/hub/v1；Desktop 的 hub.base_url 直接配置到该地址。</td></tr><tr><td>管理 Base URL</td><td>https://&lt;host&gt;/admin-api/hub。</td></tr><tr><td>公开响应</td><td>裸 JSON + 标准 HTTP 状态码；不得包裹 CommonResult。</td></tr><tr><td>管理响应</td><td>继续采用工程现有 CommonResult 和 PageResult。</td></tr><tr><td>条目主键</td><td>公开字段 id 是 Skill/App 的唯一稳定主键；App id 必须与 .happ Manifest id 一致。</td></tr><tr><td>分页</td><td>page 默认 1，page_size 默认 24、最大 50；响应为 items、page、page_size、total、has_more。</td></tr></tbody></table>
+<p>公共接口必须支持 GET /categories?type=skill|app、GET /skills、GET /skills/{id}、POST /skills/{id}/resolve、GET /apps、GET /apps/{id}、POST /apps/{id}/resolve。列表支持 q、category、page、page_size、channel、compatible_only；默认 channel=stable、compatible_only=true。</p>
+<h2>12.2 Catalog、详情与 resolve</h2>
+<p>Skill 和 App 列表项至少包含 id、name、summary、description、category、version、channel、verified、featured、icon_url、tags、compatibility、permissions、updated_at。详情响应为 item 加 versions；省略 version 时选择当前渠道最新已发布兼容版本。首期内容由 StockSense 官方维护，发布方只作为 hub_item 的展示字段，不建立独立发布方资源。</p>
+<pre lang="json" caption="resolve 请求"><code>{
+  "version": "1.2.0",
+  "channel": "stable",
+  "platform": "windows-x64"
+}</code></pre>
+<pre lang="json" caption="resolve 响应"><code>{
+  "item": {"id": "ai.hermes.watchlist", "name": "自选股盯盘看板"},
+  "artifact": {
+    "kind": "happ",
+    "artifact_id": "art_01J...",
+    "version": "1.2.0",
+    "sha256": "64-lowercase-hex",
+    "size_bytes": 1832451,
+    "download_url": "https://&lt;host&gt;/app-api/hub/v1/artifacts/art_01J.../download?token=...",
+    "expires_at": "2026-07-24T20:40:00+08:00",
+    "signature": {"algorithm": "ed25519", "key_id": "stocksense-hub-2026-01", "value": "base64-signature"}
+  }
+}</code></pre>
+<p>Skill 的 artifact.kind 固定为 skill_bundle，App 的 artifact.kind 固定为 happ。download_url 必须同源、HTTPS、无重定向；开发环境只允许 loopback HTTP。令牌有效期建议 10 分钟，下载必须返回准确 Content-Length，单个制品最大 50 MiB。</p>
+<h2>12.3 缓存、错误、信任根与兼容</h2>
+<p>分类、列表和详情必须返回 ETag，并支持 If-None-Match 命中后的 304。建议 Cache-Control 为 public,max-age=300,stale-if-error=86400；resolve 和下载地址不得缓存。错误统一为 error/code/message/retryable/request_id/details 裸 JSON。公开错误码使用 HUB_ 前缀，至少包括 HUB_INVALID_REQUEST、HUB_ITEM_NOT_FOUND、HUB_VERSION_INCOMPATIBLE、HUB_ARTIFACT_EXPIRED、HUB_ARTIFACT_TOO_LARGE、HUB_ARTIFACT_REJECTED、HUB_SIGNATURE_INVALID、HUB_RATE_LIMITED、HUB_DISABLED、HUB_UNAVAILABLE。</p>
+<p>签名算法固定 Ed25519。签名原文严格为 kind、artifact_id、version、sha256、size_bytes 五行 UTF-8 文本，以 LF 连接且最后无额外换行。私钥不得进入数据库、普通配置文件或日志；签名密钥由部署侧受控配置、KMS 或 Vault 引用管理。客户端信任公钥随安装包或受控 hub.trusted_keys 预置，禁止由同一 Hub 服务动态自举信任根。</p>
+<p>Desktop、Gateway 与远程服务以 hub 为唯一名称：Python 使用 HubClient、HubConfig 和 AppHubOperations；本地 Gateway 使用 /api/apps/hub，配置键使用 hub。</p>

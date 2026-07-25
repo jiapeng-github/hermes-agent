@@ -4,9 +4,17 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const launchHermesApp = vi.fn()
+const listHubApps = vi.fn()
+const startHubAppInstall = vi.fn()
+const getHubAppOperation = vi.fn()
+const cancelHubAppOperation = vi.fn()
 
 vi.mock('@/hermes', () => ({
-  launchHermesApp: (...args: unknown[]) => launchHermesApp(...args)
+  launchHermesApp: (...args: unknown[]) => launchHermesApp(...args),
+  listHubApps: (...args: unknown[]) => listHubApps(...args),
+  startHubAppInstall: (...args: unknown[]) => startHubAppInstall(...args),
+  getHubAppOperation: (...args: unknown[]) => getHubAppOperation(...args),
+  cancelHubAppOperation: (...args: unknown[]) => cancelHubAppOperation(...args)
 }))
 
 import { AppMarketView } from './index'
@@ -18,6 +26,9 @@ const builtinApp = {
   version: '1.0.1',
   enabled: true,
   source_editable: false,
+  lineage: 'builtin',
+  installed_at: '2026-07-24T12:00:00+08:00',
+  updated_at: '2026-07-24T12:00:00+08:00',
   trust_state: 'builtin',
   status: 'ready',
   requested_permissions: {
@@ -45,6 +56,12 @@ const builtinFinanceApps = [
     name: '上市公司基本面分析',
     description: '按公司名称或股票代码生成公司画像、财务趋势与研报分析'
   },
+  {
+    ...builtinApp,
+    id: 'ai.hermes.stock-deep-analysis',
+    name: '个股三维深度分析',
+    description: '基于妙想 MCP 的基本面、资讯研报与估值资金三维个股研究应用'
+  },
   builtinApp
 ]
 
@@ -60,7 +77,12 @@ describe('AppMarketView', () => {
     selectAndAnalyzePackage.mockReset()
     exportPackage.mockReset()
     launchHermesApp.mockReset()
+    listHubApps.mockReset()
+    startHubAppInstall.mockReset()
+    getHubAppOperation.mockReset()
+    cancelHubAppOperation.mockReset()
     api.mockResolvedValue({ items: builtinFinanceApps, next_cursor: null })
+    listHubApps.mockResolvedValue({ items: [], installed: {}, cache_state: 'fresh' })
     window.hermesDesktop = {
       api,
       apps: { exportPackage, openLaunchUrl, selectAndAnalyzePackage }
@@ -83,6 +105,7 @@ describe('AppMarketView', () => {
     expect(await screen.findByText('自选股盯盘看板')).toBeTruthy()
     expect(screen.getByText('行业轮动和资金流向监控')).toBeTruthy()
     expect(screen.getByText('上市公司基本面分析')).toBeTruthy()
+    expect(screen.getByText('个股三维深度分析')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: '创建应用' }))
     fireEvent.click(screen.getByRole('button', { name: '打开 行业轮动和资金流向监控' }))
 
@@ -134,5 +157,43 @@ describe('AppMarketView', () => {
         })
       )
     )
+  })
+
+  it('marks a newer hub package as an update and starts the existing secure install flow', async () => {
+    listHubApps.mockResolvedValue({
+      items: [
+        {
+          id: 'ai.hermes.watchlist',
+          name: '自选股盯盘看板',
+          summary: 'A 股自选股盯盘应用',
+          version: '1.1.0',
+          category: '金融'
+        }
+      ],
+      installed: {
+        'ai.hermes.watchlist': { version: '1.0.1', state: 'update_available' }
+      },
+      cache_state: 'fresh'
+    })
+    startHubAppInstall.mockResolvedValue({
+      operation_id: 'hub-operation-1',
+      hub_app_id: 'ai.hermes.watchlist',
+      version: '1.1.0',
+      state: 'queued',
+      progress: 5,
+      created_at: '2026-07-24T12:00:00+08:00',
+      updated_at: '2026-07-24T12:00:00+08:00'
+    })
+    render(<AppMarketView onCreateApp={vi.fn()} onEditApp={vi.fn()} />)
+
+    await screen.findByText('自选股盯盘看板')
+    fireEvent.click(screen.getByRole('button', { name: '应用中心' }))
+
+    expect(await screen.findByRole('button', { name: '更新' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '更新' }))
+
+    await waitFor(() => expect(startHubAppInstall).toHaveBeenCalledWith('ai.hermes.watchlist', '1.1.0'))
+    expect(await screen.findByText('正在准备应用安装')).toBeTruthy()
+    expect(screen.getByLabelText('安装进度')).toBeTruthy()
   })
 })

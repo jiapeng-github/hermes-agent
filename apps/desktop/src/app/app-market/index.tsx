@@ -15,12 +15,12 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Input } from '@/components/ui/input'
 import type { AppImportPlan } from '@/global'
 import {
-  cancelMarketplaceAppOperation,
-  getMarketplaceAppOperation,
-  listMarketplaceApps,
-  startMarketplaceAppInstall,
-  type MarketplaceAppOperation,
-  type MarketplaceAppSummary
+  cancelHubAppOperation,
+  getHubAppOperation,
+  listHubApps,
+  startHubAppInstall,
+  type HubAppOperation,
+  type HubAppSummary
 } from '@/hermes'
 import { launchAppInBrowser } from '@/lib/app-launch'
 import {
@@ -31,6 +31,7 @@ import {
   Package,
   Pencil,
   Plus,
+  RefreshCw,
   Search,
   Trash2,
   Upload
@@ -43,6 +44,9 @@ export interface AppSummary {
   version: string
   enabled: boolean
   source_editable: boolean
+  lineage: 'builtin' | 'imported' | 'user'
+  installed_at: string
+  updated_at: string
   trust_state: 'builtin' | 'signed' | 'local_untrusted'
   status: 'ready' | 'disabled' | 'incompatible' | 'invalid' | 'busy'
   requested_permissions: AppImportPlan['requested_permissions']
@@ -67,22 +71,50 @@ const STATUS_LABEL: Record<AppSummary['status'], string> = {
   busy: '运行中'
 }
 
-function marketErrorMessage(reason: unknown, fallback: string): string {
+function hubErrorMessage(reason: unknown, fallback: string): string {
   const message = reason instanceof Error ? reason.message : ''
 
-  if (message.includes('MARKET_DISABLED')) {
-    return '应用市场尚未配置。请在设置中启用市场服务后重试。'
+  if (message.includes('HUB_DISABLED')) {
+    return '应用中心尚未启用或尚未配置，请联系管理员后重试。'
   }
 
-  if (message.includes('MARKET_UNAVAILABLE')) {
-    return '暂时无法连接应用市场，请稍后重试。'
+  if (message.includes('HUB_UNAVAILABLE')) {
+    return '暂时无法连接应用中心，请稍后重试。'
   }
 
   return message || fallback
 }
 
+function sourceLabel(app: AppSummary): string {
+  if (app.lineage === 'builtin') return '内置'
+  if (app.trust_state === 'signed') return '中心安装'
+  if (app.lineage === 'user') return '本地创建'
+  return '本地导入'
+}
+
+function formatInstalledAt(value: string): string {
+  const timestamp = Date.parse(value)
+  if (Number.isNaN(timestamp)) return '时间未知'
+  return new Intl.DateTimeFormat('zh-CN', { month: 'numeric', day: 'numeric' }).format(timestamp)
+}
+
+function hubStageLabel(state: HubAppOperation['state'] | undefined): string {
+  switch (state) {
+    case 'queued':
+      return '正在排队准备…'
+    case 'resolving':
+      return '正在解析应用版本…'
+    case 'downloading':
+      return '正在安全下载应用包…'
+    case 'analyzing':
+      return '正在分析应用权限…'
+    default:
+      return '正在准备应用安装…'
+  }
+}
+
 export function AppMarketView({ onCreateApp, onEditApp }: AppMarketViewProps) {
-  const [mode, setMode] = useState<'installed' | 'market'>('installed')
+  const [mode, setMode] = useState<'installed' | 'hub'>('installed')
   const [apps, setApps] = useState<AppSummary[]>([])
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(true)
@@ -91,10 +123,11 @@ export function AppMarketView({ onCreateApp, onEditApp }: AppMarketViewProps) {
   const [importPlan, setImportPlan] = useState<AppImportPlan | null>(null)
   const [importing, setImporting] = useState(false)
   const [removeTarget, setRemoveTarget] = useState<AppSummary | null>(null)
-  const [marketApps, setMarketApps] = useState<MarketplaceAppSummary[]>([])
-  const [marketInstalled, setMarketInstalled] = useState<Record<string, string>>({})
-  const [marketLoading, setMarketLoading] = useState(false)
-  const [marketOperation, setMarketOperation] = useState<MarketplaceAppOperation | null>(null)
+  const [hubApps, setHubApps] = useState<HubAppSummary[]>([])
+  const [hubInstalled, setHubInstalled] = useState<Record<string, { version: string; state: 'installed' | 'update_available' }>>({})
+  const [hubLoading, setHubLoading] = useState(false)
+  const [hubOperation, setHubOperation] = useState<HubAppOperation | null>(null)
+  const [hubRefreshEpoch, setHubRefreshEpoch] = useState(0)
 
   async function loadApps() {
     setLoading(true)
@@ -115,52 +148,52 @@ export function AppMarketView({ onCreateApp, onEditApp }: AppMarketViewProps) {
   }, [])
 
   useEffect(() => {
-    if (mode !== 'market') {
+    if (mode !== 'hub') {
       return
     }
 
     let active = true
-    setMarketLoading(true)
+    setHubLoading(true)
     setError(null)
     const timer = window.setTimeout(() => {
-      void listMarketplaceApps(query)
+      void listHubApps(query)
         .then(result => {
           if (!active) return
-          setMarketApps(result.items)
-          setMarketInstalled(result.installed)
+          setHubApps(result.items)
+          setHubInstalled(result.installed)
         })
-        .catch(reason => active && setError(marketErrorMessage(reason, '应用市场加载失败。')))
-        .finally(() => active && setMarketLoading(false))
+        .catch(reason => active && setError(hubErrorMessage(reason, '应用中心加载失败。')))
+        .finally(() => active && setHubLoading(false))
     }, 250)
 
     return () => {
       active = false
       window.clearTimeout(timer)
     }
-  }, [mode, query])
+  }, [mode, query, hubRefreshEpoch])
 
   useEffect(() => {
-    if (!marketOperation || !['queued', 'resolving', 'downloading', 'analyzing'].includes(marketOperation.state)) {
+    if (!hubOperation || !['queued', 'resolving', 'downloading', 'analyzing'].includes(hubOperation.state)) {
       return
     }
 
     const timer = window.setInterval(() => {
-      void getMarketplaceAppOperation(marketOperation.operation_id)
+      void getHubAppOperation(hubOperation.operation_id)
         .then(operation => {
-          setMarketOperation(operation)
+          setHubOperation(operation)
           if (operation.state === 'completed' && operation.import_plan) {
             setImportPlan(operation.import_plan)
             setNotice(null)
           }
           if (operation.state === 'failed') {
-            setError(operation.error?.message ?? '应用市场安装准备失败。')
+            setError(operation.error?.message ?? '应用中心安装准备失败。')
           }
         })
         .catch(reason => setError(reason instanceof Error ? reason.message : '无法获取应用安装状态。'))
     }, 800)
 
     return () => window.clearInterval(timer)
-  }, [marketOperation])
+  }, [hubOperation])
 
   const visibleApps = useMemo(() => {
     const folded = query.trim().toLocaleLowerCase()
@@ -204,8 +237,13 @@ export function AppMarketView({ onCreateApp, onEditApp }: AppMarketViewProps) {
           grants: importPlan.requested_permissions
         }
       })
+      const wasHubInstall = hubOperation?.import_plan?.import_id === importPlan.import_id
       setImportPlan(null)
       setNotice(`已安装 ${importPlan.app.name} ${importPlan.app.version}`)
+      if (wasHubInstall) {
+        setHubOperation(null)
+        setHubRefreshEpoch(value => value + 1)
+      }
       await loadApps()
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : '应用安装失败。')
@@ -225,6 +263,9 @@ export function AppMarketView({ onCreateApp, onEditApp }: AppMarketViewProps) {
     }
 
     setImportPlan(null)
+    if (hubOperation?.import_plan?.import_id === importPlan?.import_id) {
+      setHubOperation(null)
+    }
   }
 
   async function exportPackage(app: AppSummary) {
@@ -252,26 +293,27 @@ export function AppMarketView({ onCreateApp, onEditApp }: AppMarketViewProps) {
     await loadApps()
   }
 
-  async function installFromMarket(app: MarketplaceAppSummary) {
+  async function installFromHub(app: HubAppSummary) {
     setError(null)
     setNotice(null)
 
     try {
-      const operation = await startMarketplaceAppInstall(app.id, app.version)
-      setMarketOperation(operation)
+      const operation = await startHubAppInstall(app.id, app.version)
+      setHubOperation(operation)
     } catch (reason) {
-      setError(marketErrorMessage(reason, '无法开始安装应用。'))
+      setError(hubErrorMessage(reason, '无法开始安装应用。'))
     }
   }
 
-  async function cancelMarketInstall() {
-    if (!marketOperation) return
-    await cancelMarketplaceAppOperation(marketOperation.operation_id).catch(() => undefined)
-    setMarketOperation(null)
+  async function cancelHubInstall() {
+    if (!hubOperation) return
+    await cancelHubAppOperation(hubOperation.operation_id).catch(() => undefined)
+    setNotice('已取消应用安装准备')
+    setHubOperation(null)
   }
 
-  const marketBusy = Boolean(
-    marketOperation && ['queued', 'resolving', 'downloading', 'analyzing'].includes(marketOperation.state)
+  const hubBusy = Boolean(
+    hubOperation && ['queued', 'resolving', 'downloading', 'analyzing'].includes(hubOperation.state)
   )
 
   return (
@@ -307,8 +349,8 @@ export function AppMarketView({ onCreateApp, onEditApp }: AppMarketViewProps) {
               >
                 已安装
               </Button>
-              <Button onClick={() => setMode('market')} size="xs" variant={mode === 'market' ? 'secondary' : 'ghost'}>
-                应用市场
+              <Button onClick={() => setMode('hub')} size="xs" variant={mode === 'hub' ? 'secondary' : 'ghost'}>
+                应用中心
               </Button>
             </div>
             <div className="relative w-full sm:ml-auto sm:w-[20rem]">
@@ -337,15 +379,15 @@ export function AppMarketView({ onCreateApp, onEditApp }: AppMarketViewProps) {
 
         <div className="mb-3 flex items-center justify-between">
           <span className="text-xs font-medium text-(--ui-text-secondary)">
-            {mode === 'installed' ? `全部应用 · ${visibleApps.length}` : `应用市场 · ${marketApps.length}`}
+            {mode === 'installed' ? `全部应用 · ${visibleApps.length}` : `应用中心 · ${hubApps.length}`}
           </span>
           <span className="text-[0.6875rem] text-(--ui-text-tertiary)">
             {mode === 'installed' ? '应用不会主动请求行情数据' : '安装前将展示所需权限'}
           </span>
         </div>
 
-        {mode === 'market' ? (
-          marketLoading ? (
+        {mode === 'hub' ? (
+          hubLoading ? (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {[0, 1, 2].map(item => (
                 <div
@@ -354,11 +396,13 @@ export function AppMarketView({ onCreateApp, onEditApp }: AppMarketViewProps) {
                 />
               ))}
             </div>
-          ) : marketApps.length ? (
+          ) : hubApps.length ? (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {marketApps.map(app => {
-                const installedVersion = marketInstalled[app.id]
-                const installing = marketBusy && marketOperation?.market_app_id === app.id
+              {hubApps.map(app => {
+                const installed = hubInstalled[app.id]
+                const updateAvailable = installed?.state === 'update_available'
+                const installing = hubBusy && hubOperation?.hub_app_id === app.id
+                const retrying = hubOperation?.state === 'failed' && hubOperation.hub_app_id === app.id
                 return (
                   <article
                     className="flex min-h-36 flex-col rounded-md border border-(--ui-stroke-tertiary) bg-(--ui-bg-elevated) p-3.5 shadow-sm"
@@ -370,7 +414,7 @@ export function AppMarketView({ onCreateApp, onEditApp }: AppMarketViewProps) {
                           <img
                             alt=""
                             className="size-full object-cover"
-                            src={`/api/apps/market/${encodeURIComponent(app.id)}/icon?version=${encodeURIComponent(app.version)}`}
+                            src={`/api/apps/hub/${encodeURIComponent(app.id)}/icon?version=${encodeURIComponent(app.version)}`}
                           />
                         ) : (
                           <Package className="size-5" />
@@ -387,19 +431,30 @@ export function AppMarketView({ onCreateApp, onEditApp }: AppMarketViewProps) {
                     <div className="mt-auto flex items-center gap-2 pt-2.5">
                       {app.category && <Badge variant="muted">{app.category}</Badge>}
                       <span className="text-[0.6875rem] text-(--ui-text-tertiary)">v{app.version}</span>
-                      {installedVersion ? (
+                      {installing ? (
+                        <Button className="ml-auto" disabled size="sm">
+                          <Loader2 className="size-3.5 animate-spin" /> 准备中…
+                        </Button>
+                      ) : retrying ? (
+                        <Button className="ml-auto" onClick={() => void installFromHub(app)} size="sm" variant="outline">
+                          <RefreshCw className="size-3.5" /> 重试
+                        </Button>
+                      ) : updateAvailable ? (
+                        <Button className="ml-auto" disabled={hubBusy} onClick={() => void installFromHub(app)} size="sm">
+                          <RefreshCw className="size-3.5" /> 更新
+                        </Button>
+                      ) : installed ? (
                         <Badge className="ml-auto" variant="default">
-                          已安装
+                          已是最新
                         </Badge>
                       ) : (
                         <Button
                           className="ml-auto"
-                          disabled={marketBusy}
-                          onClick={() => void installFromMarket(app)}
+                          disabled={hubBusy}
+                          onClick={() => void installFromHub(app)}
                           size="sm"
                         >
-                          {installing && <Loader2 className="size-3.5 animate-spin" />}
-                          {installing ? '准备中…' : '安装'}
+                          安装
                         </Button>
                       )}
                     </div>
@@ -411,8 +466,8 @@ export function AppMarketView({ onCreateApp, onEditApp }: AppMarketViewProps) {
             <div className="grid min-h-52 place-items-center rounded-md border border-dashed border-(--ui-stroke-secondary) text-center">
               <div>
                 <Package className="mx-auto size-6 text-(--ui-text-tertiary)" />
-                <p className="mt-2 text-sm font-medium">没有可用的市场应用</p>
-                <p className="mt-1 text-xs text-(--ui-text-tertiary)">请检查应用市场服务配置后重试。</p>
+                <p className="mt-2 text-sm font-medium">没有可用的中心应用</p>
+                <p className="mt-1 text-xs text-(--ui-text-tertiary)">请检查应用中心服务配置后重试。</p>
               </div>
             </div>
           )
@@ -481,7 +536,8 @@ export function AppMarketView({ onCreateApp, onEditApp }: AppMarketViewProps) {
                   <div className="mt-auto flex items-center gap-2 pt-2.5">
                     <Badge variant={app.status === 'ready' ? 'default' : 'warn'}>{STATUS_LABEL[app.status]}</Badge>
                     <span className="text-[0.6875rem] text-(--ui-text-tertiary)">v{app.version}</span>
-                    {builtin && <span className="text-[0.6875rem] text-(--ui-text-tertiary)">内置</span>}
+                    <span className="text-[0.6875rem] text-(--ui-text-tertiary)">{sourceLabel(app)}</span>
+                    <span className="text-[0.6875rem] text-(--ui-text-tertiary)">安装于 {formatInstalledAt(app.installed_at)}</span>
                     <Button
                       aria-label={`打开 ${app.name}`}
                       className="ml-auto"
@@ -545,18 +601,25 @@ export function AppMarketView({ onCreateApp, onEditApp }: AppMarketViewProps) {
         </DialogContent>
       </Dialog>
 
-      <Dialog onOpenChange={open => !open && void cancelMarketInstall()} open={marketBusy}>
+      <Dialog onOpenChange={open => !open && void cancelHubInstall()} open={hubBusy}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>正在准备应用安装</DialogTitle>
-            <DialogDescription>正在从应用市场下载并校验应用包，随后会展示权限确认。</DialogDescription>
+            <DialogDescription>正在从应用中心下载并校验应用包，随后会展示权限确认。</DialogDescription>
           </DialogHeader>
           <div className="flex items-center gap-2 text-sm text-(--ui-text-secondary)">
             <Loader2 className="size-4 animate-spin" />
-            {marketOperation?.state === 'analyzing' ? '正在分析应用权限…' : '正在安全下载应用包…'}
+            {hubStageLabel(hubOperation?.state)}
           </div>
+          <div aria-label="安装进度" className="h-1.5 overflow-hidden rounded-full bg-(--ui-bg-tertiary)">
+            <div
+              className="h-full rounded-full bg-primary transition-[width] duration-300"
+              style={{ width: `${hubOperation?.progress ?? 5}%` }}
+            />
+          </div>
+          <p className="text-right text-[0.6875rem] text-(--ui-text-tertiary)">{hubOperation?.progress ?? 5}%</p>
           <DialogFooter>
-            <Button onClick={() => void cancelMarketInstall()} variant="ghost">
+            <Button onClick={() => void cancelHubInstall()} variant="ghost">
               取消
             </Button>
           </DialogFooter>

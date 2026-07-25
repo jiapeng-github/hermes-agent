@@ -1,4 +1,4 @@
-"""Asynchronous remote-market application acquisition.
+"""Asynchronous remote-Hub application acquisition.
 
 Remote packages are never installed directly.  A completed operation returns
 the existing :class:`ImportPlan`; the caller must still submit the normal
@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from hermes_cli.marketplace import MarketplaceClient, MarketplaceError
+from hermes_cli.hub import HubClient, HubError
 
 from .errors import AppDomainError
 from .manager import AppManager
@@ -25,7 +25,7 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _market_error(error: MarketplaceError) -> AppDomainError:
+def _hub_error(error: HubError) -> AppDomainError:
     return AppDomainError(
         error.code,
         error.message,
@@ -37,7 +37,7 @@ def _market_error(error: MarketplaceError) -> AppDomainError:
 @dataclass(slots=True)
 class _Operation:
     id: str
-    market_app_id: str
+    hub_app_id: str
     version: str | None
     state: str = "queued"
     created_at: str = field(default_factory=_now)
@@ -49,9 +49,10 @@ class _Operation:
     def public(self) -> dict[str, Any]:
         value: dict[str, Any] = {
             "operation_id": self.id,
-            "market_app_id": self.market_app_id,
+            "hub_app_id": self.hub_app_id,
             "version": self.version,
             "state": self.state,
+            "progress": _operation_progress(self.state),
             "created_at": self.created_at,
             "updated_at": self.updated_at,
         }
@@ -67,19 +68,31 @@ class _Operation:
         return value
 
 
-class AppMarketplaceOperations:
-    """Coordinate async market downloads with the local `.happ` importer."""
+def _operation_progress(state: str) -> int:
+    return {
+        "queued": 5,
+        "resolving": 20,
+        "downloading": 55,
+        "analyzing": 82,
+        "completed": 100,
+        "failed": 0,
+        "cancelled": 0,
+    }.get(state, 0)
 
-    def __init__(self, client: MarketplaceClient | None = None) -> None:
-        self.client = client or MarketplaceClient.from_active_config()
+
+class AppHubOperations:
+    """Coordinate async Hub downloads with the local `.happ` importer."""
+
+    def __init__(self, client: HubClient | None = None) -> None:
+        self.client = client or HubClient.from_active_config()
         self._operations: dict[str, _Operation] = {}
         self._lock = threading.Lock()
 
     def list_apps(self, **params: str | int | bool | None) -> dict[str, Any]:
         try:
             response = self.client.list_apps(**params)
-        except MarketplaceError as exc:
-            raise _market_error(exc) from exc
+        except HubError as exc:
+            raise _hub_error(exc) from exc
         return {
             **response.data,
             "cache_state": response.cache_state,
@@ -87,12 +100,12 @@ class AppMarketplaceOperations:
         }
 
     def get_app(
-        self, market_app_id: str, *, version: str | None = None
+        self, hub_app_id: str, *, version: str | None = None
     ) -> dict[str, Any]:
         try:
-            response = self.client.get_app(market_app_id, version=version)
-        except MarketplaceError as exc:
-            raise _market_error(exc) from exc
+            response = self.client.get_app(hub_app_id, version=version)
+        except HubError as exc:
+            raise _hub_error(exc) from exc
         return {
             **response.data,
             "cache_state": response.cache_state,
@@ -102,8 +115,8 @@ class AppMarketplaceOperations:
     def list_categories(self) -> dict[str, Any]:
         try:
             response = self.client.list_categories("app")
-        except MarketplaceError as exc:
-            raise _market_error(exc) from exc
+        except HubError as exc:
+            raise _hub_error(exc) from exc
         return {
             **response.data,
             "cache_state": response.cache_state,
@@ -111,29 +124,29 @@ class AppMarketplaceOperations:
         }
 
     def get_icon(
-        self, market_app_id: str, *, version: str | None = None
+        self, hub_app_id: str, *, version: str | None = None
     ) -> tuple[bytes, str]:
-        detail = self.get_app(market_app_id, version=version)
+        detail = self.get_app(hub_app_id, version=version)
         item = detail.get("item") if isinstance(detail.get("item"), dict) else detail
         icon_url = item.get("icon_url") if isinstance(item, dict) else None
         if not isinstance(icon_url, str) or not icon_url:
             raise AppDomainError(
-                "APP_NOT_FOUND", "market application does not provide an icon"
+                "APP_NOT_FOUND", "hub application does not provide an icon"
             )
         try:
             return self.client.fetch_icon(icon_url)
-        except MarketplaceError as exc:
-            raise _market_error(exc) from exc
+        except HubError as exc:
+            raise _hub_error(exc) from exc
 
     def start_install(
-        self, market_app_id: str, *, version: str | None = None
+        self, hub_app_id: str, *, version: str | None = None
     ) -> dict[str, Any]:
-        if not market_app_id or len(market_app_id) > 200:
+        if not hub_app_id or len(hub_app_id) > 200:
             raise AppDomainError(
-                "APP_REQUEST_INVALID", "market application id is invalid"
+                "APP_REQUEST_INVALID", "hub application id is invalid"
             )
         operation = _Operation(
-            id=str(uuid.uuid4()), market_app_id=market_app_id, version=version
+            id=str(uuid.uuid4()), hub_app_id=hub_app_id, version=version
         )
         with self._lock:
             self._operations[operation.id] = operation
@@ -145,7 +158,7 @@ class AppMarketplaceOperations:
             operation = self._operations.get(operation_id)
             if operation is None:
                 raise AppDomainError(
-                    "APP_NOT_FOUND", "market install operation was not found"
+                    "APP_NOT_FOUND", "hub install operation was not found"
                 )
             return operation.public()
 
@@ -154,7 +167,7 @@ class AppMarketplaceOperations:
             operation = self._operations.get(operation_id)
             if operation is None:
                 raise AppDomainError(
-                    "APP_NOT_FOUND", "market install operation was not found"
+                    "APP_NOT_FOUND", "hub install operation was not found"
                 )
             if operation.state in {"completed", "failed", "cancelled"}:
                 return
@@ -170,15 +183,15 @@ class AppMarketplaceOperations:
             self._set_state(operation_id, "resolving")
             operation = self._operation(operation_id)
             resolved = self.client.resolve_app(
-                operation.market_app_id, version=operation.version
+                operation.hub_app_id, version=operation.version
             )
             artifact = resolved.get("artifact")
             if not isinstance(artifact, dict) or artifact.get("kind") != "happ":
-                raise AppDomainError("MARKET_ARTIFACT_REJECTED", "市场应用制品类型无效")
+                raise AppDomainError("HUB_ARTIFACT_REJECTED", "中心应用制品类型无效")
             self._ensure_not_cancelled(operation_id)
 
             self._set_state(operation_id, "downloading")
-            staging_dir = manager.paths.staging / f"market-{operation_id}"
+            staging_dir = manager.paths.staging / f"hub-{operation_id}"
             staging_dir.mkdir(mode=0o700)
             package_path = staging_dir / "application.happ"
             self.client.download_artifact(artifact, package_path)
@@ -193,15 +206,15 @@ class AppMarketplaceOperations:
                 current.import_plan = plan.public_dict()
                 current.state = "completed"
                 current.updated_at = _now()
-        except MarketplaceError as exc:
-            self._fail(operation_id, _market_error(exc))
+        except HubError as exc:
+            self._fail(operation_id, _hub_error(exc))
         except AppDomainError as exc:
             self._fail(operation_id, exc)
         except Exception:
             self._fail(
                 operation_id,
                 AppDomainError(
-                    "MARKET_UNAVAILABLE", "市场应用安装准备失败", retryable=True
+                    "HUB_UNAVAILABLE", "中心应用安装准备失败", retryable=True
                 ),
             )
         finally:
@@ -233,7 +246,7 @@ class AppMarketplaceOperations:
                 return
             operation.state = "cancelled"
             operation.updated_at = _now()
-        raise AppDomainError("APP_REQUEST_CANCELLED", "市场应用安装已取消")
+        raise AppDomainError("APP_REQUEST_CANCELLED", "中心应用安装已取消")
 
     def _fail(self, operation_id: str, error: AppDomainError) -> None:
         with self._lock:

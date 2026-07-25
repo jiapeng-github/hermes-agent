@@ -4078,16 +4078,16 @@ def create_source_router(auth: Optional[GitHubAuth] = None) -> List[SkillSource]
         BrowseShSource(),   # browse.sh: 169+ site-specific browser automation skills
     ]
 
-    # The StockSense market is optional and configured per profile.  Import it
-    # lazily to keep the generic Skills Hub usable without a market endpoint.
+    # The StockSense Hub is optional and configured per profile. Import it
+    # lazily to keep the generic Skills Hub usable without a Hub endpoint.
     try:
-        from tools.stocksense_market_source import StockSenseMarketSource
+        from tools.stocksense_hub_source import StockSenseHubSource
 
-        market_source = StockSenseMarketSource.from_active_config()
-        if market_source is not None:
-            sources.insert(1, market_source)
+        hub_source = StockSenseHubSource.from_active_config()
+        if hub_source is not None:
+            sources.insert(1, hub_source)
     except Exception as exc:
-        logger.debug("StockSense marketplace source is unavailable: %s", exc)
+        logger.debug("StockSense hub source is unavailable: %s", exc)
 
     return sources
 

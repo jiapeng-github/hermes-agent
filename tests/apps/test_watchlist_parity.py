@@ -7,6 +7,8 @@ from hermes_cli.apps.catalog import (
     COMPANY_ANALYSIS_SERVICE_HANDLERS,
     INDUSTRY_MONITOR_APP_ID,
     INDUSTRY_MONITOR_SERVICE_HANDLERS,
+    STOCK_DEEP_ANALYSIS_APP_ID,
+    STOCK_DEEP_ANALYSIS_SERVICE_HANDLERS,
     WATCHLIST_APP_ID,
     WATCHLIST_SERVICE_HANDLERS,
 )
@@ -85,6 +87,21 @@ def test_company_app_delegates_cached_analysis_and_refresh(monkeypatch, tmp_path
         ("analysis", "300750", False),
         ("refresh", "300750", True),
     ]
+
+
+def test_stock_deep_analysis_reuses_the_mx_company_analysis_service(monkeypatch, tmp_path: Path) -> None:
+    snapshot = {"ok": True, "status": "ready", "query": "600519"}
+    monkeypatch.setattr(
+        "hermes_cli.finance_company_analysis.get_company_analysis_snapshot_cached",
+        lambda query, *, auto_refresh=True: snapshot,
+    )
+    services = _builtin_services(
+        tmp_path,
+        STOCK_DEEP_ANALYSIS_APP_ID,
+        STOCK_DEEP_ANALYSIS_SERVICE_HANDLERS,
+    )
+
+    assert services.invoke("finance.company.analysis", {"query": "600519"}) == snapshot
 
 
 def test_app_snapshot_and_legacy_page_share_every_gate4_metric(monkeypatch, tmp_path: Path) -> None:

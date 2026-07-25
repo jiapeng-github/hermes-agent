@@ -8,21 +8,21 @@ import httpx
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from hermes_cli.marketplace.client import (
-    MarketplaceCache,
-    MarketplaceClient,
-    MarketplaceConfig,
-    MarketplaceError,
+from hermes_cli.hub.client import (
+    HubCache,
+    HubClient,
+    HubConfig,
+    HubError,
 )
 
 
-def _config(private_key: Ed25519PrivateKey | None = None) -> MarketplaceConfig:
+def _config(private_key: Ed25519PrivateKey | None = None) -> HubConfig:
     trusted_keys = {}
     if private_key is not None:
         trusted_keys["test-key"] = base64.b64encode(
             private_key.public_key().public_bytes_raw()
         ).decode()
-    return MarketplaceConfig(
+    return HubConfig(
         enabled=True,
         base_url="http://127.0.0.1:18080/api/v1",
         channel="stable",
@@ -64,18 +64,18 @@ def test_catalog_uses_fresh_cache_before_revalidating(tmp_path: Path):
 
     def handle(request: httpx.Request) -> httpx.Response:
         calls.append(request)
-        if request.headers.get("if-none-match") == '"market-v1"':
+        if request.headers.get("if-none-match") == '"hub-v1"':
             return httpx.Response(304, request=request)
         return httpx.Response(
             200,
-            headers={"etag": '"market-v1"'},
+            headers={"etag": '"hub-v1"'},
             json={"items": [{"id": "one"}]},
             request=request,
         )
 
-    client = MarketplaceClient(
+    client = HubClient(
         _config(),
-        cache=MarketplaceCache(tmp_path / "cache"),
+        cache=HubCache(tmp_path / "cache"),
         client=httpx.Client(transport=httpx.MockTransport(handle)),
     )
 
@@ -89,15 +89,15 @@ def test_catalog_uses_fresh_cache_before_revalidating(tmp_path: Path):
 
 def test_artifact_download_requires_valid_signature_and_digest(tmp_path: Path):
     private_key = Ed25519PrivateKey.generate()
-    content = b"market bundle"
+    content = b"hub bundle"
     descriptor = _descriptor(private_key, content)
 
     def handle(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, content=content, request=request)
 
-    client = MarketplaceClient(
+    client = HubClient(
         _config(private_key),
-        cache=MarketplaceCache(tmp_path / "cache"),
+        cache=HubCache(tmp_path / "cache"),
         client=httpx.Client(transport=httpx.MockTransport(handle)),
     )
     target = tmp_path / "artifact.zip"
@@ -112,24 +112,24 @@ def test_artifact_download_requires_valid_signature_and_digest(tmp_path: Path):
         **descriptor["signature"],
         "value": base64.b64encode(b"invalid").decode(),
     }
-    with pytest.raises(MarketplaceError, match="签名"):
+    with pytest.raises(HubError, match="签名"):
         client.download_artifact(descriptor, tmp_path / "other.zip")
 
 
-def test_marketplace_config_ignores_invalid_numeric_values():
-    value = MarketplaceConfig.from_mapping({
+def test_hub_config_ignores_invalid_numeric_values():
+    value = HubConfig.from_mapping({
         "enabled": True,
-        "base_url": "https://market.example",
+        "base_url": "https://hub.example",
         "request_timeout_seconds": "invalid",
     })
 
     assert value.request_timeout_seconds == 15
 
 
-def test_disabled_market_never_attempts_network(tmp_path: Path):
-    client = MarketplaceClient(
-        MarketplaceConfig.from_mapping({"enabled": False}),
-        cache=MarketplaceCache(tmp_path / "cache"),
+def test_disabled_hub_never_attempts_network(tmp_path: Path):
+    client = HubClient(
+        HubConfig.from_mapping({"enabled": False}),
+        cache=HubCache(tmp_path / "cache"),
         client=httpx.Client(
             transport=httpx.MockTransport(
                 lambda request: pytest.fail("unexpected request")
@@ -137,5 +137,5 @@ def test_disabled_market_never_attempts_network(tmp_path: Path):
         ),
     )
 
-    with pytest.raises(MarketplaceError, match="尚未启用"):
+    with pytest.raises(HubError, match="尚未启用"):
         client.list_apps()

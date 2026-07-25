@@ -1033,8 +1033,7 @@ export interface StaleAuxAssignment {
   model: string
 }
 
-/** One skill-hub source (official index, GitHub, skills.sh, …) as reported by
- *  `GET /api/skills/hub/sources`. */
+/** The first-party StockSense source reported by the Skill Center endpoint. */
 export interface SkillHubSource {
   id: string
   label: string
@@ -1081,7 +1080,7 @@ export interface SkillHubSearchResponse {
   installed: Record<string, SkillHubInstalledEntry>
 }
 
-export interface MarketplaceAppSummary {
+export interface HubAppSummary {
   id: string
   name: string
   summary: string
@@ -1095,19 +1094,25 @@ export interface MarketplaceAppSummary {
   permissions?: string[]
 }
 
-export interface MarketplaceAppsResponse {
-  items: MarketplaceAppSummary[]
+export interface HubAppsResponse {
+  items: HubAppSummary[]
   next_cursor?: string | null
   cache_state: 'fresh' | 'stale'
   cached_at?: string | null
-  installed: Record<string, string>
+  installed: Record<string, HubInstalledApp>
 }
 
-export interface MarketplaceAppOperation {
+export interface HubInstalledApp {
+  version: string
+  state: 'installed' | 'update_available'
+}
+
+export interface HubAppOperation {
   operation_id: string
-  market_app_id: string
+  hub_app_id: string
   version: string | null
   state: 'queued' | 'resolving' | 'downloading' | 'analyzing' | 'completed' | 'failed' | 'cancelled'
+  progress: number
   created_at: string
   updated_at: string
   import_plan?: AppImportPlan

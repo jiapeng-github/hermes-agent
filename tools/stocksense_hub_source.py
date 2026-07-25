@@ -1,6 +1,6 @@
-"""StockSense remote marketplace adapter for the existing Skills Hub.
+"""StockSense remote hub adapter for the existing Skills Hub.
 
-The marketplace only supplies signed skill bundles.  Installation remains in
+The hub only supplies signed skill bundles.  Installation remains in
 ``hermes_cli.skills_hub`` so every remote skill passes the normal quarantine,
 scan, approval and lock-file path.
 """
@@ -12,10 +12,10 @@ import zipfile
 from pathlib import Path
 from typing import Any, Optional
 
-from hermes_cli.marketplace import (
-    MarketplaceClient,
-    MarketplaceConfig,
-    MarketplaceError,
+from hermes_cli.hub import (
+    HubClient,
+    HubConfig,
+    HubError,
 )
 
 from tools.skills_hub import (
@@ -27,7 +27,7 @@ from tools.skills_hub import (
 )
 
 
-_SOURCE_ID = "stocksense-market"
+_SOURCE_ID = "stocksense-hub"
 _MAX_BUNDLE_FILES = 200
 _MAX_BUNDLE_FILE_BYTES = 1_000_000
 
@@ -69,7 +69,7 @@ def _skill_meta(
         trust_level="trusted" if item.get("verified") else "community",
         tags=[str(tag) for tag in tags] if isinstance(tags, list) else [],
         extra={
-            "market_skill_id": skill_id,
+            "hub_skill_id": skill_id,
             "version": version,
             "category": str(item.get("category") or ""),
             "publisher": str(item.get("publisher") or ""),
@@ -83,20 +83,20 @@ def _skill_meta(
     )
 
 
-class StockSenseMarketSource(SkillSource):
-    """Read remote StockSense skills through a configured marketplace client."""
+class StockSenseHubSource(SkillSource):
+    """Read remote StockSense skills through a configured hub client."""
 
-    def __init__(self, client: MarketplaceClient) -> None:
+    def __init__(self, client: HubClient) -> None:
         self.client = client
 
     @classmethod
-    def from_active_config(cls) -> "StockSenseMarketSource | None":
+    def from_active_config(cls) -> "StockSenseHubSource | None":
         from hermes_cli.config import load_config
 
-        config = MarketplaceConfig.from_mapping(load_config().get("marketplace"))
+        config = HubConfig.from_mapping(load_config().get("hub"))
         if not config.enabled:
             return None
-        return cls(MarketplaceClient(config))
+        return cls(HubClient(config))
 
     def source_id(self) -> str:
         return _SOURCE_ID
@@ -138,7 +138,7 @@ class StockSenseMarketSource(SkillSource):
         resolved = self.client.resolve_skill(skill_id, version=version)
         artifact = resolved.get("artifact")
         if not isinstance(artifact, dict) or artifact.get("kind") != "skill_bundle":
-            raise MarketplaceError("MARKET_ARTIFACT_REJECTED", "市场技能制品类型无效")
+            raise HubError("HUB_ARTIFACT_REJECTED", "中心技能制品类型无效")
 
         metadata = self.inspect(identifier)
         if metadata is None:
@@ -155,7 +155,7 @@ class StockSenseMarketSource(SkillSource):
             trust_level=metadata.trust_level,
             metadata={
                 **metadata.extra,
-                "market_skill_id": skill_id,
+                "hub_skill_id": skill_id,
                 "source_url": str(resolved.get("detail_url") or ""),
                 "artifact_sha256": str(artifact.get("sha256") or ""),
             },
@@ -167,45 +167,45 @@ class StockSenseMarketSource(SkillSource):
             with zipfile.ZipFile(archive) as bundle:
                 members = [info for info in bundle.infolist() if not info.is_dir()]
                 if not members or len(members) > _MAX_BUNDLE_FILES:
-                    raise MarketplaceError(
-                        "MARKET_ARTIFACT_REJECTED", "市场技能包文件数量无效"
+                    raise HubError(
+                        "HUB_ARTIFACT_REJECTED", "中心技能包文件数量无效"
                     )
                 files: dict[str, bytes] = {}
                 for info in members:
                     try:
                         path = _validate_bundle_rel_path(info.filename)
                     except ValueError as exc:
-                        raise MarketplaceError(
-                            "MARKET_ARTIFACT_REJECTED", "市场技能包包含不安全路径"
+                        raise HubError(
+                            "HUB_ARTIFACT_REJECTED", "中心技能包包含不安全路径"
                         ) from exc
                     if (
                         info.is_dir()
                         or info.file_size > _MAX_BUNDLE_FILE_BYTES
                         or (info.external_attr >> 16) & 0o170000 == 0o120000
                     ):
-                        raise MarketplaceError(
-                            "MARKET_ARTIFACT_REJECTED", "市场技能包包含不受支持的文件"
+                        raise HubError(
+                            "HUB_ARTIFACT_REJECTED", "中心技能包包含不受支持的文件"
                         )
                     files[path] = bundle.read(info)
         except zipfile.BadZipFile as exc:
-            raise MarketplaceError(
-                "MARKET_ARTIFACT_REJECTED", "市场技能包不是有效 ZIP 文件"
+            raise HubError(
+                "HUB_ARTIFACT_REJECTED", "中心技能包不是有效 ZIP 文件"
             ) from exc
 
         skill_md = files.get("SKILL.md")
         if skill_md is None:
-            raise MarketplaceError(
-                "MARKET_ARTIFACT_REJECTED", "市场技能包缺少 SKILL.md"
+            raise HubError(
+                "HUB_ARTIFACT_REJECTED", "中心技能包缺少 SKILL.md"
             )
         try:
             referenced = _referenced_support_paths(skill_md.decode("utf-8"))
         except UnicodeDecodeError as exc:
-            raise MarketplaceError(
-                "MARKET_ARTIFACT_REJECTED", "市场技能说明必须是 UTF-8 文本"
+            raise HubError(
+                "HUB_ARTIFACT_REJECTED", "中心技能说明必须是 UTF-8 文本"
             ) from exc
         if referenced is None or not referenced.issubset(files):
-            raise MarketplaceError(
-                "MARKET_ARTIFACT_REJECTED", "市场技能包引用了无效支持文件"
+            raise HubError(
+                "HUB_ARTIFACT_REJECTED", "中心技能包引用了无效支持文件"
             )
         return {
             "SKILL.md": skill_md,

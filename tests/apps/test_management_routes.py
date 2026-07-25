@@ -97,6 +97,8 @@ def test_package_export_import_uninstall_and_data_lifecycle(
 
     assert detail.status_code == 200
     assert detail.json()["id"] == app_id
+    assert detail.json()["lineage"] == "user"
+    assert detail.json()["installed_at"]
     assert exported.status_code == 200
     assert exported.content.startswith(b"PK\x03\x04")
     assert removed.status_code == 204
@@ -119,16 +121,29 @@ def test_builtin_uninstall_is_rejected(_isolate_hermes_home) -> None:
     assert response.json()["error"]["code"] == "APP_VERSION_CONFLICT"
 
 
-def test_market_routes_are_authenticated_and_explicitly_disabled_by_default(
-    _isolate_hermes_home,
+def test_hub_routes_are_authenticated_and_can_be_explicitly_disabled(
+    monkeypatch, _isolate_hermes_home,
 ) -> None:
     from hermes_cli.web_server import app, _SESSION_HEADER_NAME, _SESSION_TOKEN
+    from hermes_cli.hub import HubClient, HubConfig
+
+    monkeypatch.setattr(
+        HubClient,
+        "from_active_config",
+        classmethod(
+            lambda cls: cls(HubConfig.from_mapping({"enabled": False}))
+        ),
+    )
+    if hasattr(app.state, "app_hub_operations"):
+        delattr(app.state, "app_hub_operations")
 
     with TestClient(app) as client:
-        unauthenticated = client.get("/api/apps/market")
+        unauthenticated = client.get("/api/apps/hub")
         client.headers[_SESSION_HEADER_NAME] = _SESSION_TOKEN
-        disabled = client.get("/api/apps/market")
+        disabled = client.get("/api/apps/hub")
+        legacy_route = client.get("/api/apps/market")
 
     assert unauthenticated.status_code == 401
     assert disabled.status_code == 503
-    assert disabled.json()["error"]["code"] == "MARKET_DISABLED"
+    assert disabled.json()["error"]["code"] == "HUB_DISABLED"
+    assert legacy_route.status_code == 404

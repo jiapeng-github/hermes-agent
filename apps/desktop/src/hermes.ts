@@ -28,9 +28,9 @@ import type {
   IndustryMonitorRefreshResponse,
   IndustryMonitorSnapshot,
   LogsResponse,
-  MarketplaceAppOperation,
-  MarketplaceAppsResponse,
-  MarketplaceAppSummary,
+  HubAppOperation,
+  HubAppsResponse,
+  HubAppSummary,
   McpCatalogResponse,
   McpServerSummary,
   MemoryProviderConfig,
@@ -180,9 +180,9 @@ export type {
   HermesConfig,
   HermesConfigRecord,
   LogsResponse,
-  MarketplaceAppOperation,
-  MarketplaceAppsResponse,
-  MarketplaceAppSummary,
+  HubAppOperation,
+  HubAppsResponse,
+  HubAppSummary,
   McpCatalogEntry,
   McpCatalogResponse,
   McpServerSummary,
@@ -1438,9 +1438,8 @@ export function getElevenLabsVoices(): Promise<ElevenLabsVoicesResponse> {
 }
 
 // ---------------------------------------------------------------------------
-// Skills hub — search / preview / scan / install (parity with `hermes skills`
-// and the dashboard's Browse-hub tab). Installs spawn background actions whose
-// logs are tailed via getActionStatus().
+// StockSense Skill Center — one first-party Hub source. Installs still use the
+// shared quarantine, scan, approval, and action-log pipeline.
 // ---------------------------------------------------------------------------
 
 const HUB_REQUEST_TIMEOUT_MS = 45_000
@@ -1448,7 +1447,7 @@ const HUB_REQUEST_TIMEOUT_MS = 45_000
 export function getSkillHubSources(): Promise<SkillHubSourcesResponse> {
   return window.hermesDesktop.api<SkillHubSourcesResponse>({
     ...profileScoped(),
-    path: '/api/skills/hub/sources',
+    path: '/api/skills/hub/sources?source=stocksense-hub',
     timeoutMs: HUB_REQUEST_TIMEOUT_MS
   })
 }
@@ -1511,37 +1510,37 @@ export function updateSkillsFromHub(): Promise<ActionResponse> {
 // gateway; the gateway owns remote catalog access and .happ verification.
 // ---------------------------------------------------------------------------
 
-export function listMarketplaceApps(query = ''): Promise<MarketplaceAppsResponse> {
+export function listHubApps(query = ''): Promise<HubAppsResponse> {
   const params = new URLSearchParams({ q: query })
-  return window.hermesDesktop.api<MarketplaceAppsResponse>({
+  return window.hermesDesktop.api<HubAppsResponse>({
     ...profileScoped(),
-    path: `/api/apps/market?${params.toString()}`,
+    path: `/api/apps/hub?${params.toString()}`,
     timeoutMs: HUB_REQUEST_TIMEOUT_MS
   })
 }
 
-export function startMarketplaceAppInstall(appId: string, version?: string): Promise<MarketplaceAppOperation> {
-  return window.hermesDesktop.api<MarketplaceAppOperation>({
+export function startHubAppInstall(appId: string, version?: string): Promise<HubAppOperation> {
+  return window.hermesDesktop.api<HubAppOperation>({
     ...profileScoped(),
-    path: `/api/apps/market/${encodeURIComponent(appId)}/operations`,
+    path: `/api/apps/hub/${encodeURIComponent(appId)}/operations`,
     method: 'POST',
     body: version ? { version } : {},
     timeoutMs: HUB_REQUEST_TIMEOUT_MS
   })
 }
 
-export function getMarketplaceAppOperation(operationId: string): Promise<MarketplaceAppOperation> {
-  return window.hermesDesktop.api<MarketplaceAppOperation>({
+export function getHubAppOperation(operationId: string): Promise<HubAppOperation> {
+  return window.hermesDesktop.api<HubAppOperation>({
     ...profileScoped(),
-    path: `/api/apps/market/operations/${encodeURIComponent(operationId)}`,
+    path: `/api/apps/hub/operations/${encodeURIComponent(operationId)}`,
     timeoutMs: HUB_REQUEST_TIMEOUT_MS
   })
 }
 
-export function cancelMarketplaceAppOperation(operationId: string): Promise<void> {
+export function cancelHubAppOperation(operationId: string): Promise<void> {
   return window.hermesDesktop.api<void>({
     ...profileScoped(),
-    path: `/api/apps/market/operations/${encodeURIComponent(operationId)}`,
+    path: `/api/apps/hub/operations/${encodeURIComponent(operationId)}`,
     method: 'DELETE'
   })
 }
