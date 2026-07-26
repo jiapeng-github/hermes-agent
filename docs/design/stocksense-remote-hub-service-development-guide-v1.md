@@ -33,10 +33,12 @@ stocksense-module-hub/
 引用完整性。`hub_item.publisher_name` 是官方展示字段，不能以此扩展出发布方
 资源；私钥不入表，Artifact 只记录 `signature_key_id`、算法和签名结果。
 
-发布流转：条目草稿 → 版本草稿 → 文件服务上传 → 安全解包和结构校验 →
-SHA-256 与大小计算 → 验证报告 → 部署侧 Ed25519 签名 → 管理员发布 → 更新
-latest stable/beta 指针 → 清理缓存。任何失败都不得让版本可见；已发布版本不可
-修改，修复通过新版本完成。
+版本默认交付方式为 `package`，其流转为：条目草稿 → 版本草稿 → 文件服务上传 →
+安全解包和结构校验 → SHA-256 与大小计算 → 验证报告 → 部署侧 Ed25519 签名 →
+管理员发布 → 更新 latest stable/beta 指针 → 清理缓存。`external` 仅允许 APP，
+不上传制品，版本字段保存 `external_install_message`，创建或草稿切换后直接进入
+READY，发布时跳过制品校验与签名。任何失败都不得让版本可见；已发布版本不可修改，
+修复通过新版本完成。
 
 ## 3. 接口实现
 
@@ -49,6 +51,10 @@ latest stable/beta 指针 → 清理缓存。任何失败都不得让版本可�
 HTTPS，禁止重定向，必须流式返回精确 `Content-Length`。Skill ZIP 限 200 文件、
 单文件最大 1 MiB、必须有 UTF-8 `SKILL.md`；`.happ` 复用冻结 Manifest Schema，
 不允许携带自定义后端代码。
+
+应用目录与详情返回 `delivery`。当 `delivery.type=external` 时，Desktop 仅显示
+“外部安装”与运维提示，不调用 resolve、下载或本地导入；服务端必须对误调用的
+`POST /apps/{id}/resolve` 返回 `409 HUB_EXTERNAL_INSTALL_REQUIRED`。
 
 管理路径为 `/admin-api/hub`，权限为 `hub:category:*`、`hub:item:*`、
 `hub:version:*`、`hub:artifact:*`、`hub:download-log:query`。版本管理提供

@@ -196,4 +196,29 @@ describe('AppMarketView', () => {
     expect(await screen.findByText('正在准备应用安装')).toBeTruthy()
     expect(screen.getByLabelText('安装进度')).toBeTruthy()
   })
+
+  it('shows external-install guidance without starting a package operation', async () => {
+    listHubApps.mockResolvedValue({
+      items: [
+        {
+          id: 'ai.stocksense.external-terminal',
+          name: '机构终端',
+          summary: '由运维统一部署的外部系统',
+          version: '1.0.0',
+          category: '工具',
+          delivery: { type: 'external', message: '外部安装，请联系运维人员。' }
+        }
+      ],
+      installed: {},
+      cache_state: 'fresh'
+    })
+    render(<AppMarketView onCreateApp={vi.fn()} onEditApp={vi.fn()} />)
+
+    await screen.findByText('自选股盯盘看板')
+    fireEvent.click(screen.getByRole('button', { name: '应用中心' }))
+    fireEvent.click(await screen.findByRole('button', { name: '外部安装' }))
+
+    expect(await screen.findByText('外部安装，请联系运维人员。')).toBeTruthy()
+    expect(startHubAppInstall).not.toHaveBeenCalled()
+  })
 })

@@ -145,6 +145,17 @@ class AppHubOperations:
             raise AppDomainError(
                 "APP_REQUEST_INVALID", "hub application id is invalid"
             )
+        try:
+            detail = self.client.get_app(hub_app_id, version=version).data
+        except HubError as exc:
+            raise _hub_error(exc) from exc
+        item = detail.get("item") if isinstance(detail.get("item"), dict) else detail
+        delivery = item.get("delivery") if isinstance(item, dict) else None
+        if isinstance(delivery, dict) and delivery.get("type") == "external":
+            raise AppDomainError(
+                "HUB_EXTERNAL_INSTALL_REQUIRED",
+                str(delivery.get("message") or "外部安装，请联系运维人员。"),
+            )
         operation = _Operation(
             id=str(uuid.uuid4()), hub_app_id=hub_app_id, version=version
         )

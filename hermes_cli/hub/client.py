@@ -59,6 +59,8 @@ class HubConfig:
     offline_cache_hours: int
     require_artifact_signature: bool
     trusted_keys: dict[str, str]
+    # 仅用于域名证书尚未就绪时的临时私有部署；生产应保持 False 并使用 HTTPS。
+    allow_insecure_http: bool = False
 
     @classmethod
     def from_mapping(cls, value: Mapping[str, Any] | None) -> "HubConfig":
@@ -85,6 +87,7 @@ class HubConfig:
             trusted_keys={str(key): str(item) for key, item in (keys or {}).items()}
             if isinstance(keys, Mapping)
             else {},
+            allow_insecure_http=bool(raw.get("allow_insecure_http", False)),
         )
 
     def validate(self) -> None:
@@ -93,7 +96,13 @@ class HubConfig:
         parsed = urlparse(self.base_url)
         if not parsed.scheme or not parsed.netloc:
             raise HubError("HUB_DISABLED", "中心服务地址尚未配置")
-        if parsed.scheme != "https" and not _is_loopback_url(self.base_url):
+        if parsed.scheme not in {"http", "https"}:
+            raise HubError("HUB_DISABLED", "中心服务地址协议无效")
+        if (
+            parsed.scheme != "https"
+            and not _is_loopback_url(self.base_url)
+            and not self.allow_insecure_http
+        ):
             raise HubError("HUB_DISABLED", "中心服务必须使用 HTTPS")
 
 
@@ -117,11 +126,23 @@ def _is_loopback_url(value: str) -> bool:
     }
 
 
-def _safe_remote_url(value: str) -> str:
+def _safe_remote_url(
+    value: str,
+    *,
+    allow_insecure_http: bool = False,
+    allowed_http_host: str | None = None,
+) -> str:
     parsed = urlparse(value)
     if parsed.scheme == "https" and parsed.netloc:
         return value
     if _is_loopback_url(value):
+        return value
+    if (
+        allow_insecure_http
+        and parsed.scheme == "http"
+        and parsed.netloc
+        and parsed.hostname == allowed_http_host
+    ):
         return value
     raise HubError("HUB_ARTIFACT_REJECTED", "中心制品下载地址不安全")
 
@@ -287,7 +308,11 @@ class HubClient:
             raise HubError(
                 "HUB_ARTIFACT_EXPIRED", "中心制品下载票据已过期", retryable=True
             )
-        url = _safe_remote_url(str(descriptor.get("download_url") or ""))
+        url = _safe_remote_url(
+            str(descriptor.get("download_url") or ""),
+            allow_insecure_http=self.config.allow_insecure_http,
+            allowed_http_host=urlparse(self.config.base_url).hostname,
+        )
         destination.parent.mkdir(parents=True, exist_ok=True)
         if destination.exists():
             raise HubError("HUB_ARTIFACT_REJECTED", "中心制品暂存路径已存在")
@@ -354,7 +379,11 @@ class HubClient:
         url = urljoin(f"{self.config.base_url}/", value)
         parsed = urlparse(url)
         hub_host = urlparse(self.config.base_url).hostname
-        if not _safe_remote_url(url) or parsed.hostname != hub_host:
+        if not _safe_remote_url(
+            url,
+            allow_insecure_http=self.config.allow_insecure_http,
+            allowed_http_host=hub_host,
+        ) or parsed.hostname != hub_host:
             raise HubError("HUB_ARTIFACT_REJECTED", "中心图标地址不安全")
         try:
             response = self._client.get(

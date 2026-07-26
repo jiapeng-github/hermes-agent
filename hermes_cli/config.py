@@ -1011,11 +1011,12 @@ DEFAULT_CONFIG = {
     "fallback_providers": [],
     "credential_pool_strategies": {},
     "toolsets": ["hermes-cli"],
-    # First-party StockSense Hub. The loopback endpoint is the checked-in
-    # development default; production builds replace these values in code.
+    # First-party StockSense Hub. HTTP is a temporary exception while the
+    # production domain certificate is pending; switch back to HTTPS afterward.
     "hub": {
         "enabled": True,
-        "base_url": "http://127.0.0.1:48080/app-api/hub/v1",
+        "base_url": "http://175.24.139.183/app-api/hub/v1",
+        "allow_insecure_http": True,
         "channel": "stable",
         "request_timeout_seconds": 15,
         "catalog_cache_minutes": 5,

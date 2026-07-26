@@ -1092,6 +1092,10 @@ export interface HubAppSummary {
   tags?: string[]
   compatibility?: Record<string, unknown>
   permissions?: string[]
+  delivery?: {
+    type: 'package' | 'external'
+    message?: string
+  }
 }
 
 export interface HubAppsResponse {

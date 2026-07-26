@@ -126,6 +126,20 @@ def test_hub_config_ignores_invalid_numeric_values():
     assert value.request_timeout_seconds == 15
 
 
+def test_remote_http_hub_requires_explicit_opt_in():
+    with pytest.raises(HubError, match="HTTPS"):
+        HubConfig.from_mapping({
+            "enabled": True,
+            "base_url": "http://175.24.139.183:48080/app-api/hub/v1",
+        }).validate()
+
+    HubConfig.from_mapping({
+        "enabled": True,
+        "base_url": "http://175.24.139.183:48080/app-api/hub/v1",
+        "allow_insecure_http": True,
+    }).validate()
+
+
 def test_disabled_hub_never_attempts_network(tmp_path: Path):
     client = HubClient(
         HubConfig.from_mapping({"enabled": False}),

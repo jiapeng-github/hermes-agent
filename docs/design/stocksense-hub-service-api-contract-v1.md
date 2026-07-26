@@ -63,8 +63,10 @@ URL 不得缓存。
 
 Skill 和 App 目录项包含 `id`、`name`、`summary`、`description`、
 `category`、`version`、`channel`、`verified`、`featured`、`icon_url`、
-`tags`、`compatibility`、`permissions`、`updated_at`。App `id` 必须等于
-`.happ` Manifest `id`。首期发布方为官方固定展示信息，不建独立发布方资源。
+`tags`、`compatibility`、`permissions`、`updated_at` 和 `delivery`。`delivery`
+为 `{ "type": "package" }` 或 `{ "type": "external", "message": "..." }`。
+`package` App 的 `id` 必须等于 `.happ` Manifest `id`；`external` App 不携带
+`.happ`，只在中心展示外部安装指引。首期发布方为官方固定展示信息，不建独立发布方资源。
 
 resolve 请求：
 
@@ -78,6 +80,11 @@ resolve 返回 `{item, artifact}`。Artifact 的 `kind` 为 `skill_bundle` 或
 开发环境仅允许 loopback HTTP，令牌建议十分钟有效，制品最大 50 MiB，并返回
 准确 `Content-Length`。
 
+`delivery.type=external` 仅允许 App。Desktop 不得对其调用 resolve 或创建本地
+安装操作，而应展示 `delivery.message`（默认“外部安装，请联系运维人员。”）。若旧
+客户端仍调用 `POST /apps/{id}/resolve`，服务端返回 `409`
+`HUB_EXTERNAL_INSTALL_REQUIRED`，不返回下载 URL 或制品描述。
+
 ## 3. 错误与信任根
 
 错误为裸 JSON：
@@ -90,7 +97,7 @@ resolve 返回 `{item, artifact}`。Artifact 的 `kind` 为 `skill_bundle` 或
 `HUB_ITEM_NOT_FOUND`、`HUB_VERSION_INCOMPATIBLE`、`HUB_ARTIFACT_EXPIRED`、
 `HUB_ARTIFACT_TOO_LARGE`、`HUB_ARTIFACT_REJECTED`、
 `HUB_SIGNATURE_INVALID`、`HUB_RATE_LIMITED`、`HUB_DISABLED`、
-`HUB_UNAVAILABLE`。
+`HUB_UNAVAILABLE`、`HUB_EXTERNAL_INSTALL_REQUIRED`。
 
 签名固定为 Ed25519，原文严格为 `kind`、`artifact_id`、`version`、
 `sha256`、`size_bytes` 五行 UTF-8 文本，以 LF 连接且末尾无换行。私钥不写入
@@ -108,7 +115,7 @@ resolve 返回 `{item, artifact}`。Artifact 的 `kind` 为 `skill_bundle` 或
 |---|---|
 | `hub_category` | `type/code` 唯一的技能与应用分类。 |
 | `hub_item` | 目录主实体；`hub_id` 对外唯一，含 `publisher_name` 官方展示字段。 |
-| `hub_item_version` | SemVer、渠道、兼容性、权限、Manifest 和发布状态。 |
+| `hub_item_version` | SemVer、渠道、兼容性、权限、Manifest、`delivery_type`、外部安装提示和发布状态。 |
 | `hub_artifact` | 文件引用、摘要、大小、签名、校验报告和可用状态。 |
 | `hub_download_log` | 追加式下载结果日志；IP、UA 仅存加盐哈希。 |
 
@@ -116,9 +123,12 @@ Artifact 保留 `signature_key_id` 与签名值；当前签名 key 的轮换由�
 
 管理 API 位于 `/admin-api/hub`，使用 `hub:*` 权限点，只提供分类、条目、
 版本、制品和下载日志管理。版本支持 `upload-artifact`、`validate`、
-`publish`、`offline`；不提供发布方或签名密钥 CRUD。发布是原子流程：草稿、
-上传、安全校验、SHA-256/大小、验证报告、Ed25519 签名、更新最新版本指针、
-清理目录缓存。已发布版本不可改写，修复必须创建新版本。
+`publish`、`offline`；不提供发布方或签名密钥 CRUD。`package` 版本发布是原子
+流程：草稿、上传、安全校验、SHA-256/大小、验证报告、Ed25519 签名、更新最新
+版本指针、清理目录缓存。`external` App 版本无需制品、校验和签名，创建或从草稿
+切换后进入 READY，发布时仍校验分类、SemVer、兼容性和外部安装提示。已发布版本
+不可改写，修复必须创建新版本。已上传制品的草稿版本也不得切换为 `external`；应
+新建一个外部安装版本，以避免遗留未使用的 `.happ` 制品。
 
 ## 5. 技能 ZIP 上传预检规则
 
@@ -166,3 +176,5 @@ issue 包含稳定的 `code`、`level`、`path` 和面向管理人员的中文 `
 - 恶意 ZIP/.happ、过期下载令牌、未知签名 key、摘要不匹配和不兼容平台均被拒绝。
 - 真实 `HubClient` 消费者契约、Windows x64 与 macOS arm64 安装测试通过。
 - `.happ` 安装始终经过 AppHost 的两阶段导入与权限确认。
+- 外部安装 App 能被目录与详情接口返回，Desktop 显示安装指引且不请求下载、
+  不创建本地安装记录；直接 resolve 返回 `HUB_EXTERNAL_INSTALL_REQUIRED`。

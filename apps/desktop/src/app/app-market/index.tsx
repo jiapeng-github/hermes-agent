@@ -124,10 +124,13 @@ export function AppMarketView({ onCreateApp, onEditApp }: AppMarketViewProps) {
   const [importing, setImporting] = useState(false)
   const [removeTarget, setRemoveTarget] = useState<AppSummary | null>(null)
   const [hubApps, setHubApps] = useState<HubAppSummary[]>([])
-  const [hubInstalled, setHubInstalled] = useState<Record<string, { version: string; state: 'installed' | 'update_available' }>>({})
+  const [hubInstalled, setHubInstalled] = useState<
+    Record<string, { version: string; state: 'installed' | 'update_available' }>
+  >({})
   const [hubLoading, setHubLoading] = useState(false)
   const [hubOperation, setHubOperation] = useState<HubAppOperation | null>(null)
   const [hubRefreshEpoch, setHubRefreshEpoch] = useState(0)
+  const [externalInstallNotice, setExternalInstallNotice] = useState<string | null>(null)
 
   async function loadApps() {
     setLoading(true)
@@ -305,6 +308,11 @@ export function AppMarketView({ onCreateApp, onEditApp }: AppMarketViewProps) {
     }
   }
 
+  function showExternalInstallNotice(app: HubAppSummary) {
+    setError(null)
+    setExternalInstallNotice(app.delivery?.message || '外部安装，请联系运维人员。')
+  }
+
   async function cancelHubInstall() {
     if (!hubOperation) return
     await cancelHubAppOperation(hubOperation.operation_id).catch(() => undefined)
@@ -399,6 +407,7 @@ export function AppMarketView({ onCreateApp, onEditApp }: AppMarketViewProps) {
           ) : hubApps.length ? (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {hubApps.map(app => {
+                const externalInstall = app.delivery?.type === 'external'
                 const installed = hubInstalled[app.id]
                 const updateAvailable = installed?.state === 'update_available'
                 const installing = hubBusy && hubOperation?.hub_app_id === app.id
@@ -431,16 +440,38 @@ export function AppMarketView({ onCreateApp, onEditApp }: AppMarketViewProps) {
                     <div className="mt-auto flex items-center gap-2 pt-2.5">
                       {app.category && <Badge variant="muted">{app.category}</Badge>}
                       <span className="text-[0.6875rem] text-(--ui-text-tertiary)">v{app.version}</span>
-                      {installing ? (
+                      {externalInstall ? (
+                        <>
+                          <Badge variant="warn">外部安装</Badge>
+                          <Button
+                            className="ml-auto"
+                            onClick={() => showExternalInstallNotice(app)}
+                            size="sm"
+                            variant="outline"
+                          >
+                            外部安装
+                          </Button>
+                        </>
+                      ) : installing ? (
                         <Button className="ml-auto" disabled size="sm">
                           <Loader2 className="size-3.5 animate-spin" /> 准备中…
                         </Button>
                       ) : retrying ? (
-                        <Button className="ml-auto" onClick={() => void installFromHub(app)} size="sm" variant="outline">
+                        <Button
+                          className="ml-auto"
+                          onClick={() => void installFromHub(app)}
+                          size="sm"
+                          variant="outline"
+                        >
                           <RefreshCw className="size-3.5" /> 重试
                         </Button>
                       ) : updateAvailable ? (
-                        <Button className="ml-auto" disabled={hubBusy} onClick={() => void installFromHub(app)} size="sm">
+                        <Button
+                          className="ml-auto"
+                          disabled={hubBusy}
+                          onClick={() => void installFromHub(app)}
+                          size="sm"
+                        >
                           <RefreshCw className="size-3.5" /> 更新
                         </Button>
                       ) : installed ? (
@@ -537,7 +568,9 @@ export function AppMarketView({ onCreateApp, onEditApp }: AppMarketViewProps) {
                     <Badge variant={app.status === 'ready' ? 'default' : 'warn'}>{STATUS_LABEL[app.status]}</Badge>
                     <span className="text-[0.6875rem] text-(--ui-text-tertiary)">v{app.version}</span>
                     <span className="text-[0.6875rem] text-(--ui-text-tertiary)">{sourceLabel(app)}</span>
-                    <span className="text-[0.6875rem] text-(--ui-text-tertiary)">安装于 {formatInstalledAt(app.installed_at)}</span>
+                    <span className="text-[0.6875rem] text-(--ui-text-tertiary)">
+                      安装于 {formatInstalledAt(app.installed_at)}
+                    </span>
                     <Button
                       aria-label={`打开 ${app.name}`}
                       className="ml-auto"
@@ -622,6 +655,18 @@ export function AppMarketView({ onCreateApp, onEditApp }: AppMarketViewProps) {
             <Button onClick={() => void cancelHubInstall()} variant="ghost">
               取消
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog onOpenChange={open => !open && setExternalInstallNotice(null)} open={Boolean(externalInstallNotice)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>外部安装</DialogTitle>
+            <DialogDescription>{externalInstallNotice}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button onClick={() => setExternalInstallNotice(null)}>知道了</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
