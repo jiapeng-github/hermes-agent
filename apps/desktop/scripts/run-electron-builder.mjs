@@ -40,7 +40,8 @@ function electronBuilderCli() {
 }
 
 function runtimeFlavor() {
-  const manifestPath = path.resolve(__dirname, "..", "build", "offline-runtime", "manifest.json")
+  const scriptsDir = path.dirname(new URL(import.meta.url).pathname)
+  const manifestPath = path.resolve(scriptsDir, "..", "build", "offline-runtime", "manifest.json")
   try {
     const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"))
     return manifest && manifest.bundled === true ? "offline" : "network"

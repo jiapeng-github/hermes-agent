@@ -11,6 +11,7 @@ const {
   TARGETS,
   bundleRuntimeEnabled,
   prepareSourceBundle,
+  removeCachedWindowsMinorPythonLink,
   rebaseCopiedSymlinks
 } = require('./prepare-offline-runtime.cjs')
 
@@ -37,6 +38,27 @@ test('runtime bundle switch defaults on and accepts explicit offline/network val
   assert.equal(bundleRuntimeEnabled('0'), false)
   assert.equal(bundleRuntimeEnabled('network'), false)
   assert.throws(() => bundleRuntimeEnabled('maybe'), /Invalid STOCKSENSE_BUNDLE_RUNTIME/)
+})
+
+test('cached Windows Python minor link is removed before uv recreates it', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stocksense-windows-python-link-'))
+  const minorLink = path.join(root, 'cpython-3.11-windows-x86_64-none')
+  const patchInstall = path.join(root, 'cpython-3.11.14-windows-x86_64-none')
+  try {
+    fs.mkdirSync(patchInstall)
+    if (process.platform === 'win32') {
+      fs.mkdirSync(minorLink)
+    } else {
+      fs.symlinkSync(patchInstall, minorLink, 'junction')
+    }
+
+    assert.equal(removeCachedWindowsMinorPythonLink(root), true)
+    assert.equal(fs.existsSync(minorLink), false)
+    assert.equal(fs.existsSync(patchInstall), true)
+    assert.equal(removeCachedWindowsMinorPythonLink(root), false)
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true })
+  }
 })
 
 test('network installer bundles pinned source without native runtime files', () => {
