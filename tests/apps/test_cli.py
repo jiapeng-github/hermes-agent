@@ -103,7 +103,7 @@ def test_cli_fixture_completes_create_modify_export_import_and_rollback(
         ["publish", str(workspace), "--session-id", "cli-create"],
     )
     assert code == 0
-    assert published_v1["app"]["version"] == "0.1.0"
+    assert published_v1["app"]["version"] == "1.0.0"
 
     edit = tmp_path / "workspace-v2"
     code, checked_out = _run(
@@ -119,7 +119,7 @@ def test_cli_fixture_completes_create_modify_export_import_and_rollback(
     )
     assert code == 0
     assert checked_out["workspace"] == str(edit)
-    _set_version(edit, "0.2.0")
+    _set_version(edit, "1.1.0")
 
     output_schema = edit / "schemas/analyze.output.json"
     output_schema.unlink()
@@ -131,7 +131,7 @@ def test_cli_fixture_completes_create_modify_export_import_and_rollback(
     )
     assert code == 1
     assert failed_publish["error"]["code"] == "APP_MANIFEST_INVALID"
-    assert primary.registry.get("local.stockagent.cli-fixture").active_version == "0.1.0"
+    assert primary.registry.get("local.stockagent.cli-fixture").active_version == "1.0.0"
     output_schema.write_text(
         json.dumps(
             {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object"}
@@ -149,7 +149,7 @@ def test_cli_fixture_completes_create_modify_export_import_and_rollback(
         ["publish", str(edit), "--session-id", "cli-modify"],
     )
     assert code == 0
-    assert published_v2["app"]["version"] == "0.2.0"
+    assert published_v2["app"]["version"] == "1.1.0"
 
     code, listed = _run(parser, primary, capsys, ["list"])
     assert code == 0
@@ -203,7 +203,7 @@ def test_cli_fixture_completes_create_modify_export_import_and_rollback(
         ],
     )
     assert code == 0
-    assert imported["app"]["version"] == "0.2.0"
+    assert imported["app"]["version"] == "1.1.0"
 
     code, rolled_back = _run(
         parser,
@@ -213,8 +213,8 @@ def test_cli_fixture_completes_create_modify_export_import_and_rollback(
             "rollback",
             "local.stockagent.cli-fixture",
             "--version",
-            "0.1.0",
+            "1.0.0",
         ],
     )
     assert code == 0
-    assert rolled_back["version"] == "0.1.0"
+    assert rolled_back["version"] == "1.0.0"

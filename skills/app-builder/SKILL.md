@@ -31,7 +31,7 @@ Ask only when application identity, core workflow, required data source, or dest
 
 ## Create
 
-1. Normalize a reverse-DNS id. Prefer `local.stockagent.{slug}` unless the user supplied a valid id.
+1. Normalize a reverse-DNS id. Prefer `ai.stocksense.{slug}` unless the user supplied a valid id. This is also the public Hub `hub_id`; keep it unchanged when exporting and publishing the `.happ` package.
 2. Select `dashboard` for data-rich React applications or `vanilla` for small dependency-free tools.
 3. Run `hermes apps init --id {app_id} --template {template} --directory {workspace} --json`.
 4. Replace the sample Manifest action before feature work. Request only capabilities required by the product.
@@ -46,7 +46,7 @@ For a dashboard workspace, install dependencies only in its generated `source/` 
 1. Run `hermes apps inspect {app_id} --json` and verify active version, source availability, permissions, and development session.
 2. Run `hermes apps checkout {app_id} --version {version} --directory {workspace} --json`.
 3. Preserve existing workflows and storage shape unless the request explicitly changes them.
-4. Increment patch for fixes, minor for compatible features, and major for breaking contracts or data changes.
+4. The generated first release is `1.0.0`. Increment patch for fixes, minor for compatible features, and major for breaking contracts or data changes.
 5. Keep existing grants narrow. A new Manifest request is not automatically granted by publication.
 6. Never edit or delete the previous installed version; it is the rollback target.
 

@@ -451,7 +451,7 @@ def _template_manifest(app_id: str, name: str) -> dict[str, Any]:
         "schema_version": 1,
         "id": app_id,
         "name": name,
-        "version": "0.1.0",
+        "version": "1.0.0",
         "description": f"{name} Hermes application",
         "entry": "dist/index.html",
         "icon": "icon.png",

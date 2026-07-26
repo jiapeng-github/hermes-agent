@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
+import yaml
 
 from hermes_cli.apps.errors import AppDomainError, PackageValidationError
 from hermes_cli.apps.package import export_happ_package, inspect_happ_package
@@ -32,6 +33,7 @@ def test_vanilla_init_builds_a_valid_runtime_workspace(tmp_path: Path) -> None:
 
     assert report.valid is True
     assert report.app_id == "local.stockagent.watchlist"
+    assert yaml.safe_load((workspace / "app.yaml").read_text(encoding="utf-8"))["version"] == "1.0.0"
     assert (workspace / "dist/index.html").is_file()
     assert service.metadata(workspace).template == "vanilla"
 

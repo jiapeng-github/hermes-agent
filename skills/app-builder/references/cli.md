@@ -5,7 +5,7 @@ Use `--json` for every agent-driven call. A nonzero exit means the operation did
 ## Workspace lifecycle
 
 ```bash
-hermes apps init --id local.stockagent.example --template dashboard --directory ./example --json
+hermes apps init --id ai.stocksense.example --template dashboard --directory ./example --json
 hermes apps build ./example --json
 hermes apps validate ./example --json
 hermes apps publish ./example --session-id SESSION_ID --json
@@ -21,9 +21,9 @@ Validation checks Manifest semantics, Action JSON Schemas, SDK compatibility, pa
 
 ```bash
 hermes apps list --query watchlist --json
-hermes apps inspect local.stockagent.watchlist --json
-hermes apps checkout local.stockagent.watchlist --version 1.0.0 --directory ./watchlist-1.1 --json
-hermes apps rollback local.stockagent.watchlist --version 1.0.0 --json
+hermes apps inspect ai.stocksense.watchlist --json
+hermes apps checkout ai.stocksense.watchlist --version 1.0.0 --directory ./watchlist-1.1 --json
+hermes apps rollback ai.stocksense.watchlist --version 1.0.0 --json
 ```
 
 `inspect` returns `app`, `versions`, `development_session`, `active_path`, and the installed file inventory. Never write to `active_path`.
@@ -31,8 +31,8 @@ hermes apps rollback local.stockagent.watchlist --version 1.0.0 --json
 ## Export
 
 ```bash
-hermes apps export local.stockagent.watchlist --output ./watchlist.happ --json
-hermes apps export local.stockagent.watchlist --version 1.0.0 --no-include-source --output ./watchlist-runtime-only.happ --json
+hermes apps export ai.stocksense.watchlist --output ./watchlist.happ --json
+hermes apps export ai.stocksense.watchlist --version 1.0.0 --no-include-source --output ./watchlist-runtime-only.happ --json
 ```
 
 Use `--force` only when the user explicitly approves replacing the destination.

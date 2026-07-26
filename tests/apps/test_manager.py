@@ -50,7 +50,7 @@ def test_fixture_create_modify_recover_export_import_and_rollback(tmp_path: Path
         "local.stockagent.watchlist",
         tmp_path / "watchlist-v2",
     )
-    _set_version(edit, "0.2.0")
+    _set_version(edit, "1.1.0")
     (edit / "source/app.js").write_text(
         (edit / "source/app.js").read_text(encoding="utf-8")
         + "\ndocument.title = 'Watchlist v2';\n",
@@ -63,7 +63,7 @@ def test_fixture_create_modify_recover_export_import_and_rollback(tmp_path: Path
     with pytest.raises(AppDomainError):
         primary.publish(edit, session_id="session-failed-edit")
 
-    assert primary.registry.get("local.stockagent.watchlist").active_version == "0.1.0"
+    assert primary.registry.get("local.stockagent.watchlist").active_version == "1.0.0"
     assert edit.is_dir()
     assert not any(primary.paths.staging.iterdir())
 
@@ -75,10 +75,10 @@ def test_fixture_create_modify_recover_export_import_and_rollback(tmp_path: Path
     )
     second = primary.publish(edit, session_id="session-modify")
 
-    assert second["app"]["version"] == "0.2.0"
+    assert second["app"]["version"] == "1.1.0"
     assert set(primary.registry.get("local.stockagent.watchlist").versions) == {
-        "0.1.0",
-        "0.2.0",
+        "1.0.0",
+        "1.1.0",
     }
     assert primary.inspect("local.stockagent.watchlist")["development_session"] == "session-modify"
 
@@ -97,13 +97,13 @@ def test_fixture_create_modify_recover_export_import_and_rollback(tmp_path: Path
         ),
     )
 
-    assert imported["app"]["version"] == "0.2.0"
+    assert imported["app"]["version"] == "1.1.0"
     assert secondary.registry.get("local.stockagent.watchlist") is not None
 
-    rolled_back = primary.rollback("local.stockagent.watchlist", "0.1.0")
+    rolled_back = primary.rollback("local.stockagent.watchlist", "1.0.0")
 
-    assert first["app"]["version"] == "0.1.0"
-    assert rolled_back["version"] == "0.1.0"
+    assert first["app"]["version"] == "1.0.0"
+    assert rolled_back["version"] == "1.0.0"
     assert data_file.read_text(encoding="utf-8") == '{"symbols":["600519"]}'
 
 
@@ -126,4 +126,4 @@ def test_publish_requires_a_version_increment(tmp_path: Path) -> None:
         manager.publish(edit)
 
     assert caught.value.code == "APP_VERSION_CONFLICT"
-    assert manager.registry.get("local.stockagent.versioned").active_version == "0.1.0"
+    assert manager.registry.get("local.stockagent.versioned").active_version == "1.0.0"
