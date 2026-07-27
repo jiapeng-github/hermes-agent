@@ -68,6 +68,18 @@ test('buildDesktopBackendEnv extends PYTHONPATH and backend PATH together', () =
   assert.ok(env.PATH.includes('/opt/homebrew/bin'))
 })
 
+test('buildDesktopBackendEnv pins the packaged managed config when supplied', () => {
+  const env = buildDesktopBackendEnv({
+    hermesHome: '/Users/test/.hermes',
+    managedConfigDir: '/Applications/StockSense.app/Contents/Resources/stocksense-managed',
+    currentEnv: { PATH: '/usr/bin:/bin' },
+    platform: 'darwin',
+    pathModule: path.posix
+  })
+
+  assert.equal(env.HERMES_MANAGED_DIR, '/Applications/StockSense.app/Contents/Resources/stocksense-managed')
+})
+
 test('normalizeHermesHomeRoot maps profile homes back to the global Hermes root', () => {
   assert.equal(
     normalizeHermesHomeRoot('/Users/test/.hermes/profiles/oracle', { pathModule: path.posix }),

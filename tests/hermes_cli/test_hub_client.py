@@ -140,6 +140,38 @@ def test_remote_http_hub_requires_explicit_opt_in():
     }).validate()
 
 
+def test_managed_hub_config_overrides_a_stale_localhost_user_value(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    managed = tmp_path / "managed"
+    home.mkdir()
+    managed.mkdir()
+    (home / "config.yaml").write_text(
+        "hub:\n  base_url: http://127.0.0.1:48080/app-api/hub/v1\n",
+        encoding="utf-8",
+    )
+    (managed / "config.yaml").write_text(
+        "hub:\n  enabled: true\n  base_url: https://hub.stocksense.example/app-api/hub/v1\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("HERMES_HOME", str(home))
+    monkeypatch.setenv("HERMES_MANAGED_DIR", str(managed))
+
+    from hermes_cli import managed_scope
+    import hermes_cli.config as config_module
+
+    config_module._LOAD_CONFIG_CACHE.clear()
+    config_module._RAW_CONFIG_CACHE.clear()
+    managed_scope.invalidate_managed_cache()
+
+    try:
+        value = HubConfig.from_mapping(config_module.load_config().get("hub"))
+        assert value.base_url == "https://hub.stocksense.example/app-api/hub/v1"
+    finally:
+        config_module._LOAD_CONFIG_CACHE.clear()
+        config_module._RAW_CONFIG_CACHE.clear()
+        managed_scope.invalidate_managed_cache()
+
+
 def test_disabled_hub_never_attempts_network(tmp_path: Path):
     client = HubClient(
         HubConfig.from_mapping({"enabled": False}),

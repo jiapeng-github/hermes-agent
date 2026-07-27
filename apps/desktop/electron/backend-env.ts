@@ -92,6 +92,7 @@ function normalizeHermesHomeRoot(hermesHome, { pathModule = pathModuleForPlatfor
 
 function buildDesktopBackendEnv({
   hermesHome,
+  managedConfigDir,
   pythonPathEntries = [],
   venvRoot,
   currentEnv = process.env,
@@ -102,7 +103,7 @@ function buildDesktopBackendEnv({
   const currentPythonPath = currentEnv?.PYTHONPATH || ''
   const key = pathEnvKey(currentEnv, platform)
 
-  return {
+  const env = {
     PYTHONPATH: appendUniquePathEntries([...pythonPathEntries, currentPythonPath], { delimiter }),
     [key]: buildDesktopBackendPath({
       hermesHome,
@@ -112,6 +113,12 @@ function buildDesktopBackendEnv({
       pathModule
     })
   }
+
+  if (managedConfigDir) {
+    env.HERMES_MANAGED_DIR = managedConfigDir
+  }
+
+  return env
 }
 
 export {
