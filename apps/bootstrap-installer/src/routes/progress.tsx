@@ -50,11 +50,11 @@ export default function ProgressScreen({ bootstrap }: ProgressProps) {
   }, [bootstrap.status])
 
   const isUpdate = mode === 'update'
-  const title = bootstrap.status === 'completed' ? 'Done' : isUpdate ? 'Updating Hermes' : 'Setting up Hermes Agent'
+  const title = bootstrap.status === 'completed' ? '完成' : isUpdate ? '正在更新 StockSense' : '正在安装 StockSense'
 
   const description = isUpdate
     ? 'Hermes is updating to the latest version — this only takes a moment.'
-    : 'This is a one-time setup. The Hermes installer is downloading dependencies and configuring your machine. Subsequent launches will skip this step.'
+    : '这是一次性初始化。StockSense 正在下载依赖并配置运行环境，后续启动将跳过此步骤。'
 
   const pct = Math.round(progress.fraction * 100)
 

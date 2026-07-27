@@ -66,13 +66,13 @@ pub fn bootstrap_cache_dir() -> PathBuf {
 /// HERMES_HOME so it survives repo checkout deletion (unlike anything under
 /// hermes-agent/).
 ///
-/// On Windows this is `%LOCALAPPDATA%\hermes\hermes-setup.exe`; on other
+/// On Windows this is `%LOCALAPPDATA%\hermes\stocksense-setup.exe`; on other
 /// platforms the extension differs but the directory is the same.
 pub fn installer_dest() -> PathBuf {
     let name = if cfg!(target_os = "windows") {
-        "hermes-setup.exe"
+        "stocksense-setup.exe"
     } else {
-        "hermes-setup"
+        "stocksense-setup"
     };
     hermes_home().join(name)
 }
@@ -166,7 +166,7 @@ pub fn init_logging() -> Option<WorkerGuard> {
     if let Err(err) = std::fs::create_dir_all(&dir) {
         // No log dir → log to stderr only. Don't panic; the installer
         // should still be usable on an exotic filesystem.
-        eprintln!("[hermes-setup] could not create log dir {dir:?}: {err}");
+        eprintln!("[stocksense-setup] could not create log dir {dir:?}: {err}");
         return None;
     }
 

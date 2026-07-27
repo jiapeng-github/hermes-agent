@@ -626,10 +626,9 @@ const DESKTOP_PROFILE_CONFIG_PATH = path.join(app.getPath('userData'), 'active-p
 // Mirrors hermes_cli.profiles._PROFILE_ID_RE so we never hand the backend a
 // value its profile resolver would reject and exit on.
 const PROFILE_NAME_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/
-// Branch we track for self-update. The GUI work has merged to main, so this
-// tracks main. User can also override at runtime via
+// Branch we track for StockSense self-updates. User can also override at runtime via
 // hermesDesktop.updates.setBranch().
-const DEFAULT_UPDATE_BRANCH = 'main'
+const DEFAULT_UPDATE_BRANCH = 'release'
 // desktop.log lives under HERMES_HOME/logs/ so it sits next to agent.log,
 // errors.log, gateway.log produced by hermes_logging.setup_logging — one log
 // directory per user, regardless of which UI surface produced the line.
@@ -2308,15 +2307,15 @@ function emitUpdateProgress(payload) {
   }
 }
 
-// Self-heal the tracked update branch: if origin no longer publishes it (e.g.
-// bb/gui was merged into main and deleted), fall back to main and persist so
-// every later check/apply follows main — no manual flip, even for already-
-// installed clients. Read-only ls-remote probe; only flips on a definitive
+// Self-heal the tracked update branch: if origin no longer publishes it, fall
+// back to StockSense's stable release branch and persist so every later
+// check/apply follows it — no manual flip, even for already-installed clients.
+// Read-only ls-remote probe; only flips on a definitive
 // "ref absent" (exit 2), never on a transient network error, so a flaky
 // connection can't strand a user on the wrong branch.
 async function resolveHealedBranch(updateRoot, branch) {
-  if (!branch || branch === 'main') {
-    return branch || 'main'
+  if (!branch || branch === DEFAULT_UPDATE_BRANCH) {
+    return branch || DEFAULT_UPDATE_BRANCH
   }
 
   const originUrl = await getOriginUrl(updateRoot)
@@ -2327,14 +2326,14 @@ async function resolveHealedBranch(updateRoot, branch) {
     return branch
   }
 
-  rememberLog(`[updates] origin/${branch} is gone (merged?); falling back to main`)
+  rememberLog(`[updates] origin/${branch} is gone; falling back to ${DEFAULT_UPDATE_BRANCH}`)
   const config = readDesktopUpdateConfig()
 
-  if (config.branch !== 'main') {
-    writeDesktopUpdateConfig({ ...config, branch: 'main' })
+  if (config.branch !== DEFAULT_UPDATE_BRANCH) {
+    writeDesktopUpdateConfig({ ...config, branch: DEFAULT_UPDATE_BRANCH })
   }
 
-  return 'main'
+  return DEFAULT_UPDATE_BRANCH
 }
 
 async function checkUpdates() {
@@ -2486,14 +2485,14 @@ let updateInFlight = false
 let isQuittingForHandoff = false
 
 // Resolve the staged updater binary. The Tauri installer copies itself to
-// HERMES_HOME/hermes-setup.exe on a successful install (see
+// HERMES_HOME/stocksense-setup.exe on a successful install (see
 // apps/bootstrap-installer paths::copy_self_to_hermes_home). That binary owns
 // ALL repo mutation — running `hermes update` + rebuilding the desktop — so
 // the desktop never touches its own bits while running. Returns null when the
 // updater isn't staged (e.g. a dev/source run that never went through the
 // installer); callers degrade gracefully.
 function resolveUpdaterBinary() {
-  const name = IS_WINDOWS ? 'hermes-setup.exe' : 'hermes-setup'
+  const name = IS_WINDOWS ? 'stocksense-setup.exe' : 'stocksense-setup'
   const candidate = path.join(HERMES_HOME, name)
 
   return fileExists(candidate) ? candidate : null
@@ -2707,7 +2706,7 @@ async function releaseBackendLock(updateRoot, tag) {
 //
 // The desktop is a pure consumer: it does NOT git pull / pip install / rebuild
 // itself (the old open-coded git dance lived here and drifted from
-// `hermes update`). Instead we spawn the staged Hermes-Setup binary with
+// `hermes update`). Instead we spawn the staged StockSense Setup binary with
 // --update and quit, so it can run `hermes update` (which refuses while we
 // hold the venv shim) and rebuild the desktop with our exe already gone.
 //
@@ -2724,7 +2723,7 @@ async function applyUpdates(opts = {}) {
     const updater = resolveUpdaterBinary()
 
     if (!updater && !IS_WINDOWS) {
-      // macOS/Linux drag-install: no staged Tauri hermes-setup. Unlike Windows
+      // macOS/Linux drag-install: no staged Tauri StockSense Setup. Unlike Windows
       // (where a venv-shim file lock forces the quit→hand-off→rebuild dance),
       // there's no mandatory file locking here, so the desktop can drive the
       // whole update itself: `hermes update` (backend) + `hermes desktop
@@ -2736,13 +2735,13 @@ async function applyUpdates(opts = {}) {
     if (!updater) {
       // No staged updater binary — this is a CLI-installed user (they ran
       // `hermes desktop`, never the Tauri installer that self-copies
-      // hermes-setup.exe into HERMES_HOME). They DO have a working `hermes`
+      // stocksense-setup.exe into HERMES_HOME). They DO have a working `hermes`
       // on PATH / in the venv, so the correct path is the one-liner in their
       // native medium. We show the EXACT command, branch-pinned to the
       // checkout they're on — bare `hermes update` defaults to main and would
-      // silently switch a bb/gui (or any non-main) install off-branch. Mirror
-      // the GUI button's contract: append --branch <current> for non-main
-      // checkouts, keep it bare for main so the card stays clean.
+      // silently switch a StockSense checkout away from its release branch.
+      // Mirror the GUI button's contract: append --branch <current> for any
+      // non-default checkout, keep it bare for the StockSense release branch.
       const updateRoot = resolveUpdateRoot()
       let command = 'hermes update'
 
@@ -2753,7 +2752,7 @@ async function applyUpdates(opts = {}) {
         if (head.code === 0 && current && current !== 'HEAD') {
           const branch = await resolveHealedBranch(updateRoot, current)
 
-          if (branch !== 'main') {
+          if (branch !== DEFAULT_UPDATE_BRANCH) {
             command = `hermes update --branch ${branch}`
           }
         }
