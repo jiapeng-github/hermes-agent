@@ -17,7 +17,7 @@ test('spawnUpdaterProcess hides the updater console and detaches the child on Wi
   }
 
   const result = spawnUpdaterProcess(
-    'hermes-setup.exe',
+    'stocksense-setup.exe',
     ['--update', '--branch', 'main'],
     { cwd: 'C:\\Hermes', detached: true, stdio: 'ignore' },
     {
@@ -35,7 +35,7 @@ test('spawnUpdaterProcess hides the updater console and detaches the child on Wi
   assert.deepEqual(calls, [
     {
       args: ['--update', '--branch', 'main'],
-      command: 'hermes-setup.exe',
+      command: 'stocksense-setup.exe',
       options: { cwd: 'C:\\Hermes', detached: true, stdio: 'ignore', windowsHide: true }
     }
   ])
@@ -45,7 +45,7 @@ test('spawnUpdaterProcess preserves updater options off Windows', () => {
   let capturedOptions: SpawnOptions | undefined
 
   spawnUpdaterProcess(
-    'hermes-setup',
+    'stocksense-setup',
     ['--update'],
     { detached: true, stdio: 'ignore' },
     {
