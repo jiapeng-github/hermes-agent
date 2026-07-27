@@ -81,6 +81,10 @@ fn main() {
     }
     println!("cargo:rerun-if-env-changed=HERMES_BUILD_PIN_COMMIT");
     println!("cargo:rerun-if-env-changed=HERMES_BUILD_PIN_BRANCH");
+    // install_script.rs compiles these scripts into StockSense Setup. Rebuild
+    // whenever either payload changes, even when the Rust source is untouched.
+    println!("cargo:rerun-if-changed=../../../scripts/install.ps1");
+    println!("cargo:rerun-if-changed=../../../scripts/install.sh");
 
     // -----------------------------------------------------------------
     // Tauri windows manifest. See hermes-setup.manifest for rationale —

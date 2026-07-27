@@ -541,6 +541,19 @@ function resolveStockMcpDefaultsPath() {
   return candidates.find(candidate => candidate && fileExists(candidate)) || null
 }
 
+function resolveStockSenseManagedConfigDir() {
+  const candidates = [
+    process.resourcesPath ? path.join(process.resourcesPath, 'stocksense-managed') : null,
+    path.join(APP_ROOT, 'resources', 'stocksense-managed')
+  ]
+
+  return candidates.find(candidate => candidate && fileExists(path.join(candidate, 'config.yaml'))) || null
+}
+
+// This package-owned policy wins over stale user config.yaml values. In
+// particular, bridge releases must not keep querying a former localhost Hub.
+const STOCKSENSE_MANAGED_CONFIG_DIR = resolveStockSenseManagedConfigDir()
+
 function resolveOfflineRuntimePath() {
   const expectedTarget =
     process.platform === 'win32' && process.arch === 'x64'
@@ -3550,6 +3563,7 @@ function createPythonBackend(root, label, backendArgs, options: any = {}) {
     args: ['-m', 'hermes_cli.main', ...backendArgs],
     env: buildDesktopBackendEnv({
       hermesHome: HERMES_HOME,
+      managedConfigDir: STOCKSENSE_MANAGED_CONFIG_DIR,
       pythonPathEntries: [root, ...getVenvSitePackagesEntries(venvRoot)],
       venvRoot
     }),
@@ -3574,6 +3588,7 @@ function createActiveBackend(backendArgs) {
     args: ['-m', 'hermes_cli.main', ...backendArgs],
     env: buildDesktopBackendEnv({
       hermesHome: HERMES_HOME,
+      managedConfigDir: STOCKSENSE_MANAGED_CONFIG_DIR,
       pythonPathEntries: [ACTIVE_HERMES_ROOT, ...getVenvSitePackagesEntries(VENV_ROOT)],
       venvRoot: VENV_ROOT
     }),
@@ -7504,10 +7519,11 @@ async function spawnPoolBackend(profile, entry) {
     backend.args,
     hiddenWindowsChildOptions({
       cwd: hermesCwd,
-      env: {
-        ...process.env,
-        HERMES_HOME,
-        ...backend.env,
+        env: {
+          ...process.env,
+          HERMES_HOME,
+          ...backend.env,
+          ...(STOCKSENSE_MANAGED_CONFIG_DIR ? { HERMES_MANAGED_DIR: STOCKSENSE_MANAGED_CONFIG_DIR } : {}),
         // Pin the gateway's tool/terminal cwd to the same directory we chose for
         // the child process. Inherited TERMINAL_CWD (or a stale config bridge)
         // can still point at the install dir even when spawn cwd is home.
@@ -7774,6 +7790,7 @@ async function startHermes() {
           // can't reliably do that, so we set it inline for every spawn.
           HERMES_HOME,
           ...backend.env,
+          ...(STOCKSENSE_MANAGED_CONFIG_DIR ? { HERMES_MANAGED_DIR: STOCKSENSE_MANAGED_CONFIG_DIR } : {}),
           TERMINAL_CWD: hermesCwd,
           HERMES_DASHBOARD_SESSION_TOKEN: token,
           // Marks this dashboard backend as desktop-spawned so it runs the cron

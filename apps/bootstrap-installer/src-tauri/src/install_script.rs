@@ -2,10 +2,11 @@
 //!
 //! Resolution order:
 //!   1. Dev shortcut: a sibling repo checkout via $HERMES_SETUP_DEV_REPO_ROOT
-//!      env var. Lets devs iterate without re-publishing the script.
-//!   2. Bundled fallback: if the installer was bundled with a script (e.g.
-//!      tauri's `resource` mechanism), serve from there. Not used today.
-//!   3. Network: download from GitHub raw at a pinned commit or branch.
+//!      env var. Lets devs iterate without rebuilding the installer.
+//!   2. Bundled script: every release installer compiles the matching install
+//!      script into the binary, then materializes it in the local cache.
+//!   3. Network/cache fallback retained for older or custom builds that do
+//!      not carry a bundled script.
 //!      Commit pins are immutable; branch pins are HEAD-tracking.
 //!
 //! Mirrors `apps/desktop/electron/bootstrap-runner.ts`'s `resolveInstallScript`,
@@ -18,6 +19,12 @@ use std::path::{Path, PathBuf};
 use tokio::io::AsyncWriteExt;
 
 use crate::paths;
+
+// Keep the first bootstrap stage independent of GitHub's raw-content host.
+// Some enterprise Windows networks MITM HTTPS and do not expose the proxy's
+// root CA to rustls, causing the installer to fail before install.ps1 starts.
+const BUNDLED_INSTALL_PS1: &[u8] = include_bytes!("../../../../scripts/install.ps1");
+const BUNDLED_INSTALL_SH: &[u8] = include_bytes!("../../../../scripts/install.sh");
 
 /// Identity of the install.ps1 we'll execute. Used by both the manifest
 /// fetch and the per-stage runs.
@@ -60,6 +67,13 @@ impl ScriptKind {
             Self::Ps1 => "install.ps1",
             Self::Sh => "install.sh",
         }
+    }
+}
+
+fn bundled_script_bytes(kind: ScriptKind) -> &'static [u8] {
+    match kind {
+        ScriptKind::Ps1 => BUNDLED_INSTALL_PS1,
+        ScriptKind::Sh => BUNDLED_INSTALL_SH,
     }
 }
 
@@ -120,9 +134,15 @@ pub async fn resolve(
         }
     }
 
-    // 2. (Not implemented) bundled fallback.
+    // 2. Materialize the script that was built into this installer. The
+    // script and the commit pin come from the same CI checkout, so this is
+    // both reproducible and independent of raw.githubusercontent.com.
+    if !bundled_script_bytes(kind).is_empty() {
+        return materialize_bundled_script(kind, pin, emit_log);
+    }
 
-    // 3. Network. Pin must be a real commit or a branch ref.
+    // 3. Network. This is only reachable for a custom binary compiled
+    // without the embedded scripts. Pin must be a real commit or a branch ref.
     //
     // Commit SHAs are immutable — permanent cache reuse is safe.
     // Branch/tag pins are moving refs: always try to refresh so "Retry install"
@@ -203,6 +223,59 @@ pub async fn resolve(
             }
         }
     }
+}
+
+fn materialize_bundled_script(
+    kind: ScriptKind,
+    pin: &Pin,
+    emit_log: &impl Fn(&str),
+) -> Result<ResolvedScript> {
+    let cache_ref = pin
+        .commit
+        .as_deref()
+        .filter(|value| is_valid_commit(value))
+        .or(pin.branch.as_deref())
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or("unversioned");
+    let cache_name = format!("bundled-{cache_ref}");
+    let path = cached_path(kind, &cache_name);
+    let bytes = prepare_cached_script_bytes(kind, bundled_script_bytes(kind));
+
+    if std::fs::read(&path).ok().as_deref() != Some(bytes.as_slice()) {
+        let parent = path.parent().ok_or_else(|| {
+            anyhow!("bundled install script has no cache parent: {}", path.display())
+        })?;
+        std::fs::create_dir_all(parent)
+            .with_context(|| format!("creating bundled-script cache directory {}", parent.display()))?;
+
+        let tmp_path = path.with_extension(format!(
+            "{}.tmp",
+            path.extension().and_then(|value| value.to_str()).unwrap_or("script")
+        ));
+        std::fs::write(&tmp_path, &bytes)
+            .with_context(|| format!("writing bundled install script {}", tmp_path.display()))?;
+
+        // Windows rename cannot replace an existing file. Remove only after
+        // the full replacement has been written successfully.
+        if path.exists() {
+            std::fs::remove_file(&path)
+                .with_context(|| format!("replacing bundled install script {}", path.display()))?;
+        }
+        std::fs::rename(&tmp_path, &path)
+            .with_context(|| format!("activating bundled install script {}", path.display()))?;
+    }
+
+    emit_log(&format!(
+        "[bootstrap] using bundled {} for {}",
+        kind.filename(),
+        truncate_ref(cache_ref)
+    ));
+    Ok(ResolvedScript {
+        path,
+        source: ScriptSource::Bundled,
+        commit: pin.commit.clone(),
+        branch: pin.branch.clone(),
+    })
 }
 
 #[derive(Debug, Clone, Default)]
@@ -432,6 +505,13 @@ mod tests {
         let out = prepare_cached_script_bytes(ScriptKind::Sh, b"#!/bin/bash\n");
         assert!(!out.starts_with(UTF8_BOM));
         assert_eq!(out, b"#!/bin/bash\n");
+    }
+
+    #[test]
+    fn bundled_scripts_are_nonempty_and_match_their_runtime_shells() {
+        assert!(bundled_script_bytes(ScriptKind::Ps1).starts_with(b"#"));
+        assert!(bundled_script_bytes(ScriptKind::Ps1).windows(5).any(|line| line == b"param"));
+        assert!(bundled_script_bytes(ScriptKind::Sh).starts_with(b"#!/bin/bash"));
     }
 
     #[test]
