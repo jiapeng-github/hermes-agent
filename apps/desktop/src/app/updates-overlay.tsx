@@ -68,9 +68,13 @@ export function UpdatesOverlay() {
   const behind = status?.behind ?? 0
   const updateAvailable = status?.updateAvailable || behind > 0
 
-  const phase: 'idle' | 'applying' | 'manual' | 'guiSkew' | 'error' =
+  const phase: 'idle' | 'applying' | 'ready' | 'download' | 'manual' | 'guiSkew' | 'error' =
     apply.stage === 'manual'
       ? 'manual'
+      : apply.stage === 'ready'
+        ? 'ready'
+      : apply.stage === 'download'
+        ? 'download'
       : apply.stage === 'guiSkew'
         ? 'guiSkew'
         : apply.applying || apply.stage === 'restart'
@@ -88,7 +92,12 @@ export function UpdatesOverlay() {
 
     if (
       !next &&
-      (apply.stage === 'error' || apply.stage === 'restart' || apply.stage === 'manual' || apply.stage === 'guiSkew')
+      (apply.stage === 'error' ||
+        apply.stage === 'restart' ||
+        apply.stage === 'ready' ||
+        apply.stage === 'download' ||
+        apply.stage === 'manual' ||
+        apply.stage === 'guiSkew')
     ) {
       resetUpdateApplyState()
     }
@@ -111,6 +120,12 @@ export function UpdatesOverlay() {
 
         {phase === 'manual' && (
           <ManualView command={apply.command ?? null} message={apply.message} onDone={() => handleClose(false)} />
+        )}
+
+        {phase === 'download' && <DownloadView message={apply.message} onDone={() => handleClose(false)} />}
+
+        {phase === 'ready' && (
+          <ReadyToInstallView message={apply.message} onRestart={() => void applyUpdates({ install: true })} />
         )}
 
         {phase === 'guiSkew' && <GuiSkewView message={apply.message} onDone={() => handleClose(false)} />}
@@ -236,6 +251,9 @@ function IdleView({
 
         <DialogTitle className="text-center text-xl">{title}</DialogTitle>
         <DialogDescription className="text-center text-sm">{body}</DialogDescription>
+        {target === 'client' && status.releaseVersion ? (
+          <p className="text-xs font-medium text-muted-foreground">StockSense {status.releaseVersion}</p>
+        ) : null}
       </div>
 
       <div className="grid gap-3">
@@ -252,11 +270,16 @@ function IdleView({
             </ul>
           </div>
         ))}
+        {target === 'client' && status.releaseNotes ? (
+          <p className="rounded-md border border-border/70 bg-muted/35 px-3 py-2 text-xs leading-5 text-muted-foreground">
+            {status.releaseNotes}
+          </p>
+        ) : null}
       </div>
 
       <div className="grid gap-2">
         <Button className="font-semibold" onClick={onInstall} size="lg">
-          {u.updateNow}
+          {target === 'client' && status.releaseVersion ? u.downloadNow : u.updateNow}
         </Button>
         <Button className="font-medium" onClick={onLater} type="button" variant="text">
           {u.maybeLater}
@@ -264,6 +287,50 @@ function IdleView({
       </div>
 
       {remaining > 0 && <p className="text-center text-xs text-muted-foreground">{u.moreChanges(remaining)}</p>}
+    </div>
+  )
+}
+
+function DownloadView({ message, onDone }: { message?: string; onDone: () => void }) {
+  const { t } = useI18n()
+  const u = t.updates
+
+  return (
+    <div className="grid gap-5 px-6 pb-6 pt-7 pr-8">
+      <div className="flex flex-col items-center gap-3 text-center">
+        <Check className="size-8 text-primary" />
+
+        <DialogTitle className="text-center text-xl">{u.downloadReadyTitle}</DialogTitle>
+        <DialogDescription className="max-w-prose text-center text-sm leading-5 text-muted-foreground">
+          {message || u.downloadReadyBody}
+        </DialogDescription>
+      </div>
+
+      <Button className="font-semibold" onClick={onDone} size="lg" variant="secondary">
+        {u.done}
+      </Button>
+    </div>
+  )
+}
+
+function ReadyToInstallView({ message, onRestart }: { message?: string; onRestart: () => void }) {
+  const { t } = useI18n()
+  const u = t.updates
+
+  return (
+    <div className="grid gap-5 px-6 pb-6 pt-7 pr-8">
+      <div className="flex flex-col items-center gap-3 text-center">
+        <Check className="size-8 text-primary" />
+
+        <DialogTitle className="text-center text-xl">{u.readyToInstallTitle}</DialogTitle>
+        <DialogDescription className="max-w-prose text-center text-sm leading-5 text-muted-foreground">
+          {message || u.readyToInstallBody}
+        </DialogDescription>
+      </div>
+
+      <Button className="font-semibold" onClick={onRestart} size="lg">
+        {u.restartAndInstall}
+      </Button>
     </div>
   )
 }

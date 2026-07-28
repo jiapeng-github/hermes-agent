@@ -335,12 +335,18 @@ export interface DesktopUpdateStatus {
   commits?: DesktopUpdateCommit[]
   dirty?: boolean
   fetchedAt?: number
+  /** Signed release metadata returned by the StockSense version service. */
+  releaseNotes?: string
+  releaseVersion?: string
+  mandatory?: boolean
 }
 
 export type DesktopUpdateDirtyStrategy = 'abort' | 'stash' | 'force'
 
 export interface DesktopUpdateApplyOptions {
   dirtyStrategy?: DesktopUpdateDirtyStrategy
+  /** Complete an already downloaded HTTPS desktop update by restarting the app. */
+  install?: boolean
 }
 
 export interface DesktopUpdateApplyResult {
@@ -374,6 +380,10 @@ export interface DesktopUpdateApplyResult {
   /** True when a detached relauncher took over (macOS bundle swap / Linux
    *  re-exec): the app is about to quit and reopen itself. */
   handedOff?: boolean
+  /** A signed installer URL was opened in the system browser for manual install. */
+  openedExternal?: boolean
+  /** An HTTPS update has been downloaded and is ready for a user-confirmed restart. */
+  readyToInstall?: boolean
 }
 
 export type DesktopUpdateStage =
@@ -386,6 +396,8 @@ export type DesktopUpdateStage =
   | 'rebuild'
   | 'restart'
   | 'done'
+  | 'ready'
+  | 'download'
   | 'manual'
   /** Backend updated but the running GUI package (AppImage/.deb/.rpm) was NOT
    *  changed — the user must update/reinstall the desktop app. Terminal,

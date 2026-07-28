@@ -1640,6 +1640,12 @@ export interface Translations {
     availableBodyBackend: string
     availableBodyNoChangelog: string
     updateNow: string
+    downloadNow: string
+    downloadReadyTitle: string
+    downloadReadyBody: string
+    readyToInstallTitle: string
+    readyToInstallBody: string
+    restartAndInstall: string
     maybeLater: string
     moreChanges: (count: number) => string
     manualTitle: string

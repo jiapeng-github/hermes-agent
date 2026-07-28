@@ -321,6 +321,37 @@ describe('applyUpdates terminal state', () => {
     expect(notifySpy).not.toHaveBeenCalled()
   })
 
+  it('keeps a closeable download state after opening a verified installer', async () => {
+    applyMock.mockResolvedValue({
+      ok: true,
+      openedExternal: true,
+      message: 'Installer opened in your browser.'
+    })
+
+    await applyUpdates()
+
+    expect($updateApply.get().stage).toBe('download')
+    expect($updateApply.get().applying).toBe(false)
+    expect($updateApply.get().message).toBe('Installer opened in your browser.')
+    expect($updateOverlayOpen.get()).toBe(true)
+    expect(notifySpy).not.toHaveBeenCalled()
+  })
+
+  it('keeps a restart-ready state after an HTTPS update download completes', async () => {
+    applyMock.mockResolvedValue({
+      ok: true,
+      readyToInstall: true,
+      message: 'Update downloaded.'
+    })
+
+    await applyUpdates()
+
+    expect($updateApply.get().stage).toBe('ready')
+    expect($updateApply.get().applying).toBe(false)
+    expect($updateOverlayOpen.get()).toBe(true)
+    expect(notifySpy).not.toHaveBeenCalled()
+  })
+
   it('lands on the guiSkew terminal state for a GUI/backend skew (AppImage/.deb/.rpm), without claiming a GUI update', async () => {
     // Linux: backend updated, but the running desktop package was NOT replaced.
     // Must NOT toast "loads next launch" — that's the dishonest message #45205
@@ -493,11 +524,10 @@ describe('startUpdatePoller', () => {
     vi.useRealTimers()
   })
 
-  it('calls checkUpdates() on startup so the version pill populates immediately', async () => {
+  it('checks for client updates after the startup delay', async () => {
     startUpdatePoller()
 
-    // checkUpdates() is async — flush microtasks without advancing the 30-min interval.
-    await vi.advanceTimersByTimeAsync(0)
+    await vi.advanceTimersByTimeAsync(60_000)
 
     expect(checkMock).toHaveBeenCalled()
     expect($updateStatus.get()?.behind).toBe(5)
@@ -505,17 +535,17 @@ describe('startUpdatePoller', () => {
 
   it('calls checkUpdates() on each interval tick', async () => {
     startUpdatePoller()
-    await vi.advanceTimersByTimeAsync(0)
+    await vi.advanceTimersByTimeAsync(60_000)
     checkMock.mockClear()
 
-    await vi.advanceTimersByTimeAsync(30 * 60 * 1000)
+    await vi.advanceTimersByTimeAsync(6 * 60 * 60 * 1000)
 
     expect(checkMock).toHaveBeenCalled()
   })
 
-  it('calls checkUpdates() when the window regains focus', async () => {
+  it('does not query the client release service when the window regains focus', async () => {
     startUpdatePoller()
-    await vi.advanceTimersByTimeAsync(0)
+    await vi.advanceTimersByTimeAsync(60_000)
     checkMock.mockClear()
 
     // Invoke the registered focus handler directly (the mock window doesn't
@@ -524,6 +554,6 @@ describe('startUpdatePoller', () => {
 
     await vi.advanceTimersByTimeAsync(0)
 
-    expect(checkMock).toHaveBeenCalled()
+    expect(checkMock).not.toHaveBeenCalled()
   })
 })

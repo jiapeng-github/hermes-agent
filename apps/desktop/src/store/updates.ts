@@ -391,6 +391,31 @@ export async function applyUpdates(opts: DesktopUpdateApplyOptions = {}): Promis
       return result
     }
 
+    // Packaged StockSense releases use the signed version service. During the
+    // HTTP transition period the installer is opened in the system browser so
+    // the user can complete the platform-native install themselves.
+    if (result?.openedExternal) {
+      $updateApply.set({
+        ...IDLE,
+        applying: false,
+        stage: 'download',
+        message: result.message ?? translateNow('updates.downloadReadyBody')
+      })
+
+      return result
+    }
+
+    if (result?.readyToInstall) {
+      $updateApply.set({
+        ...IDLE,
+        applying: false,
+        stage: 'ready',
+        message: result.message ?? translateNow('updates.readyToInstallBody')
+      })
+
+      return result
+    }
+
     // A detached relauncher took over (macOS bundle swap / Linux re-exec): the
     // app is about to quit and reopen, so hold the "Restarting…" view until it
     // does. Every other resolved outcome MUST land on a terminal, closeable
@@ -621,6 +646,8 @@ function ingestProgress(payload: DesktopUpdateProgress): void {
   const terminal =
     payload.stage === 'error' ||
     payload.stage === 'restart' ||
+    payload.stage === 'ready' ||
+    payload.stage === 'download' ||
     payload.stage === 'manual' ||
     payload.stage === 'guiSkew'
 
@@ -640,6 +667,7 @@ function ingestProgress(payload: DesktopUpdateProgress): void {
 
 let pollerStarted = false
 let backgroundTimer: ReturnType<typeof setInterval> | null = null
+let startupTimer: ReturnType<typeof setTimeout> | null = null
 let lastFocusAt = 0
 let connectionUnsub: (() => void) | null = null
 let lastConnectionMode: string | undefined
@@ -657,7 +685,9 @@ export function startUpdatePoller(): void {
   }
 
   pollerStarted = true
-  void checkUpdates()
+  // Let the initial window and backend connection settle before making the
+  // signed release-service request. Subsequent checks happen every six hours.
+  startupTimer = setTimeout(() => void checkUpdates(), 60_000)
   void checkBackendUpdates()
   void refreshDesktopVersion()
   bridge.onProgress(ingestProgress)
@@ -683,11 +713,16 @@ export function startUpdatePoller(): void {
       void checkUpdates()
       void checkBackendUpdates()
     },
-    30 * 60 * 1000
+    6 * 60 * 60 * 1000
   )
 }
 
 export function stopUpdatePoller(): void {
+  if (startupTimer !== null) {
+    clearTimeout(startupTimer)
+    startupTimer = null
+  }
+
   if (backgroundTimer !== null) {
     clearInterval(backgroundTimer)
     backgroundTimer = null
@@ -708,7 +743,8 @@ function onFocus() {
   }
 
   lastFocusAt = now
-  void checkUpdates()
+  // Client release checks are deliberately limited to the startup delay and
+  // six-hour poll. A user can still run an explicit check from the menu.
   void checkBackendUpdates()
   void refreshDesktopVersion()
 }

@@ -28,6 +28,7 @@ import {
   shell,
   systemPreferences
 } from 'electron'
+import { autoUpdater } from 'electron-updater'
 import nodePty from 'node-pty'
 
 import { openAppLaunchUrl } from './app-browser.cjs'
@@ -69,6 +70,13 @@ import {
 } from './connection-config'
 import { adoptServedDashboardToken } from './dashboard-token'
 import { loadOrCreateInstallationId, sshOwnershipId } from './desktop-installation'
+import {
+  buildDesktopReleaseCheckUrl,
+  normalizeDesktopReleaseServiceConfig,
+  type ValidatedDesktopManagedConfig,
+  type ValidatedDesktopRelease,
+  validateDesktopReleaseCheck
+} from './desktop-release'
 import {
   buildPosixCleanupScript,
   buildWindowsCleanupScript,
@@ -118,6 +126,12 @@ import {
 } from './hardening'
 import { createLinkTitleWindow, guardLinkTitleSession, readLinkTitleWindowTitle } from './link-title-window'
 import { ensureMainWindow } from './main-window-lifecycle'
+import {
+  hasPersistedManagedConfig,
+  normalizeStockSenseManagedConfig,
+  persistStockSenseManagedConfig,
+  readManagedConfigMetadata
+} from './managed-config'
 import { serializeJsonBody, setJsonRequestHeaders } from './oauth-net-request'
 import { createKeepAwake } from './power-save'
 import { decideProfileDeleteAction, profileNameFromDeleteRequest, resolveRouteProfile } from './profile-delete-routing'
@@ -542,7 +556,9 @@ function resolveStockMcpDefaultsPath() {
 }
 
 function resolveStockSenseManagedConfigDir() {
+  const remoteManagedConfigDir = path.join(app.getPath('userData'), 'managed-config')
   const candidates = [
+    remoteManagedConfigDir,
     process.resourcesPath ? path.join(process.resourcesPath, 'stocksense-managed') : null,
     path.join(APP_ROOT, 'resources', 'stocksense-managed')
   ]
@@ -550,9 +566,33 @@ function resolveStockSenseManagedConfigDir() {
   return candidates.find(candidate => candidate && fileExists(path.join(candidate, 'config.yaml'))) || null
 }
 
+function resolveStockSenseDesktopUpdateConfigPath() {
+  const candidates = [
+    process.resourcesPath ? path.join(process.resourcesPath, 'stocksense-desktop-update.json') : null,
+    path.join(APP_ROOT, 'resources', 'stocksense-desktop-update.json')
+  ]
+
+  return candidates.find(candidate => candidate && fileExists(candidate)) || null
+}
+
+function readStockSenseDesktopUpdateConfig() {
+  const configPath = resolveStockSenseDesktopUpdateConfigPath()
+
+  if (!configPath) {
+    return null
+  }
+
+  try {
+    return normalizeDesktopReleaseServiceConfig(JSON.parse(fs.readFileSync(configPath, 'utf8')))
+  } catch (error) {
+    rememberLog(`[desktop-release] failed to load release service config: ${String(error)}`)
+    return null
+  }
+}
+
 // This package-owned policy wins over stale user config.yaml values. In
 // particular, bridge releases must not keep querying a former localhost Hub.
-const STOCKSENSE_MANAGED_CONFIG_DIR = resolveStockSenseManagedConfigDir()
+const STOCKSENSE_DESKTOP_UPDATE_CONFIG = readStockSenseDesktopUpdateConfig()
 
 function resolveOfflineRuntimePath() {
   const expectedTarget =
@@ -2349,7 +2389,7 @@ async function resolveHealedBranch(updateRoot, branch) {
   return DEFAULT_UPDATE_BRANCH
 }
 
-async function checkUpdates() {
+async function checkGitUpdates() {
   const updateRoot = resolveUpdateRoot()
   let { branch } = readDesktopUpdateConfig()
   const gitDir = path.join(updateRoot, '.git')
@@ -2725,7 +2765,7 @@ async function releaseBackendLock(updateRoot, tag) {
 //
 // Detection (checkUpdates / commit changelog / "N behind") stays in the UI;
 // only this apply action changed.
-async function applyUpdates(opts = {}) {
+async function applyGitUpdates(opts = {}) {
   if (updateInFlight) {
     throw new Error('An update is already in progress.')
   }
@@ -2861,6 +2901,346 @@ async function applyUpdates(opts = {}) {
   } finally {
     updateInFlight = false
   }
+}
+
+let activeDesktopRelease: ValidatedDesktopRelease | null = null
+let downloadedDesktopRelease: ValidatedDesktopRelease | null = null
+let desktopAutoUpdaterEventsBound = false
+
+function canUseAutomaticDesktopUpdates(release: ValidatedDesktopRelease, config = STOCKSENSE_DESKTOP_UPDATE_CONFIG) {
+  if (
+    !config?.automaticUpdatesEnabled ||
+    !['win32', 'darwin'].includes(process.platform) ||
+    release.deliveryMode !== 'auto' ||
+    !release.feedUrl
+  ) {
+    return false
+  }
+
+  try {
+    return new URL(config.endpoint || '').protocol === 'https:' && new URL(release.feedUrl).protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+function configureDesktopAutoUpdater(release: ValidatedDesktopRelease) {
+  if (!release.feedUrl) {
+    throw new Error('Automatic release has no feed URL.')
+  }
+
+  if (!desktopAutoUpdaterEventsBound) {
+    desktopAutoUpdaterEventsBound = true
+    autoUpdater.autoDownload = false
+    autoUpdater.autoInstallOnAppQuit = false
+    autoUpdater.allowPrerelease = false
+    autoUpdater.disableWebInstaller = true
+    autoUpdater.on('download-progress', progress => {
+      emitUpdateProgress({
+        stage: 'fetch',
+        message: `正在下载 StockSense 更新（${Math.round(progress.percent)}%）…`,
+        percent: progress.percent
+      })
+    })
+    autoUpdater.on('update-downloaded', event => {
+      emitUpdateProgress({
+        stage: 'ready',
+        message: `StockSense ${event.version} 已下载，等待重启安装。`,
+        percent: 100
+      })
+    })
+    autoUpdater.on('error', error => {
+      rememberLog(`[desktop-release] automatic updater failed: ${String(error)}`)
+    })
+  }
+
+  autoUpdater.requestHeaders = {
+    'X-StockSense-Client-Version': app.getVersion(),
+    'X-StockSense-Installation-Id': desktopInstallationId
+  }
+  autoUpdater.setFeedURL(release.feedUrl)
+}
+
+function desktopReleasePlatform() {
+  if (process.platform === 'win32') {
+    return 'windows'
+  }
+
+  if (process.platform === 'darwin') {
+    return 'macos'
+  }
+
+  return null
+}
+
+function desktopReleaseArch() {
+  if (process.arch === 'x64') {
+    return 'x64'
+  }
+
+  if (process.arch === 'arm64') {
+    return 'arm64'
+  }
+
+  return null
+}
+
+function remoteManagedConfigDir() {
+  return path.join(app.getPath('userData'), 'managed-config')
+}
+
+async function syncDesktopManagedConfig(descriptor: ValidatedDesktopManagedConfig) {
+  const targetDir = remoteManagedConfigDir()
+  const previous = readManagedConfigMetadata(targetDir)
+
+  if (previous) {
+    if (previous.revision > descriptor.revision) {
+      throw new Error(`received managed config revision ${descriptor.revision} older than local ${previous.revision}`)
+    }
+
+    if (previous.revision === descriptor.revision) {
+      if (previous.sha256 !== descriptor.sha256) {
+        throw new Error(`managed config revision ${descriptor.revision} changed its SHA-256`)
+      }
+
+      if (hasPersistedManagedConfig(targetDir)) {
+        return false
+      }
+    }
+  }
+
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 12_000)
+
+  try {
+    const response = await fetch(descriptor.url, {
+      headers: { Accept: 'application/json' },
+      signal: controller.signal
+    })
+
+    if (!response.ok) {
+      throw new Error(`managed config returned HTTP ${response.status}`)
+    }
+
+    const body = Buffer.from(await response.arrayBuffer())
+    const sha256 = crypto.createHash('sha256').update(body).digest('hex')
+
+    if (sha256 !== descriptor.sha256) {
+      throw new Error('managed config SHA-256 verification failed')
+    }
+
+    const config = normalizeStockSenseManagedConfig(JSON.parse(body.toString('utf8')))
+
+    if (!config) {
+      throw new Error('managed config contains unsupported or invalid fields')
+    }
+
+    persistStockSenseManagedConfig(targetDir, config, descriptor)
+    rememberLog(`[managed-config] installed verified revision ${descriptor.revision}`)
+
+    return true
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+async function checkDesktopReleaseUpdates() {
+  const config = STOCKSENSE_DESKTOP_UPDATE_CONFIG
+  const platform = desktopReleasePlatform()
+  const arch = desktopReleaseArch()
+
+  activeDesktopRelease = null
+  downloadedDesktopRelease = null
+
+  if (!config) {
+    return {
+      supported: false,
+      reason: 'release-service-not-configured',
+      message: '桌面版本服务尚未配置签名公钥，暂不检查更新。'
+    }
+  }
+
+  if (!platform || !arch) {
+    return {
+      supported: false,
+      reason: 'unsupported-platform',
+      message: '当前平台暂不支持桌面端版本更新。'
+    }
+  }
+
+  const currentVersion = app.getVersion()
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 12_000)
+
+  try {
+    const response = await fetch(buildDesktopReleaseCheckUrl(config, { arch, currentVersion, platform }), {
+      headers: {
+        Accept: 'application/json',
+        'X-StockSense-Client-Version': currentVersion,
+        'X-StockSense-Installation-Id': desktopInstallationId
+      },
+      signal: controller.signal
+    })
+
+    if (!response.ok) {
+      throw new Error(`version service returned HTTP ${response.status}`)
+    }
+
+    const check = validateDesktopReleaseCheck(await response.json(), {
+      currentVersion,
+      signingKeys: config.signingKeys || {}
+    })
+
+    if (!check.supported) {
+      return {
+        supported: false,
+        reason: 'invalid-release-response',
+        message: check.message || '桌面版本服务响应无效。'
+      }
+    }
+
+    if (check.managedConfig) {
+      try {
+        const changed = await syncDesktopManagedConfig(check.managedConfig)
+
+        if (changed) {
+          rememberLog('[managed-config] new settings will apply when the local backend next starts')
+        }
+      } catch (error) {
+        // A configuration refresh is never allowed to suppress a verified
+        // release result or disrupt an already-running local backend.
+        rememberLog(`[managed-config] sync failed; keeping last known good config: ${String(error)}`)
+      }
+    }
+
+    if (!check.available || !check.release) {
+      return {
+        supported: true,
+        updateAvailable: false,
+        behind: 0,
+        branch: config.channel,
+        currentBranch: config.channel,
+        fetchedAt: Date.now()
+      }
+    }
+
+    activeDesktopRelease = check.release
+
+    if (check.release.deliveryMode === 'auto') {
+      if (!canUseAutomaticDesktopUpdates(check.release, config)) {
+        activeDesktopRelease = null
+        return {
+          supported: false,
+          reason: 'automatic-updates-not-enabled',
+          message: '自动更新需要 HTTPS 版本服务和受信任的更新配置。'
+        }
+      }
+
+      configureDesktopAutoUpdater(check.release)
+      const update = await autoUpdater.checkForUpdates()
+
+      if (!update || update.updateInfo.version !== check.release.version) {
+        throw new Error('The HTTPS update feed does not match the signed release version.')
+      }
+    }
+
+    return {
+      supported: true,
+      updateAvailable: true,
+      behind: 1,
+      branch: config.channel,
+      currentBranch: config.channel,
+      fetchedAt: Date.now(),
+      mandatory: check.release.mandatory,
+      releaseNotes: check.release.notes,
+      releaseVersion: check.release.version,
+      targetSha: `release:${check.release.version}`
+    }
+  } catch (error) {
+    activeDesktopRelease = null
+    downloadedDesktopRelease = null
+    rememberLog(`[desktop-release] version check failed: ${String(error)}`)
+
+    return {
+      supported: false,
+      reason: 'release-service-unavailable',
+      message: '暂时无法连接桌面版本服务，请稍后重试。',
+      error: String(error)
+    }
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+async function checkUpdates() {
+  return IS_PACKAGED ? checkDesktopReleaseUpdates() : checkGitUpdates()
+}
+
+async function applyDesktopReleaseUpdate(opts: { install?: boolean } = {}) {
+  if (!activeDesktopRelease) {
+    await checkDesktopReleaseUpdates()
+  }
+
+  if (!activeDesktopRelease) {
+    return {
+      ok: false,
+      error: 'release-not-available',
+      message: '未找到已验证的更新安装包，请先重新检查更新。'
+    }
+  }
+
+  if (activeDesktopRelease.deliveryMode === 'manual') {
+    if (!activeDesktopRelease.installerUrl) {
+      return { ok: false, error: 'installer-not-available', message: '未找到可验证的更新安装包。' }
+    }
+
+    await shell.openExternal(activeDesktopRelease.installerUrl)
+    rememberLog(`[desktop-release] opened verified installer URL for ${activeDesktopRelease.version}`)
+
+    return {
+      ok: true,
+      openedExternal: true,
+      message: `已在浏览器中打开 StockSense ${activeDesktopRelease.version} 安装包。下载完成后运行安装包即可更新。`,
+      releaseVersion: activeDesktopRelease.version
+    }
+  }
+
+  if (!canUseAutomaticDesktopUpdates(activeDesktopRelease)) {
+    return {
+      ok: false,
+      error: 'automatic-updates-not-enabled',
+      message: '自动更新尚未启用，请下载完整安装包手动更新。'
+    }
+  }
+
+  configureDesktopAutoUpdater(activeDesktopRelease)
+
+  if (opts.install) {
+    if (!downloadedDesktopRelease || downloadedDesktopRelease.version !== activeDesktopRelease.version) {
+      return { ok: false, error: 'update-not-downloaded', message: '更新包尚未下载完成。' }
+    }
+
+    emitUpdateProgress({ stage: 'restart', message: '正在重启并安装 StockSense 更新…', percent: 100 })
+    autoUpdater.quitAndInstall(false, true)
+
+    return { ok: true, handedOff: true }
+  }
+
+  emitUpdateProgress({ stage: 'fetch', message: '正在下载 StockSense 更新…', percent: 0 })
+  await autoUpdater.downloadUpdate()
+  downloadedDesktopRelease = activeDesktopRelease
+  emitUpdateProgress({ stage: 'ready', message: '更新已下载，等待重启安装。', percent: 100 })
+
+  return {
+    ok: true,
+    readyToInstall: true,
+    message: `StockSense ${activeDesktopRelease.version} 已下载，重启后即可完成更新。`,
+    releaseVersion: activeDesktopRelease.version
+  }
+}
+
+async function applyUpdates(opts = {}) {
+  return IS_PACKAGED ? applyDesktopReleaseUpdate(opts) : applyGitUpdates(opts)
 }
 
 async function handOffWindowsBootstrapRecovery(reason) {
@@ -3563,7 +3943,7 @@ function createPythonBackend(root, label, backendArgs, options: any = {}) {
     args: ['-m', 'hermes_cli.main', ...backendArgs],
     env: buildDesktopBackendEnv({
       hermesHome: HERMES_HOME,
-      managedConfigDir: STOCKSENSE_MANAGED_CONFIG_DIR,
+      managedConfigDir: resolveStockSenseManagedConfigDir(),
       pythonPathEntries: [root, ...getVenvSitePackagesEntries(venvRoot)],
       venvRoot
     }),
@@ -3588,7 +3968,7 @@ function createActiveBackend(backendArgs) {
     args: ['-m', 'hermes_cli.main', ...backendArgs],
     env: buildDesktopBackendEnv({
       hermesHome: HERMES_HOME,
-      managedConfigDir: STOCKSENSE_MANAGED_CONFIG_DIR,
+      managedConfigDir: resolveStockSenseManagedConfigDir(),
       pythonPathEntries: [ACTIVE_HERMES_ROOT, ...getVenvSitePackagesEntries(VENV_ROOT)],
       venvRoot: VENV_ROOT
     }),
@@ -7523,7 +7903,7 @@ async function spawnPoolBackend(profile, entry) {
           ...process.env,
           HERMES_HOME,
           ...backend.env,
-          ...(STOCKSENSE_MANAGED_CONFIG_DIR ? { HERMES_MANAGED_DIR: STOCKSENSE_MANAGED_CONFIG_DIR } : {}),
+          ...(resolveStockSenseManagedConfigDir() ? { HERMES_MANAGED_DIR: resolveStockSenseManagedConfigDir() } : {}),
         // Pin the gateway's tool/terminal cwd to the same directory we chose for
         // the child process. Inherited TERMINAL_CWD (or a stale config bridge)
         // can still point at the install dir even when spawn cwd is home.
@@ -7790,7 +8170,7 @@ async function startHermes() {
           // can't reliably do that, so we set it inline for every spawn.
           HERMES_HOME,
           ...backend.env,
-          ...(STOCKSENSE_MANAGED_CONFIG_DIR ? { HERMES_MANAGED_DIR: STOCKSENSE_MANAGED_CONFIG_DIR } : {}),
+          ...(resolveStockSenseManagedConfigDir() ? { HERMES_MANAGED_DIR: resolveStockSenseManagedConfigDir() } : {}),
           TERMINAL_CWD: hermesCwd,
           HERMES_DASHBOARD_SESSION_TOKEN: token,
           // Marks this dashboard backend as desktop-spawned so it runs the cron

@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "endpoint": "http://175.24.139.183/app-api/desktop/v1/check",
+  "allowInsecureHttp": true,
+  "automaticUpdatesEnabled": false,
+  "channel": "stable",
+  "flavor": "offline",
+  "signingKeys": {
+    "stocksense-desktop-2026-07-29": "RPqbPmFYog1JSOpuO26xbv5pNth9UvriHeZHl4s+Aec="
+  }
+}
