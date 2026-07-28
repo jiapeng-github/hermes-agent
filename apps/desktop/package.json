@@ -96,6 +96,7 @@
     "d3-force": "^3.0.0",
     "dnd-core": "^14.0.1",
     "dompurify": "^3.4.11",
+    "electron-updater": "^6.8.9",
     "fflate": "^0.8.3",
     "hast-util-from-html-isomorphic": "^2.0.0",
     "hast-util-to-text": "^4.0.2",
@@ -178,6 +179,12 @@
       }
     ],
     "artifactName": "StockSense-${version}-${os}-${arch}.${ext}",
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "https://updates.invalid/stocksense"
+      }
+    ],
     "icon": "assets/icon",
     "directories": {
       "output": "release"
@@ -203,6 +210,10 @@
       {
         "from": "resources/stocksense-managed",
         "to": "stocksense-managed"
+      },
+      {
+        "from": "resources/stocksense-desktop-update.json",
+        "to": "stocksense-desktop-update.json"
       },
       {
         "from": "build/offline-runtime",

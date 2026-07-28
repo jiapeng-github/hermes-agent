@@ -1901,6 +1901,7 @@ export const ja = defineLocale({
       rebuild: 'デスクトップアプリを再ビルド中…',
       restart: 'StockSense を再起動中…',
       done: '更新が完了しました',
+      ready: '再起動してインストール',
       manual: 'ターミナルから更新',
       guiSkew: 'デスクトップアプリを更新してください',
       error: '更新が一時停止中'
@@ -1921,6 +1922,12 @@ export const ja = defineLocale({
     availableBodyNoChangelog:
       '新しいバージョンを利用できます。このインストール形式ではリリースノートは表示できません。',
     updateNow: '今すぐ更新',
+    downloadNow: '更新をダウンロード',
+    downloadReadyTitle: 'インストーラーを開きました',
+    downloadReadyBody: 'ブラウザでインストーラーをダウンロードして実行し、更新を完了してください。',
+    readyToInstallTitle: '更新をダウンロードしました',
+    readyToInstallBody: 'StockSense を再起動すると更新のインストールが完了します。',
+    restartAndInstall: '再起動して更新',
     maybeLater: '後で',
     moreChanges: count => `さらに ${count} 件の変更が含まれています。`,
     manualTitle: 'ターミナルから更新',

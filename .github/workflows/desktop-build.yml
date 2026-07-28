@@ -83,7 +83,8 @@ jobs:
       - name: Write checksums
         shell: pwsh
         run: |
-          Get-ChildItem 'apps/desktop/release' -Filter '*.exe' |
+          Get-ChildItem 'apps/desktop/release' -File |
+            Where-Object { $_.Name -match '\.(exe|blockmap|yml)$' } |
             Get-FileHash -Algorithm SHA256 |
             ForEach-Object { "$($_.Hash.ToLower())  $($_.Name)" } |
             Set-Content 'apps/desktop/release/SHA256SUMS.txt'
@@ -94,6 +95,8 @@ jobs:
           name: stocksense-windows-x64-${{ inputs.flavor }}
           path: |
             apps/desktop/release/*.exe
+            apps/desktop/release/*.blockmap
+            apps/desktop/release/*.yml
             apps/desktop/release/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 14
@@ -147,7 +150,7 @@ jobs:
       - name: Write checksums
         run: |
           cd apps/desktop/release
-          shasum -a 256 *.dmg *.zip > SHA256SUMS.txt
+          shasum -a 256 *.dmg *.zip *.blockmap *.yml > SHA256SUMS.txt
 
       - name: Upload macOS installers
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.0
@@ -156,7 +159,58 @@ jobs:
           path: |
             apps/desktop/release/*.dmg
             apps/desktop/release/*.zip
+            apps/desktop/release/*.blockmap
+            apps/desktop/release/*.yml
             apps/desktop/release/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
+  release-bundle:
+    name: Desktop release bundle (${{ inputs.flavor }})
+    if: inputs.target == 'all' && needs.windows.result == 'success' && needs.macos.result == 'success'
+    needs: [windows, macos]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install workspace dependencies
+        uses: ./.github/actions/retry
+        with:
+          command: npm ci
+
+      - name: Download platform artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: stocksense-*-${{ inputs.flavor }}
+          path: desktop-release-input
+
+      - name: Create upload bundle
+        id: bundle
+        run: |
+          VERSION=$(node -p "require('./apps/desktop/package.json').version")
+          BUNDLE="desktop-release-bundle-${VERSION}-${{ inputs.flavor }}.zip"
+          node apps/desktop/scripts/create-release-bundle.mjs \
+            --input desktop-release-input \
+            --output "$BUNDLE" \
+            --version "$VERSION" \
+            --channel stable \
+            --flavor "${{ inputs.flavor }}"
+          echo "bundle=$BUNDLE" >> "$GITHUB_OUTPUT"
+
+      - name: Upload management release bundle
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.0
+        with:
+          name: stocksense-release-bundle-${{ inputs.flavor }}
+          path: ${{ steps.bundle.outputs.bundle }}
           if-no-files-found: error
           retention-days: 14
           compression-level: 0
