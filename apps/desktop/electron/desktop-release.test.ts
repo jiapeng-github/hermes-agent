@@ -103,11 +103,13 @@ test('normalizes only explicitly allowed HTTP release service endpoints', () => 
 
 test('builds the public check URL with platform, architecture, package flavor and version', () => {
   const config = normalizeDesktopReleaseServiceConfig({
+    backgroundDownloadEnabled: true,
     endpoint: 'https://updates.example/app-api/desktop/v1/check',
     flavor: 'offline',
     signingKeys: { k: 'x' }
   })
   assert.ok(config)
+  assert.equal(config.backgroundDownloadEnabled, true)
   const url = new URL(buildDesktopReleaseCheckUrl(config, { arch: 'x64', currentVersion: '0.19.0', platform: 'windows' }))
 
   assert.equal(url.searchParams.get('platform'), 'windows')

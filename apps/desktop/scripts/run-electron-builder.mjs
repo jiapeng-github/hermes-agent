@@ -39,15 +39,26 @@ function electronBuilderCli() {
   return path.join(path.dirname(pkgJson), rel)
 }
 
-function runtimeFlavor() {
+function runtimeFlavor(expectedOfflineTarget) {
   const scriptsDir = path.dirname(new URL(import.meta.url).pathname)
   const manifestPath = path.resolve(scriptsDir, "..", "build", "offline-runtime", "manifest.json")
+
   try {
     const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"))
-    return manifest && manifest.bundled === true ? "offline" : "network"
+    if (manifest?.bundled === true && manifest.target === expectedOfflineTarget) {
+      return "offline"
+    }
   } catch {
-    return "network"
+    // A clear packaging error is raised below for supported desktop targets.
   }
+
+  if (expectedOfflineTarget) {
+    throw new Error(
+      `Offline runtime ${expectedOfflineTarget} is not prepared. Run the platform dist command instead of invoking the builder directly.`
+    )
+  }
+
+  return "network"
 }
 
 const args = process.argv.slice(2)
@@ -59,12 +70,22 @@ const crossTarget = args.some(a => {
   if (a === '--mac' || a === '--macos') return process.platform !== 'darwin'
   return false
 })
-const noCross = !args.includes('--win') && !args.includes('--linux') && !args.includes('--mac')
+const noCross =
+  !args.includes('--win') && !args.includes('--linux') && !args.includes('--mac') && !args.includes('--macos')
+const expectedOfflineTarget = args.includes('--win')
+  ? 'windows-x64'
+  : args.includes('--mac') || args.includes('--macos')
+    ? 'macos-arm64'
+    : noCross && process.platform === 'win32' && process.arch === 'x64'
+      ? 'windows-x64'
+      : noCross && process.platform === 'darwin' && process.arch === 'arm64'
+        ? 'macos-arm64'
+        : null
 
 const dist = electronDistDir()
 const builderArgs = []
 if (!args.some(arg => arg.includes("artifactName"))) {
-  const flavor = runtimeFlavor()
+  const flavor = runtimeFlavor(expectedOfflineTarget)
   builderArgs.push(`-c.artifactName=StockSense-\${version}-\${os}-\${arch}-${flavor}.\${ext}`)
   console.log(`[run-electron-builder] packaging ${flavor} runtime flavor`)
 }
