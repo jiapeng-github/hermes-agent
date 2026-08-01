@@ -497,6 +497,7 @@ describe('startUpdatePoller', () => {
 
   beforeEach(() => {
     storage.clear()
+    notifySpy.mockClear()
     checkMock.mockReset()
     onProgressMock.mockReset()
     Object.keys(listeners).forEach(k => delete listeners[k])
@@ -507,6 +508,8 @@ describe('startUpdatePoller', () => {
       fetchedAt: 0
     })
     $updateStatus.set(null)
+    resetUpdateApplyState()
+    $updateOverlayOpen.set(false)
     ;(globalThis as unknown as { window: unknown }).window = {
       hermesDesktop: { updates: { check: checkMock, onProgress: onProgressMock } },
       addEventListener: vi.fn((event: string, handler: Function) => {
@@ -531,6 +534,28 @@ describe('startUpdatePoller', () => {
 
     expect(checkMock).toHaveBeenCalled()
     expect($updateStatus.get()?.behind).toBe(5)
+  })
+
+  it('notifies only after a background client update is ready to restart', () => {
+    startUpdatePoller()
+
+    const onProgress = onProgressMock.mock.calls[0]?.[0] as ((payload: unknown) => void) | undefined
+    expect(onProgress).toBeTypeOf('function')
+
+    onProgress?.({
+      at: Date.now(),
+      error: null,
+      message: 'Update downloaded.',
+      percent: 100,
+      stage: 'ready'
+    })
+
+    expect($updateApply.get()).toMatchObject({ applying: false, stage: 'ready' })
+    expect(notifySpy).toHaveBeenCalledTimes(1)
+
+    const notification = notifySpy.mock.calls[0]?.[0] as { action?: { onClick?: () => void } }
+    notification.action?.onClick?.()
+    expect($updateOverlayOpen.get()).toBe(true)
   })
 
   it('calls checkUpdates() on each interval tick', async () => {

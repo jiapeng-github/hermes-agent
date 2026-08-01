@@ -5,6 +5,7 @@ export const DESKTOP_RELEASE_PROTOCOL_VERSION = 1
 export interface DesktopReleaseServiceConfig {
   allowInsecureHttp?: boolean
   automaticUpdatesEnabled?: boolean
+  backgroundDownloadEnabled?: boolean
   channel?: string
   endpoint?: string
   flavor?: string
@@ -278,6 +279,7 @@ export function normalizeDesktopReleaseServiceConfig(raw: unknown): DesktopRelea
   return {
     allowInsecureHttp: raw.allowInsecureHttp === true,
     automaticUpdatesEnabled: raw.automaticUpdatesEnabled === true,
+    backgroundDownloadEnabled: raw.backgroundDownloadEnabled === true,
     channel: typeof raw.channel === 'string' && raw.channel.trim() ? raw.channel.trim() : 'stable',
     endpoint,
     flavor: typeof raw.flavor === 'string' && raw.flavor.trim() ? raw.flavor.trim() : 'offline',

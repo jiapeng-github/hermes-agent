@@ -14,14 +14,6 @@ on:
           - all
           - windows-x64
           - macos-arm64
-      flavor:
-        description: "Installer flavor (offline bundles the runtime; network downloads it on first launch)"
-        required: true
-        default: offline
-        type: choice
-        options:
-          - offline
-          - network
 
 # The workflow only reads the selected ref and uploads private workflow
 # artifacts, so it never needs a write-capable GitHub token.
@@ -29,12 +21,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: desktop-build-${{ github.ref }}-${{ inputs.target }}-${{ inputs.flavor }}
+  group: desktop-build-${{ github.ref }}-${{ inputs.target }}-offline
   cancel-in-progress: false
 
 jobs:
   windows:
-    name: Windows x64 (${{ inputs.flavor }})
+    name: Windows x64 (offline)
     if: inputs.target == 'all' || inputs.target == 'windows-x64'
     runs-on: windows-2022
     timeout-minutes: 90
@@ -56,7 +48,6 @@ jobs:
       # prepare-offline-runtime keeps its own platform-specific Python and wheel
       # cache, separate from uv's normal cache. Keep it OS/arch/lockfile scoped.
       - name: Restore offline runtime cache
-        if: inputs.flavor == 'offline'
         uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57 # v4.2.0
         with:
           path: apps/desktop/build/offline-runtime-prep
@@ -78,7 +69,7 @@ jobs:
 
       - name: Build installer
         working-directory: apps/desktop
-        run: npm run dist:win${{ inputs.flavor == 'network' && ':thin' || '' }}
+        run: npm run dist:win
 
       - name: Write checksums
         shell: pwsh
@@ -92,7 +83,7 @@ jobs:
       - name: Upload Windows installer
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.0
         with:
-          name: stocksense-windows-x64-${{ inputs.flavor }}
+          name: stocksense-windows-x64-offline
           path: |
             apps/desktop/release/*.exe
             apps/desktop/release/*.blockmap
@@ -103,7 +94,7 @@ jobs:
           compression-level: 0
 
   macos:
-    name: macOS arm64 (${{ inputs.flavor }})
+    name: macOS arm64 (offline)
     if: inputs.target == 'all' || inputs.target == 'macos-arm64'
     runs-on: macos-14
     timeout-minutes: 90
@@ -125,7 +116,6 @@ jobs:
       # prepare-offline-runtime keeps its own platform-specific Python and wheel
       # cache, separate from uv's normal cache. Keep it OS/arch/lockfile scoped.
       - name: Restore offline runtime cache
-        if: inputs.flavor == 'offline'
         uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57 # v4.2.0
         with:
           path: apps/desktop/build/offline-runtime-prep
@@ -145,7 +135,7 @@ jobs:
 
       - name: Build installer
         working-directory: apps/desktop
-        run: npm run dist:mac${{ inputs.flavor == 'network' && ':thin' || '' }}
+        run: npm run dist:mac
 
       - name: Write checksums
         run: |
@@ -155,7 +145,7 @@ jobs:
       - name: Upload macOS installers
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.0
         with:
-          name: stocksense-macos-arm64-${{ inputs.flavor }}
+          name: stocksense-macos-arm64-offline
           path: |
             apps/desktop/release/*.dmg
             apps/desktop/release/*.zip
@@ -167,7 +157,7 @@ jobs:
           compression-level: 0
 
   release-bundle:
-    name: Desktop release bundle (${{ inputs.flavor }})
+    name: Desktop release bundle (offline)
     if: inputs.target == 'all' && needs.windows.result == 'success' && needs.macos.result == 'success'
     needs: [windows, macos]
     runs-on: ubuntu-24.04
@@ -190,26 +180,25 @@ jobs:
       - name: Download platform artifacts
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          pattern: stocksense-*-${{ inputs.flavor }}
+          pattern: stocksense-*-offline
           path: desktop-release-input
 
       - name: Create upload bundle
         id: bundle
         run: |
           VERSION=$(node -p "require('./apps/desktop/package.json').version")
-          BUNDLE="desktop-release-bundle-${VERSION}-${{ inputs.flavor }}.zip"
+          BUNDLE="desktop-release-bundle-${VERSION}-offline.zip"
           node apps/desktop/scripts/create-release-bundle.mjs \
             --input desktop-release-input \
             --output "$BUNDLE" \
             --version "$VERSION" \
-            --channel stable \
-            --flavor "${{ inputs.flavor }}"
+            --channel stable
           echo "bundle=$BUNDLE" >> "$GITHUB_OUTPUT"
 
       - name: Upload management release bundle
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.0
         with:
-          name: stocksense-release-bundle-${{ inputs.flavor }}
+          name: stocksense-release-bundle-offline
           path: ${{ steps.bundle.outputs.bundle }}
           if-no-files-found: error
           retention-days: 14

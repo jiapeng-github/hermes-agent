@@ -620,7 +620,7 @@ function resolveOfflineRuntimePath() {
       const manifest = JSON.parse(fs.readFileSync(path.join(candidate, 'manifest.json'), 'utf8'))
 
       if (
-        (manifest.bundled !== true && manifest.source_bundled !== true) ||
+        manifest.bundled !== true ||
         manifest.target !== expectedTarget ||
         !manifest.files
       ) {
@@ -630,10 +630,7 @@ function resolveOfflineRuntimePath() {
       const installScript = expectedTarget === 'windows-x64' ? 'install.ps1' : 'install.sh'
       const requiredFiles = ['hermes-agent-source.zip', installScript]
 
-      if (
-        manifest.source_bundled === true &&
-        requiredFiles.some(file => typeof manifest.files[file] !== 'string')
-      ) {
+      if (requiredFiles.some(file => typeof manifest.files[file] !== 'string')) {
         continue
       }
 
@@ -2905,6 +2902,7 @@ async function applyGitUpdates(opts = {}) {
 
 let activeDesktopRelease: ValidatedDesktopRelease | null = null
 let downloadedDesktopRelease: ValidatedDesktopRelease | null = null
+let desktopReleaseDownload: { promise: Promise<void>; version: string } | null = null
 let desktopAutoUpdaterEventsBound = false
 
 function canUseAutomaticDesktopUpdates(release: ValidatedDesktopRelease, config = STOCKSENSE_DESKTOP_UPDATE_CONFIG) {
@@ -2943,6 +2941,15 @@ function configureDesktopAutoUpdater(release: ValidatedDesktopRelease) {
       })
     })
     autoUpdater.on('update-downloaded', event => {
+      if (activeDesktopRelease?.version !== event.version) {
+        rememberLog(
+          `[desktop-release] ignored downloaded version ${event.version}; expected ${activeDesktopRelease?.version || 'none'}`
+        )
+
+        return
+      }
+
+      downloadedDesktopRelease = activeDesktopRelease
       emitUpdateProgress({
         stage: 'ready',
         message: `StockSense ${event.version} 已下载，等待重启安装。`,
@@ -2959,6 +2966,53 @@ function configureDesktopAutoUpdater(release: ValidatedDesktopRelease) {
     'X-StockSense-Installation-Id': desktopInstallationId
   }
   autoUpdater.setFeedURL(release.feedUrl)
+}
+
+async function downloadDesktopRelease(release: ValidatedDesktopRelease) {
+  if (downloadedDesktopRelease?.version === release.version) {
+    return
+  }
+
+  if (desktopReleaseDownload) {
+    if (desktopReleaseDownload.version !== release.version) {
+      throw new Error(`StockSense ${desktopReleaseDownload.version} is already downloading.`)
+    }
+
+    return desktopReleaseDownload.promise
+  }
+
+  const promise = (async () => {
+    emitUpdateProgress({ stage: 'fetch', message: '正在后台下载 StockSense 更新…', percent: 0 })
+
+    try {
+      await autoUpdater.downloadUpdate()
+
+      if (downloadedDesktopRelease?.version !== release.version) {
+        downloadedDesktopRelease = release
+        emitUpdateProgress({ stage: 'ready', message: '更新已下载，等待重启安装。', percent: 100 })
+      }
+    } catch (error) {
+      emitUpdateProgress({
+        stage: 'error',
+        message: '后台下载更新失败，可以稍后重试。',
+        percent: null,
+        error: String(error)
+      })
+      throw error
+    }
+  })()
+
+  desktopReleaseDownload = { promise, version: release.version }
+
+  const clearDownload = () => {
+    if (desktopReleaseDownload?.version === release.version) {
+      desktopReleaseDownload = null
+    }
+  }
+
+  void promise.then(clearDownload, clearDownload)
+
+  return promise
 }
 
 function desktopReleasePlatform() {
@@ -3049,9 +3103,6 @@ async function checkDesktopReleaseUpdates() {
   const platform = desktopReleasePlatform()
   const arch = desktopReleaseArch()
 
-  activeDesktopRelease = null
-  downloadedDesktopRelease = null
-
   if (!config) {
     return {
       supported: false,
@@ -3067,6 +3118,23 @@ async function checkDesktopReleaseUpdates() {
       message: '当前平台暂不支持桌面端版本更新。'
     }
   }
+
+  if (desktopReleaseDownload && activeDesktopRelease) {
+    return {
+      supported: true,
+      updateAvailable: true,
+      behind: 1,
+      branch: config.channel,
+      currentBranch: config.channel,
+      fetchedAt: Date.now(),
+      mandatory: activeDesktopRelease.mandatory,
+      releaseNotes: activeDesktopRelease.notes,
+      releaseVersion: activeDesktopRelease.version,
+      targetSha: `release:${activeDesktopRelease.version}`
+    }
+  }
+
+  activeDesktopRelease = null
 
   const currentVersion = app.getVersion()
   const controller = new AbortController()
@@ -3126,9 +3194,14 @@ async function checkDesktopReleaseUpdates() {
 
     activeDesktopRelease = check.release
 
+    if (downloadedDesktopRelease && downloadedDesktopRelease.version !== check.release.version) {
+      downloadedDesktopRelease = null
+    }
+
     if (check.release.deliveryMode === 'auto') {
       if (!canUseAutomaticDesktopUpdates(check.release, config)) {
         activeDesktopRelease = null
+
         return {
           supported: false,
           reason: 'automatic-updates-not-enabled',
@@ -3141,6 +3214,12 @@ async function checkDesktopReleaseUpdates() {
 
       if (!update || update.updateInfo.version !== check.release.version) {
         throw new Error('The HTTPS update feed does not match the signed release version.')
+      }
+
+      if (config.backgroundDownloadEnabled && downloadedDesktopRelease?.version !== check.release.version) {
+        void downloadDesktopRelease(check.release).catch(error => {
+          rememberLog(`[desktop-release] background download failed: ${String(error)}`)
+        })
       }
     }
 
@@ -3158,7 +3237,6 @@ async function checkDesktopReleaseUpdates() {
     }
   } catch (error) {
     activeDesktopRelease = null
-    downloadedDesktopRelease = null
     rememberLog(`[desktop-release] version check failed: ${String(error)}`)
 
     return {
@@ -3226,10 +3304,7 @@ async function applyDesktopReleaseUpdate(opts: { install?: boolean } = {}) {
     return { ok: true, handedOff: true }
   }
 
-  emitUpdateProgress({ stage: 'fetch', message: '正在下载 StockSense 更新…', percent: 0 })
-  await autoUpdater.downloadUpdate()
-  downloadedDesktopRelease = activeDesktopRelease
-  emitUpdateProgress({ stage: 'ready', message: '更新已下载，等待重启安装。', percent: 100 })
+  await downloadDesktopRelease(activeDesktopRelease)
 
   return {
     ok: true,

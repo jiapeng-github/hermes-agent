@@ -72,7 +72,7 @@ function main() {
   const output = path.resolve(requiredArgument('output'))
   const version = requiredArgument('version')
   const channel = requiredArgument('channel')
-  const flavor = requiredArgument('flavor')
+  const flavor = 'offline'
   const files = walk(input)
   const stagingDir = fs.mkdtempSync(path.join(os.tmpdir(), 'stocksense-release-bundle-'))
   const assets = []

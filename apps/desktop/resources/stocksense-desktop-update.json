@@ -3,6 +3,7 @@
   "endpoint": "http://175.24.139.183/app-api/desktop/v1/check",
   "allowInsecureHttp": true,
   "automaticUpdatesEnabled": false,
+  "backgroundDownloadEnabled": true,
   "channel": "stable",
   "flavor": "offline",
   "signingKeys": {

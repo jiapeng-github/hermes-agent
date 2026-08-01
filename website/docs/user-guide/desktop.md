@@ -311,13 +311,13 @@ Build installers:
 
 ```bash
 npm run dist:mac          # macOS arm64 offline DMG + zip
-npm run dist:mac:thin     # macOS arm64 network-bootstrap DMG + zip
 npm run dist:win          # Windows x64 offline NSIS exe
-npm run dist:win:thin     # Windows x64 network-bootstrap NSIS exe
-npm run pack         # unpacked app under release/ (no installer)
+npm run pack              # offline unpacked app under release/ (no installer)
 ```
 
-Desktop releases support `macos-arm64` and `windows-x64`. Every installer includes the pinned Hermes source and platform install script, so first launch does not require GitHub repository access. `STOCKSENSE_BUNDLE_RUNTIME` defaults to `1`, producing an offline installer that additionally contains uv, Python 3.11, and the locked Python dependency cache. Set it to `0`, or use a `:thin` command, to produce the smaller installer that downloads only runtime dependencies on first launch. Artifact names carry an `offline` or `network` suffix. Build offline installers on their matching native host because Python runtimes and wheels are platform-specific. Default apps use the operating system browser, so Playwright Chromium and other browser-automation dependencies are installed only when those tools are first enabled.
+Desktop releases support `macos-arm64` and `windows-x64`. StockSense ships one offline installer flavor. Every installer includes the pinned Hermes source, platform install script, uv, Python 3.11, and the locked Python dependency cache, so first launch does not require GitHub repository access. Artifact names carry the `offline` suffix. Build installers on their matching native host because Python runtimes and wheels are platform-specific. Default apps use the operating system browser, so Playwright Chromium and other browser-automation dependencies are installed only when those tools are first enabled.
+
+Packaged clients check the signed StockSense version service after startup and then every six hours. When HTTPS automatic delivery is enabled, the client downloads a verified update in the background. Installation remains user-confirmed: after the download completes, StockSense prompts the user to restart and install. Windows updates use the NSIS artifact and blockmap; macOS updates use the ZIP artifact and blockmap. DMG remains the first-install distribution format.
 
 macOS/Windows signing and notarization run automatically when the relevant credentials are present in the environment (`CSC_LINK` / `CSC_KEY_PASSWORD` / `APPLE_*` for macOS, `WIN_CSC_*` for Windows).
 

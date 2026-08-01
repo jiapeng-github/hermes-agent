@@ -663,6 +663,21 @@ function ingestProgress(payload: DesktopUpdateProgress): void {
     command: payload.stage === 'manual' ? payload.message : current.command,
     log
   })
+
+  if (payload.stage === 'ready') {
+    dismissNotification(UPDATE_TOAST_ID)
+    notify({
+      action: {
+        label: translateNow('updates.restartAndInstall'),
+        onClick: () => openUpdateOverlayFor('client')
+      },
+      durationMs: 0,
+      id: UPDATE_TOAST_ID,
+      kind: 'info',
+      message: payload.message || translateNow('updates.readyToInstallBody'),
+      title: translateNow('updates.readyToInstallTitle')
+    })
+  }
 }
 
 let pollerStarted = false
