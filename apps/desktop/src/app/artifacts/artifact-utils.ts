@@ -1,6 +1,6 @@
 import { readDesktopFileDataUrl } from '@/lib/desktop-fs'
 import { filePathFromMediaPath, isRemoteGateway, mediaExternalUrl } from '@/lib/media'
-import type { SessionInfo, SessionMessage } from '@/types/hermes'
+import type { AppActivityArtifact, SessionInfo, SessionMessage } from '@/types/hermes'
 
 export type ArtifactKind = 'image' | 'file' | 'link'
 export type ArtifactFilter = 'all' | ArtifactKind
@@ -12,18 +12,20 @@ export interface ArtifactRecord {
   value: string
   href: string
   label: string
+  profile: string
   sessionId: string
   sessionTitle: string
   timestamp: number
+  appActivityArtifactId?: string
 }
 
 const MARKDOWN_IMAGE_RE = /!\[([^\]]*)\]\(([^)\s]+)\)/g
 const MARKDOWN_LINK_RE = /\[([^\]]+)\]\(([^)\s]+)\)/g
 const URL_RE = /https?:\/\/[^\s<>"')]+/g
-const PATH_RE = /(^|[\s("'`])((?:\/|~\/|\.\.?\/)[^\s"'`<>]+(?:\.[a-z0-9]{1,8})?)/gi
+const PATH_RE = /(^|[\s("'`])((?:(?:[a-z]:[\\/])|\/|~\/|\.\.?\/)[^\s"'`<>]+(?:\.[a-z0-9]{1,8})?)/gi
 const IMAGE_EXT_RE = /\.(?:png|jpe?g|gif|webp|svg|bmp)(?:\?.*)?$/i
-const FILE_EXT_RE = /\.(?:png|jpe?g|gif|webp|svg|bmp|pdf|txt|json|md|csv|zip|tar|gz|mp3|wav|mp4|mov)(?:\?.*)?$/i
-const KEY_HINT_RE = /(path|file|url|image|artifact|output|download|result|target)/i
+const FILE_EXT_RE =
+  /\.(?:png|jpe?g|gif|webp|svg|bmp|html?|pdf|docx?|xlsx?|pptx?|txt|json|md|csv|zip|tar|gz|mp3|wav|mp4|mov)(?:\?.*)?$/i
 
 function artifactSessionTitle(session: SessionInfo): string {
   return session.title?.trim() || session.preview?.trim() || 'Untitled session'
@@ -54,7 +56,8 @@ function looksLikePathOrUrl(value: string): boolean {
     value.startsWith('/') ||
     value.startsWith('./') ||
     value.startsWith('../') ||
-    value.startsWith('~/')
+    value.startsWith('~/') ||
+    /^[a-z]:[\\/]/i.test(value)
   )
 }
 
@@ -67,7 +70,7 @@ function looksLikeArtifact(value: string): boolean {
     return true
   }
 
-  return value.startsWith('/') && value.includes('.')
+  return (value.startsWith('/') || /^[a-z]:[\\/]/i.test(value)) && value.includes('.')
 }
 
 function artifactKind(value: string): ArtifactKind {
@@ -80,7 +83,8 @@ function artifactKind(value: string): ArtifactKind {
     value.startsWith('./') ||
     value.startsWith('../') ||
     value.startsWith('~/') ||
-    value.startsWith('file://')
+    value.startsWith('file://') ||
+    /^[a-z]:[\\/]/i.test(value)
   ) {
     return 'file'
   }
@@ -93,7 +97,7 @@ function artifactHref(value: string): string {
     return value
   }
 
-  if (value.startsWith('file://') || value.startsWith('/')) {
+  if (value.startsWith('file://') || value.startsWith('/') || /^[a-z]:[\\/]/i.test(value)) {
     return mediaExternalUrl(value)
   }
 
@@ -141,32 +145,6 @@ function messageText(message: SessionMessage): string {
   return ''
 }
 
-function collectStringValues(
-  value: unknown,
-  keyPath: string,
-  collector: (value: string, keyPath: string) => void
-): void {
-  if (typeof value === 'string') {
-    collector(value, keyPath)
-
-    return
-  }
-
-  if (Array.isArray(value)) {
-    value.forEach((entry, index) => collectStringValues(entry, `${keyPath}.${index}`, collector))
-
-    return
-  }
-
-  if (!value || typeof value !== 'object') {
-    return
-  }
-
-  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
-    collectStringValues(child, keyPath ? `${keyPath}.${key}` : key, collector)
-  }
-}
-
 function collectArtifactsFromText(text: string, pushValue: (value: string) => void): void {
   for (const match of text.matchAll(MARKDOWN_IMAGE_RE)) {
     pushValue(match[2] || '')
@@ -202,50 +180,38 @@ function collectArtifactsFromText(text: string, pushValue: (value: string) => vo
 function collectArtifactsFromMessage(message: SessionMessage, pushValue: (value: string) => void): void {
   const text = messageText(message)
 
-  if (text) {
+  if (message.role === 'assistant' && text) {
     collectArtifactsFromText(text, pushValue)
   }
 
-  if (message.role !== 'tool' && !Array.isArray(message.tool_calls)) {
+  if (message.role !== 'tool' || (message.tool_name || message.name) !== 'image_generate') {
     return
-  }
-
-  if (Array.isArray(message.tool_calls)) {
-    for (const call of message.tool_calls) {
-      collectStringValues(call, 'tool_call', (value, keyPath) => {
-        const normalized = normalizeValue(value)
-
-        if (!normalized) {
-          return
-        }
-
-        if (KEY_HINT_RE.test(keyPath) && (looksLikePathOrUrl(normalized) || FILE_EXT_RE.test(normalized))) {
-          pushValue(normalized)
-        }
-      })
-    }
   }
 
   const parsed = parseMaybeJson(text)
 
-  if (parsed !== null) {
-    collectStringValues(parsed, 'tool_result', (value, keyPath) => {
-      const normalized = normalizeValue(value)
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return
+  }
 
-      if (!normalized) {
-        return
-      }
+  const result = parsed as Record<string, unknown>
 
-      if ((KEY_HINT_RE.test(keyPath) || looksLikePathOrUrl(normalized)) && looksLikeArtifact(normalized)) {
-        pushValue(normalized)
-      }
-    })
+  if (result.success === false || result.status === 'error') {
+    return
+  }
+
+  for (const key of ['host_image', 'image', 'agent_visible_image'] as const) {
+    if (typeof result[key] === 'string') {
+      pushValue(result[key])
+      return
+    }
   }
 }
 
 export function collectArtifactsForSession(session: SessionInfo, messages: SessionMessage[]): ArtifactRecord[] {
   const found = new Map<string, ArtifactRecord>()
   const title = artifactSessionTitle(session)
+  const profile = session.profile || 'default'
 
   for (const message of messages) {
     if (message.role !== 'assistant' && message.role !== 'tool') {
@@ -259,7 +225,7 @@ export function collectArtifactsForSession(session: SessionInfo, messages: Sessi
         return
       }
 
-      const key = `${session.id}:${value}`
+      const key = `${profile}:${session.id}:${value}`
 
       if (found.has(key)) {
         return
@@ -271,6 +237,7 @@ export function collectArtifactsForSession(session: SessionInfo, messages: Sessi
         value,
         href: artifactHref(value),
         label: artifactLabel(value),
+        profile,
         sessionId: session.id,
         sessionTitle: title,
         timestamp: message.timestamp || session.last_active || session.started_at || Date.now()
@@ -279,4 +246,56 @@ export function collectArtifactsForSession(session: SessionInfo, messages: Sessi
   }
 
   return Array.from(found.values())
+}
+
+export function artifactFromAppActivity(session: SessionInfo, artifact: AppActivityArtifact): ArtifactRecord {
+  const profile = session.profile || 'default'
+  const value = artifact.file_path
+
+  return {
+    id: `app:${profile}:${artifact.id}`,
+    kind: 'file',
+    value,
+    href: artifactHref(value),
+    label: artifact.title?.trim() || artifactLabel(value),
+    profile,
+    sessionId: session.id,
+    sessionTitle: artifactSessionTitle(session),
+    timestamp: artifact.created_at || session.last_active || session.started_at || Date.now(),
+    appActivityArtifactId: artifact.id
+  }
+}
+
+function canonicalArtifactValue(artifact: ArtifactRecord): string {
+  if (artifact.kind === 'link') {
+    try {
+      const url = new URL(artifact.value)
+      url.hash = ''
+
+      return url.toString()
+    } catch {
+      return artifact.value
+    }
+  }
+
+  const normalized = artifact.value
+    .replace(/^file:\/\//i, '')
+    .replace(/\\/g, '/')
+    .replace(/\/+$/, '')
+
+  return /^[a-z]:\//i.test(normalized) ? normalized.toLowerCase() : normalized
+}
+
+export function mergeArtifacts(records: readonly ArtifactRecord[]): ArtifactRecord[] {
+  const found = new Map<string, ArtifactRecord>()
+
+  for (const artifact of [...records].sort((left, right) => right.timestamp - left.timestamp)) {
+    const key = `${artifact.profile}:${artifact.kind}:${canonicalArtifactValue(artifact)}`
+
+    if (!found.has(key)) {
+      found.set(key, artifact)
+    }
+  }
+
+  return Array.from(found.values()).sort((left, right) => right.timestamp - left.timestamp)
 }

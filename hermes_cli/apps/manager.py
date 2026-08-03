@@ -10,6 +10,7 @@ from typing import Any
 from packaging.version import InvalidVersion, Version
 
 from .catalog import ensure_builtin_apps
+from .activity import AppActivityStore
 from .errors import AppDomainError, ManifestValidationError
 from .manifest import load_manifest
 from .models import AppManifest, AppPermissions
@@ -283,6 +284,38 @@ class AppManager:
             self.paths.version(app_id, record.active_version),
         )
 
+    def get_activity_session(self, session_id: str) -> dict[str, Any]:
+        store = AppActivityStore(self.paths)
+        try:
+            return store.get_session(session_id)
+        finally:
+            store.close()
+
+    def launch_activity_artifact(
+        self,
+        artifact_id: str,
+        supervisor: AppRuntimeSupervisor,
+    ) -> dict[str, Any]:
+        store = AppActivityStore(self.paths)
+        try:
+            artifact = store.get_artifact(artifact_id)
+        finally:
+            store.close()
+        ensure_builtin_apps(self.paths, self.registry)
+        record = self._require_record(artifact.app_id)
+        version = artifact.app_version or record.active_version
+        manifest = self._load_installed_manifest(
+            record.id,
+            version,
+            record=record,
+        )
+        return supervisor.launch_artifact(
+            record,
+            manifest,
+            self.paths.version(record.id, version),
+            artifact.id,
+        )
+
     def stop(self, app_id: str, supervisor: AppRuntimeSupervisor) -> None:
         ensure_builtin_apps(self.paths, self.registry)
         self._require_record(app_id)
@@ -310,6 +343,11 @@ class AppManager:
         ensure_builtin_apps(self.paths, self.registry)
         self._require_record(app_id)
         supervisor.stop(app_id)
+        activity = AppActivityStore(self.paths)
+        try:
+            activity.delete_app(app_id)
+        finally:
+            activity.close()
         self.registry.delete_data(app_id)
 
     def _require_record(self, app_id: str) -> AppRecord:

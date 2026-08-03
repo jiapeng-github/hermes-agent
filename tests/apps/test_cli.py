@@ -155,10 +155,10 @@ def test_cli_fixture_completes_create_modify_export_import_and_rollback(
     assert code == 0
     assert [item["id"] for item in listed["items"]] == [
         "local.stockagent.cli-fixture",
-        "ai.hermes.industry-monitor",
-        "ai.hermes.company-analysis",
-        "ai.hermes.stock-deep-analysis",
-        "ai.hermes.watchlist",
+        "ai.stocksense.industry-monitor",
+        "ai.stocksense.company-analysis",
+        "ai.stocksense.stock-deep-analysis",
+        "ai.stocksense.watchlist",
     ]
     code, inspected = _run(
         parser,

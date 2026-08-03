@@ -68,8 +68,8 @@ Gate 5 is accepted. The phase-1 local App Platform release gates are complete.
 
 Date: 2026-07-14
 
-- `ai.hermes.industry-monitor` and `ai.hermes.company-analysis` join
-  `ai.hermes.watchlist` as runtime-owned default applications in Application
+- `ai.stocksense.industry-monitor` and `ai.stocksense.company-analysis` join
+  `ai.stocksense.watchlist` as runtime-owned default applications in Application
   Market. All three install atomically per Profile and report `builtin` trust.
 - Industry Monitor inherits only `finance.industry.snapshot` and
   `finance.industry.refresh`. Its browser UI keeps the cached-first asynchronous

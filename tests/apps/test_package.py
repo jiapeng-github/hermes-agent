@@ -22,7 +22,7 @@ def test_valid_unsigned_package_is_fully_verified(tmp_path: Path) -> None:
 
     inspection = _inspect(package, tmp_path)
 
-    assert inspection.manifest.id == "ai.hermes.watchlist"
+    assert inspection.manifest.id == "ai.stocksense.watchlist"
     assert inspection.envelope.source_included is True
     assert inspection.signature_state == "unsigned"
     assert (tmp_path / "extracted/dist/index.html").is_file()

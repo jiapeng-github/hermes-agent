@@ -61,7 +61,7 @@ def test_analyze_creates_plan_but_does_not_install(tmp_path: Path) -> None:
 
     plan = service.analyze(package)
 
-    assert plan.app.id == "ai.hermes.watchlist"
+    assert plan.app.id == "ai.stocksense.watchlist"
     assert plan.conflict.kind == "none"
     assert service.registry.get(plan.app.id) is None
     assert not service.paths.version(plan.app.id, plan.app.version).exists()
@@ -226,14 +226,14 @@ def test_copy_rewrites_only_installed_manifest_identity(tmp_path: Path) -> None:
 
     result = service.confirm(
         plan.import_id,
-        _confirmation(plan, mode="copy", copy_id="ai.hermes.watchlist-copy"),
+        _confirmation(plan, mode="copy", copy_id="ai.stocksense.watchlist-copy"),
     )
 
-    assert result.app.id == "ai.hermes.watchlist-copy"
-    copied = service.paths.version("ai.hermes.watchlist-copy", "1.0.0")
+    assert result.app.id == "ai.stocksense.watchlist-copy"
+    copied = service.paths.version("ai.stocksense.watchlist-copy", "1.0.0")
     copied_manifest = yaml.safe_load((copied / "app.yaml").read_text(encoding="utf-8"))
-    assert copied_manifest["id"] == "ai.hermes.watchlist-copy"
-    assert service.registry.get("ai.hermes.watchlist") is None
+    assert copied_manifest["id"] == "ai.stocksense.watchlist-copy"
+    assert service.registry.get("ai.stocksense.watchlist") is None
 
 
 def test_copy_downgrades_signature_trust_after_manifest_rewrite(tmp_path: Path) -> None:

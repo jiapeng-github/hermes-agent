@@ -16,7 +16,7 @@ path was added.
 
 ## Built-in pilot
 
-`ai.hermes.watchlist` is bundled as a static HTML/CSS/JavaScript application.
+`ai.stocksense.watchlist` is bundled as a static HTML/CSS/JavaScript application.
 Its Manifest declares six exact first-party service actions:
 
 | Application action | Runtime-owned handler | Existing domain source |
@@ -57,7 +57,7 @@ second parser or financial calculation path.
 
 On first read, an existing `<HERMES_HOME>/finance/watchlist.json` is copied
 idempotently to
-`<HERMES_HOME>/app-data/ai.hermes.watchlist/storage/watchlist.json`. The legacy
+`<HERMES_HOME>/app-data/ai.stocksense.watchlist/storage/watchlist.json`. The legacy
 file is left byte-identical as a rollback copy. Both the browser application
 and old desktop route then read and write the new Profile-scoped canonical
 file.

@@ -8,7 +8,7 @@ import { AppMarketView } from './index'
 
 const PREVIEW_APPS = [
   {
-    id: 'ai.hermes.industry-monitor',
+    id: 'ai.stocksense.industry-monitor',
     name: '行业轮动和资金流向监控',
     description: 'A 股市场广度、热点题材、行业轮动、资金流与北向成交监控。',
     version: '1.0.0',
@@ -31,7 +31,7 @@ const PREVIEW_APPS = [
     }
   },
   {
-    id: 'ai.hermes.company-analysis',
+    id: 'ai.stocksense.company-analysis',
     name: '上市公司基本面分析',
     description: '按公司名称或股票代码生成公司画像、财务趋势、估值与研报分析。',
     version: '1.0.0',
@@ -54,10 +54,10 @@ const PREVIEW_APPS = [
     }
   },
   {
-    id: 'ai.hermes.stock-deep-analysis',
+    id: 'ai.stocksense.stock-deep-analysis',
     name: '个股三维深度分析',
-    description: '基于妙想 MCP 的基本面、资讯研报与估值资金三维个股研究应用。',
-    version: '1.0.2',
+    description: '基于妙想 MCP 的公司质地、舆情摘要与交易活跃度三维个股研究应用。',
+    version: '1.0.0',
     enabled: true,
     source_editable: false,
     lineage: 'builtin',
@@ -77,7 +77,7 @@ const PREVIEW_APPS = [
     }
   },
   {
-    id: 'ai.hermes.watchlist',
+    id: 'ai.stocksense.watchlist',
     name: '自选股盯盘看板',
     description: 'Profile 隔离的 A 股自选股盯盘、行情详情和公司分析应用。',
     version: '1.0.0',

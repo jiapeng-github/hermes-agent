@@ -1,5 +1,5 @@
 (() => {
-  const state = { data: null, mode: 'topic', loading: false, timer: null }
+  const state = { data: null, mode: 'topic', loading: false, timer: null, capturePending: false }
   const el = id => document.getElementById(id)
 
   document.addEventListener('DOMContentLoaded', initialize)
@@ -21,9 +21,15 @@
     state.loading = true
     el('refresh').classList.add('loading')
     try {
-      state.data = await window.HermesApp.run('snapshot', { auto_refresh: autoRefresh })
+      const tracked = await window.HermesApp.runTracked('snapshot', { auto_refresh: autoRefresh })
+      state.data = tracked.result
       render()
-      schedule(Boolean(state.data.refresh?.refreshing))
+      const refreshing = Boolean(state.data.refresh?.refreshing)
+      schedule(refreshing)
+      if (state.capturePending && !refreshing) {
+        state.capturePending = false
+        await publishArtifact(tracked.run_id)
+      }
     } catch (error) {
       el('status').textContent = error.message || '市场数据读取失败'
     } finally {
@@ -36,10 +42,24 @@
     if (state.loading) return
     try {
       el('status').textContent = '妙想 MCP 正在后台刷新'
+      state.capturePending = true
       await window.HermesApp.run('refresh', {})
       schedule(true, 500)
     } catch (error) {
       el('status').textContent = error.message || '刷新失败'
+    }
+  }
+
+  async function publishArtifact(runId) {
+    const data = state.data || {}
+    try {
+      await window.HermesApp.publishCurrentPage(runId, {
+        title: '行业轮动和资金流向监控',
+        summary: data.summary?.headline || 'A 股市场广度、热点题材、行业轮动与资金流向快照',
+        snapshot: { as_of: data.as_of || null, headline: data.summary?.headline || '' }
+      })
+    } catch (error) {
+      console.warn('应用产物保存失败', error)
     }
   }
 

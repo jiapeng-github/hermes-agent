@@ -64,50 +64,45 @@
 
   <!-- 基本面 -->
   <div class="card">
-    <h2><span class="num">1</span>基本面 · 财务质地</h2>
-    <span class="tag" id="fundamental-tag">核心来源：妙想 MCP · 单位：人民币 / 同比口径</span>
+    <h2><span class="num">1</span>基本面 · 公司质地与估值</h2>
+    <span class="tag" id="fundamental-tag">核心来源：妙想 MCP · 结构化公司画像、盈利能力与同行对比</span>
     <div class="metrics" id="fundamental-metrics"></div>
-
-    <div class="chart-title">归母净利润趋势（亿元）</div>
-    <div class="trend" id="profit-trend"></div>
-
-    <div class="metrics supplementary" id="supplementary-metrics"></div>
+    <div class="section-heading">
+      <div class="chart-title">同行估值与盈利能力对比</div>
+      <span id="fundamental-detail-note">按妙想 MCP 实际返回字段展示</span>
+    </div>
+    <div id="fundamental-detail"></div>
+    <div class="profile-summary" id="fundamental-summary"></div>
   </div>
 
   <!-- 新闻面 -->
   <div class="card">
-    <h2><span class="num">2</span>新闻面 · 近30天舆情</h2>
-    <span class="tag">情绪倾向基于妙想 MCP 返回的公开资讯样本估算，仅供参考</span>
-    <div class="sent">
-      <div class="donut" id="sentiment-donut"></div>
-      <div class="legend" id="sentiment-legend"></div>
-    </div>
-    <div class="tl research-timeline" id="research"></div>
+    <h2><span class="num">2</span>新闻面 · 舆情摘要</h2>
+    <span class="tag">基于妙想 MCP 返回的公开资讯提炼，仅展示简短总结</span>
+    <div class="research-summary" id="research-summary"></div>
   </div>
 
   <!-- 资金面 -->
   <div class="card">
-    <h2><span class="num">3</span>资金面 · 主力与北向</h2>
-    <span class="tag">核心来源：妙想 MCP 返回的交易活跃度与资金数据（涨红跌绿，按 A 股习惯）</span>
+    <h2><span class="num">3</span>资金面 · 交易活跃度与价格动能</h2>
+    <span class="tag">核心来源：妙想 MCP 返回的成交额、换手率、量比与当日行情</span>
     <div class="metrics capital-metrics" id="capital-metrics"></div>
-    <table>
-      <thead><tr><th>日期</th><th>主力净流入</th><th>收盘价</th><th>涨跌幅</th></tr></thead>
-      <tbody id="capital-table"></tbody>
-      <tfoot id="capital-total"></tfoot>
-    </table>
-    <p class="explain"><b class="ink">北向资金解读：</b><span id="capital-note">当前接口尚未返回完整北向持股或主力近 5 日序列时，本区域会明确提示数据缺口。</span></p>
+    <div class="signal-grid" id="capital-signals"></div>
+    <p class="explain"><b class="ink">资金面解读：</b><span id="capital-note">等待成交活跃度与价格动能数据。</span></p>
   </div>
 
   <!-- 价格区间 -->
   <div class="card">
     <h2><span class="num">¥</span>合理价格区间参考</h2>
     <span class="tag">基于当前可用价格区间与估值位置生成，非投资建议</span>
-    <div class="range-track">
-      <div class="range-mark" id="range-low"><span class="cap">保守 --</span></div>
-      <div class="range-mid" id="range-mid"><span class="cap">中枢 --</span></div>
-      <div class="range-mark" id="range-high"><span class="cap">乐观 --</span></div>
+    <div id="valuation-range" class="is-hidden">
+      <div class="range-track">
+        <div class="range-mark" id="range-low"><span class="cap">保守 --</span></div>
+        <div class="range-mid" id="range-mid"><span class="cap">中枢 --</span></div>
+        <div class="range-mark" id="range-high"><span class="cap">乐观 --</span></div>
+      </div>
+      <div class="range-note"><span>← 保守（区间低位）</span><span id="valuation-signal">中性（估值中枢）</span><span>乐观（区间高位）→</span></div>
     </div>
-    <div class="range-note"><span>← 保守（区间低位）</span><span id="valuation-signal">中性（估值中枢）</span><span>乐观（区间高位）→</span></div>
     <div class="metrics supplementary" id="valuation-metrics"></div>
     <p class="explain" id="valuation-note">等待妙想 MCP 返回价格区间与估值数据。</p>
   </div>
@@ -118,8 +113,8 @@
     <div class="src">
       <span>实时行情：<b>妙想 MCP</b> <i id="source-quote">等待</i></span>
       <span>财务数据：<b>妙想 MCP</b> <i id="source-finance">等待</i></span>
-      <span>新闻舆情：<b>妙想 MCP</b> <i id="source-research">等待</i></span>
-      <span>资金数据：<b>妙想 MCP</b> <i id="source-capital">等待</i></span>
+      <span>新闻摘要：<b>妙想 MCP</b> <i id="source-research">等待</i></span>
+      <span>交易活跃度：<b>妙想 MCP</b> <i id="source-capital">等待</i></span>
       <span>数据时间：<b id="as-of">等待查询</b></span>
     </div>
   </div>
@@ -139,8 +134,6 @@
 
 </div>
 </div>
-
-<dialog id="article-dialog"><div class="dialog-shell"><header><div><h2 id="article-title"></h2><p id="article-meta"></p></div><button class="icon-button" id="article-close" aria-label="关闭">×</button></header><div id="article-body"></div></div></dialog>
 <script src="/assets/runtime.js"></script>
 <script src="/assets/app.js"></script>
 </body>

@@ -38,7 +38,7 @@ def _validator(name: str) -> Draft202012Validator:
 def _valid_manifest() -> dict[str, Any]:
     return {
         "schema_version": 1,
-        "id": "ai.hermes.watchlist",
+        "id": "ai.stocksense.watchlist",
         "name": "自选股",
         "version": "1.0.0",
         "description": "本地自选股盯盘与分析应用",
@@ -201,7 +201,7 @@ def test_happ_metadata_definitions_validate_canonical_examples() -> None:
     schema = _read_json("happ-package.schema.json")
     envelope = {
         "format_version": 1,
-        "app_id": "ai.hermes.watchlist",
+        "app_id": "ai.stocksense.watchlist",
         "app_version": "1.0.0",
         "created_at": "2026-07-12T08:00:00Z",
         "created_by": "hermes-desktop",

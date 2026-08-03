@@ -2413,6 +2413,15 @@ async def fs_read_text(path: str):
     }
 
 
+@app.get("/api/fs/exists")
+async def fs_file_exists(path: str):
+    try:
+        _fs_regular_file(_fs_path(path))
+        return {"exists": True}
+    except HTTPException:
+        return {"exists": False}
+
+
 class FsWriteText(BaseModel):
     path: str
     content: str
@@ -4319,7 +4328,8 @@ def get_sessions(
             now = time.time()
             for s in sessions:
                 s["is_active"] = (
-                    s.get("ended_at") is None
+                    s.get("source") != "app"
+                    and s.get("ended_at") is None
                     and (now - s.get("last_active", s.get("started_at", 0))) < 300
                 )
                 if profile_name:
@@ -4441,7 +4451,8 @@ def get_profiles_sessions(
                 s["profile"] = name
                 s["is_default_profile"] = name == "default"
                 s["is_active"] = (
-                    s.get("ended_at") is None
+                    s.get("source") != "app"
+                    and s.get("ended_at") is None
                     and (now - s.get("last_active", s.get("started_at", 0))) < 300
                 )
                 s["archived"] = bool(s.get("archived"))
@@ -4527,7 +4538,8 @@ def get_profiles_sessions_sidebar(
             s["profile"] = name
             s["is_default_profile"] = name == "default"
             s["is_active"] = (
-                s.get("ended_at") is None
+                s.get("source") != "app"
+                and s.get("ended_at") is None
                 and (now - s.get("last_active", s.get("started_at", 0))) < 300
             )
             s["archived"] = bool(s.get("archived"))
@@ -12194,6 +12206,43 @@ async def stop_local_app(app_id: str, request: Request):
     except AppDomainError as exc:
         return _app_api_error(exc)
     return Response(status_code=204)
+
+
+@app.get("/api/app-activity/sessions/{session_id}")
+async def get_app_activity_session(session_id: str, request: Request):
+    """Return the read-only application timeline behind one app session."""
+    from hermes_cli.apps.activity import AppActivityError
+    from hermes_cli.apps.manager import AppManager
+
+    try:
+        return await asyncio.to_thread(AppManager().get_activity_session, session_id)
+    except AppActivityError as exc:
+        return JSONResponse(
+            {"error": {"code": exc.code, "message": exc.message, "retryable": False}},
+            status_code=exc.status_code,
+        )
+
+
+@app.post("/api/app-activity/artifacts/{artifact_id}/launch", status_code=201)
+async def launch_app_activity_artifact(artifact_id: str, request: Request):
+    """Issue a one-time AppHost URL for a persisted static HTML artifact."""
+    from hermes_cli.apps.activity import AppActivityError
+    from hermes_cli.apps.errors import AppDomainError
+    from hermes_cli.apps.manager import AppManager
+
+    try:
+        return await asyncio.to_thread(
+            AppManager().launch_activity_artifact,
+            artifact_id,
+            request.app.state.app_runtime_supervisor,
+        )
+    except AppActivityError as exc:
+        return JSONResponse(
+            {"error": {"code": exc.code, "message": exc.message, "retryable": False}},
+            status_code=exc.status_code,
+        )
+    except AppDomainError as exc:
+        return _app_api_error(exc)
 
 
 @app.post("/api/apps/{app_id}/export")

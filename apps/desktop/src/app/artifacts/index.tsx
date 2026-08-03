@@ -17,8 +17,9 @@ import {
 } from '@/components/ui/pagination'
 import { RowButton } from '@/components/ui/row-button'
 import { Tip } from '@/components/ui/tooltip'
-import { getSessionMessages, listAllProfileSessions } from '@/hermes'
+import { getAppActivitySession, getSessionMessages, launchAppActivityArtifact, listAllProfileSessions } from '@/hermes'
 import { type Translations, useI18n } from '@/i18n'
+import { desktopFileExists } from '@/lib/desktop-fs'
 import { ExternalLink, ExternalLinkIcon, hostPathLabel, urlSlugTitleLabel, useLinkTitle } from '@/lib/external-link'
 import { FileImage, FileText, FolderOpen, Link2, Loader2, RefreshCw } from '@/lib/icons'
 import { downloadGatewayMediaFile, isRemoteGateway } from '@/lib/media'
@@ -36,9 +37,11 @@ import type { SetStatusbarItemGroup } from '../shell/statusbar-controls'
 import {
   ARTIFACT_FILTERS,
   type ArtifactFilter,
+  artifactFromAppActivity,
   artifactImageSrc,
   type ArtifactRecord,
-  collectArtifactsForSession
+  collectArtifactsForSession,
+  mergeArtifacts
 } from './artifact-utils'
 
 function formatArtifactTime(timestamp: number): string {
@@ -83,7 +86,7 @@ function paginationItems(page: number, pageCount: number): Array<number | 'ellip
 }
 
 type CellCtx = {
-  onOpen: (href: string) => void | Promise<void>
+  onOpen: (artifact: ArtifactRecord) => void | Promise<void>
   onOpenChat: (sessionId: string) => void
 }
 
@@ -121,20 +124,48 @@ export function ArtifactsView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
     setRefreshing(true)
 
     try {
-      const sessions = (await listAllProfileSessions(30, 1)).sessions
-      const results = await Promise.allSettled(sessions.map(session => getSessionMessages(session.id, session.profile)))
-      const nextArtifacts: ArtifactRecord[] = []
+      const [conversationPage, appPage] = await Promise.all([
+        listAllProfileSessions(50, 1, 'exclude', 'recent', 'all', { excludeSources: ['app'] }),
+        listAllProfileSessions(100, 0, 'exclude', 'recent', 'all', { source: 'app' })
+      ])
+      const [conversationResults, appResults] = await Promise.all([
+        Promise.allSettled(conversationPage.sessions.map(session => getSessionMessages(session.id, session.profile))),
+        Promise.allSettled(appPage.sessions.map(session => getAppActivitySession(session.id, session.profile)))
+      ])
+      const candidates: ArtifactRecord[] = []
 
-      results.forEach((result, index) => {
+      conversationResults.forEach((result, index) => {
         if (result.status !== 'fulfilled') {
           return
         }
 
-        const session = sessions[index]
-        nextArtifacts.push(...collectArtifactsForSession(session, result.value.messages))
+        const session = conversationPage.sessions[index]
+
+        candidates.push(...collectArtifactsForSession(session, result.value.messages))
       })
 
-      setArtifacts(nextArtifacts.sort((left, right) => right.timestamp - left.timestamp))
+      appResults.forEach((result, index) => {
+        if (result.status !== 'fulfilled') {
+          return
+        }
+
+        const session = appPage.sessions[index]
+
+        candidates.push(...result.value.artifacts.map(artifact => artifactFromAppActivity(session, artifact)))
+      })
+
+      const merged = mergeArtifacts(candidates)
+      const existing = await Promise.all(
+        merged.map(async artifact =>
+          artifact.kind === 'file'
+            ? (await desktopFileExists(artifact.value, artifact.profile))
+              ? artifact
+              : null
+            : artifact
+        )
+      )
+
+      setArtifacts(existing.filter((artifact): artifact is ArtifactRecord => artifact !== null))
     } catch (err) {
       notifyError(err, a.failedLoad)
       setArtifacts([])
@@ -236,22 +267,30 @@ export function ArtifactsView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
   }, [artifacts])
 
   const openArtifact = useCallback(
-    async (href: string) => {
+    async (artifact: ArtifactRecord) => {
       try {
+        if (artifact.appActivityArtifactId) {
+          const launch = await launchAppActivityArtifact(artifact.appActivityArtifactId, artifact.profile)
+
+          await window.hermesDesktop?.apps.openLaunchUrl(launch.url)
+
+          return
+        }
+
         // A gateway-local file resolves to file:// in remote mode (the file
         // lives on the gateway, not this disk). Opening that locally fails —
         // and an OAuth remote connection has no query token to build a download
         // URL. Fetch the bytes over the authenticated fs bridge instead.
-        if (isRemoteGateway() && /^file:/i.test(href)) {
-          await downloadGatewayMediaFile(href)
+        if (isRemoteGateway() && /^file:/i.test(artifact.href)) {
+          await downloadGatewayMediaFile(artifact.href)
 
           return
         }
 
         if (window.hermesDesktop?.openExternal) {
-          await window.hermesDesktop.openExternal(href)
+          await window.hermesDesktop.openExternal(artifact.href)
         } else {
-          window.open(href, '_blank', 'noopener,noreferrer')
+          window.open(artifact.href, '_blank', 'noopener,noreferrer')
         }
       } catch (err) {
         notifyError(err, a.openFailed)
@@ -550,7 +589,7 @@ function PrimaryCell({ artifact, ctx }: { artifact: ArtifactRecord; ctx: CellCtx
   return (
     <ArtifactCellAction
       href={isLink ? artifact.href : undefined}
-      onClick={isLink ? undefined : () => void ctx.onOpen(artifact.href)}
+      onClick={isLink ? undefined : () => void ctx.onOpen(artifact)}
       title={label}
     >
       <span className="mt-0.5 grid size-6 shrink-0 place-items-center self-start rounded-md bg-(--ui-bg-tertiary) text-(--ui-text-tertiary)">

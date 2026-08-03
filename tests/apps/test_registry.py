@@ -17,12 +17,12 @@ from .happ_fixtures import manifest_data
 def test_paths_are_profile_scoped_and_separate_package_from_data(tmp_path: Path) -> None:
     paths = AppPaths(tmp_path / "profile-a")
 
-    assert paths.version("ai.hermes.watchlist", "1.0.0") == (
+    assert paths.version("ai.stocksense.watchlist", "1.0.0") == (
         tmp_path
-        / "profile-a/apps/packages/ai.hermes.watchlist/versions/1.0.0"
+        / "profile-a/apps/packages/ai.stocksense.watchlist/versions/1.0.0"
     )
-    assert paths.app_runtime_data("ai.hermes.watchlist") == (
-        tmp_path / "profile-a/app-data/ai.hermes.watchlist"
+    assert paths.app_runtime_data("ai.stocksense.watchlist") == (
+        tmp_path / "profile-a/app-data/ai.stocksense.watchlist"
     )
 
 

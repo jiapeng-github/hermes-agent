@@ -70,7 +70,7 @@ class FinanceWatchlistTest(unittest.TestCase):
             migrated = (
                 Path(home)
                 / "app-data"
-                / "ai.hermes.watchlist"
+                / "ai.stocksense.watchlist"
                 / "storage"
                 / "watchlist.json"
             )

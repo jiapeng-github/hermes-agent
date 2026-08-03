@@ -17,6 +17,11 @@ import type { GatewayRequester } from '../types'
 // desktop websocket, so poll the bounded lists while the app is visible.
 const CRON_POLL_INTERVAL_MS = 30_000
 const MESSAGING_POLL_INTERVAL_MS = 10_000
+// App activity is written by AppHost after an explicit browser-side action,
+// outside the desktop gateway event stream. Refreshing recents on focus and at
+// a modest cadence makes the new read-only app session appear without asking
+// the user to create a chat or reconnect first.
+const APP_ACTIVITY_POLL_INTERVAL_MS = 5_000
 const ACTIVE_MESSAGING_SESSION_POLL_INTERVAL_MS = 5_000
 // Match the TUI's live-session refresh cadence. Auto-compression can rotate a
 // stored session id while its turn keeps running; until the next snapshot the
@@ -230,6 +235,16 @@ export function useBackgroundSync({
 
     return visiblePoll(MESSAGING_POLL_INTERVAL_MS, () => void refreshMessagingSessions())
   }, [gatewayState, refreshMessagingSessions])
+
+  // AppHost persists successful app artifacts directly to the profile's
+  // session database, so no chat websocket event exists to refresh recents.
+  useEffect(() => {
+    if (gatewayState !== 'open') {
+      return
+    }
+
+    return visiblePoll(APP_ACTIVITY_POLL_INTERVAL_MS, () => void refreshSessions())
+  }, [gatewayState, refreshSessions])
 
   // Only the open messaging transcript needs its own poll — local chats are
   // live over the websocket already.

@@ -10,6 +10,7 @@ from pathlib import Path
 
 from packaging.version import Version
 
+from .activity import AppActivityStore
 from .errors import AppDomainError, AppRegistryError
 from .manifest import load_manifest
 from .models import AppManifest
@@ -18,10 +19,10 @@ from .registry import AppRecord, AppRegistry
 from .workspace import validate_app_bundle
 
 
-INDUSTRY_MONITOR_APP_ID = "ai.hermes.industry-monitor"
-COMPANY_ANALYSIS_APP_ID = "ai.hermes.company-analysis"
-STOCK_DEEP_ANALYSIS_APP_ID = "ai.hermes.stock-deep-analysis"
-WATCHLIST_APP_ID = "ai.hermes.watchlist"
+INDUSTRY_MONITOR_APP_ID = "ai.stocksense.industry-monitor"
+COMPANY_ANALYSIS_APP_ID = "ai.stocksense.company-analysis"
+STOCK_DEEP_ANALYSIS_APP_ID = "ai.stocksense.stock-deep-analysis"
+WATCHLIST_APP_ID = "ai.stocksense.watchlist"
 INDUSTRY_MONITOR_SERVICE_HANDLERS = (
     "finance.industry.snapshot",
     "finance.industry.refresh",
@@ -38,6 +39,12 @@ WATCHLIST_SERVICE_HANDLERS = (
     "finance.watchlist.remove",
     "finance.watchlist.detail",
     "finance.company.analysis",
+)
+LEGACY_BUILTIN_APP_IDS = (
+    "ai.hermes.company-analysis",
+    "ai.hermes.industry-monitor",
+    "ai.hermes.stock-deep-analysis",
+    "ai.hermes.watchlist",
 )
 
 
@@ -87,6 +94,23 @@ def builtin_app(app_id: str) -> BuiltinApp | None:
 
 def ensure_builtin_apps(paths: AppPaths, registry: AppRegistry) -> list[AppRecord]:
     """Install newer bundled versions without replacing user-owned identities."""
+    for app_id in LEGACY_BUILTIN_APP_IDS:
+        existing = registry.get(app_id)
+        if existing is not None and existing.lineage != "builtin":
+            continue
+        if not (
+            existing is not None
+            or paths.app_package(app_id).exists()
+            or paths.app_runtime_data(app_id).exists()
+        ):
+            continue
+        registry.retire_builtin(app_id)
+        activity = AppActivityStore(paths)
+        try:
+            activity.delete_app(app_id)
+        finally:
+            activity.close()
+
     installed: list[AppRecord] = []
     for definition in _CATALOG.values():
         installed.append(_ensure_builtin(definition, paths, registry))
@@ -176,6 +200,7 @@ __all__ = [
     "COMPANY_ANALYSIS_SERVICE_HANDLERS",
     "INDUSTRY_MONITOR_APP_ID",
     "INDUSTRY_MONITOR_SERVICE_HANDLERS",
+    "LEGACY_BUILTIN_APP_IDS",
     "STOCK_DEEP_ANALYSIS_APP_ID",
     "STOCK_DEEP_ANALYSIS_SERVICE_HANDLERS",
     "WATCHLIST_APP_ID",

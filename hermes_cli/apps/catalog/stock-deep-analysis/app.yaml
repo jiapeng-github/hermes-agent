@@ -1,8 +1,8 @@
 schema_version: 1
-id: ai.hermes.stock-deep-analysis
+id: ai.stocksense.stock-deep-analysis
 name: 个股三维深度分析
-version: 1.0.3
-description: 基于妙想 MCP 的基本面、资讯研报与估值资金三维个股研究应用
+version: 1.0.1
+description: 基于妙想 MCP 的公司质地、舆情摘要与交易活跃度三维个股研究应用
 entry: dist/index.html
 icon: icon.png
 sdk_version: 1.0.0

@@ -1,16 +1,13 @@
 (() => {
-  const state = { data: null, query: '', loading: false, timer: null }
+  const state = { data: null, query: '', loading: false, timer: null, capturePending: false }
   const el = id => document.getElementById(id)
 
   document.addEventListener('DOMContentLoaded', initialize)
 
   async function initialize() {
-    const [bootstrap, saved] = await Promise.all([
-      window.HermesApp.bootstrap(),
-      window.HermesApp.storageGet('company-analysis.last-query', '')
-    ])
+    const bootstrap = await window.HermesApp.bootstrap()
     document.documentElement.dataset.theme = bootstrap.theme
-    state.query = typeof saved === 'string' && saved.trim() ? saved.trim() : ''
+    state.query = ''
     el('query').value = state.query
     el('search-form').addEventListener('submit', search)
     el('refresh').addEventListener('click', refresh)
@@ -28,13 +25,14 @@
     const query = el('query').value.trim()
     if (!query) return
     state.query = query
-    await window.HermesApp.storageSet('company-analysis.last-query', query)
+    state.capturePending = true
     await load(true)
   }
 
   async function refresh() {
     if (state.loading || !state.query) return
     el('status').textContent = '妙想 MCP 正在后台刷新'
+    state.capturePending = true
     try {
       await window.HermesApp.run('refresh', { query: state.query })
       schedule(true, 500)
@@ -52,14 +50,35 @@
     el('refresh').classList.add('loading')
     el('status').textContent = `正在读取 ${state.query} 的分析快照`
     try {
-      state.data = await window.HermesApp.run('analyze', { query: state.query, auto_refresh: autoRefresh })
+      const tracked = await window.HermesApp.runTracked('analyze', { query: state.query, auto_refresh: autoRefresh })
+      state.data = tracked.result
       render()
-      schedule(Boolean(state.data.refresh?.refreshing))
+      const refreshing = Boolean(state.data.refresh?.refreshing)
+      schedule(refreshing)
+      if (state.capturePending && !refreshing) {
+        state.capturePending = false
+        await publishArtifact(tracked.run_id)
+      }
     } catch (error) {
       el('status').textContent = error.message || '公司分析读取失败'
     } finally {
       state.loading = false
       el('refresh').classList.remove('loading')
+    }
+  }
+
+  async function publishArtifact(runId) {
+    const data = state.data || {}
+    const resolved = data.resolved || {}
+    const name = resolved.name || data.quote?.name || state.query
+    try {
+      await window.HermesApp.publishCurrentPage(runId, {
+        title: `${name} 上市公司基本面分析`,
+        summary: `${name} 的公司画像、财务趋势、盈利能力、估值与研报分析快照`,
+        snapshot: { query: state.query, name, code: resolved.code || '', as_of: data.as_of || null }
+      })
+    } catch (error) {
+      console.warn('应用产物保存失败', error)
     }
   }
 

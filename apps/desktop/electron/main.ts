@@ -128,6 +128,7 @@ import { createLinkTitleWindow, guardLinkTitleSession, readLinkTitleWindowTitle 
 import { ensureMainWindow } from './main-window-lifecycle'
 import {
   hasPersistedManagedConfig,
+  hasSecurePersistedManagedConfig,
   normalizeStockSenseManagedConfig,
   persistStockSenseManagedConfig,
   readManagedConfigMetadata
@@ -558,7 +559,7 @@ function resolveStockMcpDefaultsPath() {
 function resolveStockSenseManagedConfigDir() {
   const remoteManagedConfigDir = path.join(app.getPath('userData'), 'managed-config')
   const candidates = [
-    remoteManagedConfigDir,
+    hasSecurePersistedManagedConfig(remoteManagedConfigDir) ? remoteManagedConfigDir : null,
     process.resourcesPath ? path.join(process.resourcesPath, 'stocksense-managed') : null,
     path.join(APP_ROOT, 'resources', 'stocksense-managed')
   ]

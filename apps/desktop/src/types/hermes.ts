@@ -419,6 +419,44 @@ export interface SessionInfo {
   is_default_profile?: boolean
 }
 
+export interface AppActivityArtifact {
+  id: string
+  app_id: string
+  app_version: string
+  session_id: string
+  run_id: string
+  title: string
+  summary: string
+  mime_type: 'text/html'
+  sha256: string
+  size_bytes: number
+  created_at: number
+  file_path: string
+}
+
+export interface AppActivityRun {
+  run_id: string
+  action_id: string
+  input: Record<string, unknown>
+  status: 'running' | 'completed' | 'failed' | 'cancelled'
+  result_summary?: string | null
+  error?: { code?: string; message?: string; retryable?: boolean } | null
+  created_at: number
+  completed_at?: number | null
+}
+
+export interface AppActivitySessionResponse {
+  session: {
+    app_id: string
+    session_id: string
+    app_name: string
+    created_at: number
+    updated_at: number
+  }
+  artifacts: AppActivityArtifact[]
+  runs: AppActivityRun[]
+}
+
 export interface SessionMessage {
   codex_reasoning_items?: unknown
   content: unknown

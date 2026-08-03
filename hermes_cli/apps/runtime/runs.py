@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import queue
 import threading
 import time
@@ -14,11 +15,13 @@ from typing import Any
 from jsonschema import Draft202012Validator
 
 from ..models import AppManifest, ServiceAction
+from ..activity import AppActivityStore
 from .service import ServiceActionRegistry
 
 
 TERMINAL_STATUSES = frozenset({"completed", "failed", "cancelled"})
 IDEMPOTENCY_TTL_SECONDS = 24 * 60 * 60
+_log = logging.getLogger(__name__)
 
 
 class RuntimeRunError(Exception):
@@ -40,10 +43,11 @@ class RuntimeRunError(Exception):
 
 
 class RunRecord:
-    def __init__(self, run_id: str, action_id: str):
+    def __init__(self, run_id: str, action_id: str, runtime_session: str):
         now = _utc_now()
         self.run_id = run_id
         self.action_id = action_id
+        self.runtime_session = runtime_session
         self.status = "queued"
         self.result: Any = None
         self.error: dict[str, Any] | None = None
@@ -129,10 +133,12 @@ class ActionRuntime:
         manifest: AppManifest,
         app_root: Path,
         service_registry: ServiceActionRegistry,
+        activity_store: AppActivityStore | None = None,
     ):
         self.manifest = manifest
         self.app_root = app_root
         self.service_registry = service_registry
+        self.activity_store = activity_store
         self._runs: dict[str, RunRecord] = {}
         self._idempotency: dict[tuple[str, str, str], tuple[float, str, str]] = {}
         self._pending: dict[str, int] = {}
@@ -206,7 +212,7 @@ class ActionRuntime:
                     return self._accepted_response(self._runs[run_id])
 
             run_id = str(uuid.uuid4())
-            record = RunRecord(run_id, action_id)
+            record = RunRecord(run_id, action_id, session)
             queue_position = self._pending.get(action_id, 0)
             self._pending[action_id] = queue_position + 1
             record.append(
@@ -214,6 +220,16 @@ class ActionRuntime:
                 {"action_id": action_id, "queue_position": queue_position},
             )
             self._runs[run_id] = record
+            if self.activity_store is not None:
+                try:
+                    self.activity_store.record_run_started(
+                        self.manifest,
+                        run_id,
+                        action_id,
+                        input_data,
+                    )
+                except Exception:
+                    _log.exception("Could not persist application run %s", run_id)
             if normalized_key is not None:
                 self._idempotency[(session, action_id, normalized_key)] = (
                     now + IDEMPOTENCY_TTL_SECONDS,
@@ -337,6 +353,10 @@ class ActionRuntime:
                 {"operation_id": operation_id, "summary": "数据已更新"},
             )
             record.append("data.snapshot", {"data": value})
+            # Persist completion before exposing the terminal snapshot. The app
+            # publishes its artifact as soon as polling observes `completed`,
+            # so reversing this order creates a narrow but real 409 race.
+            self._record_finished(record, status="completed", result=value)
             record.terminal(
                 "completed",
                 "run.completed",
@@ -366,16 +386,16 @@ class ActionRuntime:
             key: value for key, value in self._idempotency.items() if value[0] > now
         }
 
-    @staticmethod
-    def _cancel(record: RunRecord) -> None:
+    def _cancel(self, record: RunRecord) -> None:
         record.terminal(
             "cancelled",
             "run.cancelled",
             {"reason": "应用请求取消", "requested_by": "app"},
         )
+        self._record_finished(record)
 
-    @staticmethod
     def _fail(
+        self,
         record: RunRecord,
         code: str,
         message: str,
@@ -384,6 +404,27 @@ class ActionRuntime:
     ) -> None:
         error = {"code": code, "message": message, "retryable": retryable}
         record.terminal("failed", "run.failed", {"error": error}, error=error)
+        self._record_finished(record, error=error)
+
+    def _record_finished(
+        self,
+        record: RunRecord,
+        *,
+        status: str | None = None,
+        result: Any = None,
+        error: dict[str, Any] | None = None,
+    ) -> None:
+        if self.activity_store is None:
+            return
+        try:
+            self.activity_store.record_run_finished(
+                record.run_id,
+                status or record.status,
+                result=result,
+                error=error,
+            )
+        except Exception:
+            _log.exception("Could not finalize application run %s", record.run_id)
 
 
 def _validate_idempotency_key(value: str | None) -> str | None:

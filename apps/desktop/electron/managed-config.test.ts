@@ -7,6 +7,7 @@ import { test } from 'vitest'
 
 import {
   hasPersistedManagedConfig,
+  hasSecurePersistedManagedConfig,
   managedConfigPaths,
   normalizeStockSenseManagedConfig,
   persistStockSenseManagedConfig,
@@ -26,7 +27,10 @@ test('accepts only the Hub managed-config whitelist', () => {
   })
 
   assert.equal(config?.hub.base_url, 'https://www.stocksense.work/app-api/hub/v1')
-  assert.equal(normalizeStockSenseManagedConfig({ hub: { enabled: true, base_url: 'https://hub.example', model: 'nope' } }), null)
+  assert.equal(
+    normalizeStockSenseManagedConfig({ hub: { enabled: true, base_url: 'https://hub.example', model: 'nope' } }),
+    null
+  )
   assert.equal(normalizeStockSenseManagedConfig({ hub: { enabled: true, base_url: 'http://hub.example' } }), null)
 })
 
@@ -40,9 +44,29 @@ test('persists a valid managed config atomically in the user-owned directory', (
 
   assert.equal(metadata.revision, 3)
   assert.equal(hasPersistedManagedConfig(rootDir), true)
+  assert.equal(hasSecurePersistedManagedConfig(rootDir), true)
   assert.deepEqual(JSON.parse(fs.readFileSync(paths.configPath, 'utf8')), config)
   assert.equal(JSON.parse(fs.readFileSync(paths.metadataPath, 'utf8')).sha256, 'a'.repeat(64))
   assert.equal(readManagedConfigMetadata(rootDir)?.revision, 3)
 
   fs.rmSync(rootDir, { force: true, recursive: true })
+})
+
+test('rejects a persisted HTTP Hub config as a desktop override', () => {
+  const rootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'stocksense-managed-config-http-'))
+  const { configPath } = managedConfigPaths(rootDir)
+
+  fs.writeFileSync(
+    configPath,
+    JSON.stringify({
+      hub: {
+        allow_insecure_http: true,
+        base_url: 'http://175.24.139.183/app-api/hub/v1',
+        enabled: true
+      }
+    })
+  )
+
+  assert.equal(hasPersistedManagedConfig(rootDir), true)
+  assert.equal(hasSecurePersistedManagedConfig(rootDir), false)
 })

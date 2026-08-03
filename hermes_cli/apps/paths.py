@@ -73,6 +73,10 @@ class AppPaths:
         return self.locks / "registry.lock"
 
     @property
+    def activity_db(self) -> Path:
+        return self.root / "activity.sqlite3"
+
+    @property
     def app_data(self) -> Path:
         return self.hermes_home / "app-data"
 
@@ -87,6 +91,9 @@ class AppPaths:
 
     def app_runtime_data(self, app_id: str) -> Path:
         return self.app_data / _validated_app_id(app_id)
+
+    def app_artifacts(self, app_id: str) -> Path:
+        return self.app_runtime_data(app_id) / "artifacts"
 
     def import_plan(self, import_id: str) -> Path:
         return self.import_plans / _validated_import_id(import_id)
