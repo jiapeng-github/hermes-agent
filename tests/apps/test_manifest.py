@@ -16,7 +16,7 @@ from hermes_cli.apps.contracts import contract_path
 def _manifest_data() -> dict[str, Any]:
     return {
         "schema_version": 1,
-        "id": "ai.hermes.watchlist",
+        "id": "ai.stocksense.watchlist",
         "name": "自选股",
         "version": "1.0.0",
         "description": "本地自选股盯盘与分析应用",
@@ -101,7 +101,7 @@ def _issue_codes(exc: ManifestValidationError) -> set[str]:
 def test_parse_manifest_returns_strict_domain_model() -> None:
     manifest = parse_manifest(_manifest_data())
 
-    assert manifest.id == "ai.hermes.watchlist"
+    assert manifest.id == "ai.stocksense.watchlist"
     assert set(manifest.actions) == {"refresh_quotes", "analyze_stock"}
 
     schema = json.loads(contract_path("app-manifest.schema.json").read_text(encoding="utf-8"))

@@ -3,6 +3,7 @@ import { JsonRpcGatewayClient } from '@hermes/shared'
 import type {
   ActionResponse,
   ActionStatusResponse,
+  AppActivitySessionResponse,
   AnalyticsResponse,
   AudioSpeakResponse,
   AudioTranscriptionResponse,
@@ -1631,10 +1632,28 @@ export function getWatchlistSnapshot(): Promise<WatchlistSnapshot> {
   })
 }
 
-export function launchHermesApp(appId: string): Promise<HermesAppLaunch> {
+export function launchHermesApp(appId: string, profile?: string | null): Promise<HermesAppLaunch> {
   return window.hermesDesktop.api<HermesAppLaunch>({
-    ...profileScoped(),
+    ...(profile ? { profile } : profileScoped()),
     path: `/api/apps/${encodeURIComponent(appId)}/launch`,
+    method: 'POST',
+    body: {},
+    timeoutMs: 15_000
+  })
+}
+
+export function getAppActivitySession(sessionId: string, profile?: string | null): Promise<AppActivitySessionResponse> {
+  return window.hermesDesktop.api<AppActivitySessionResponse>({
+    ...(profile ? { profile } : profileScoped()),
+    path: `/api/app-activity/sessions/${encodeURIComponent(sessionId)}`,
+    timeoutMs: 15_000
+  })
+}
+
+export function launchAppActivityArtifact(artifactId: string, profile?: string | null): Promise<HermesAppLaunch> {
+  return window.hermesDesktop.api<HermesAppLaunch>({
+    ...(profile ? { profile } : profileScoped()),
+    path: `/api/app-activity/artifacts/${encodeURIComponent(artifactId)}/launch`,
     method: 'POST',
     body: {},
     timeoutMs: 15_000

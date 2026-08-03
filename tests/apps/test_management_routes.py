@@ -45,6 +45,52 @@ def test_management_routes_remain_behind_dashboard_auth(_isolate_hermes_home) ->
     assert response.status_code == 401
 
 
+def test_authenticated_app_activity_routes_are_read_only_and_issue_launch_urls(
+    monkeypatch,
+    _isolate_hermes_home,
+) -> None:
+    from hermes_cli.web_server import app, _SESSION_HEADER_NAME, _SESSION_TOKEN
+
+    timeline = {
+        "session": {
+            "app_id": WATCHLIST_APP_ID,
+            "session_id": "session-1",
+            "app_name": "自选股盯盘看板",
+            "created_at": 1.0,
+            "updated_at": 2.0,
+        },
+        "artifacts": [],
+        "runs": [],
+    }
+    launch = {
+        "launch_id": "91dfb287-c638-4cc9-9a12-0cb61dcbab55",
+        "url": "http://127.0.0.1:49182/launch/one-time?next=%2F__hermes%2Fartifacts%2Fartifact-1",
+        "expires_at": "2026-08-02T10:00:30+00:00",
+    }
+    monkeypatch.setattr(
+        AppManager,
+        "get_activity_session",
+        lambda self, session_id: timeline,
+    )
+    monkeypatch.setattr(
+        AppManager,
+        "launch_activity_artifact",
+        lambda self, artifact_id, supervisor: launch,
+    )
+
+    with TestClient(app) as client:
+        unauthenticated = client.get("/api/app-activity/sessions/session-1")
+        client.headers[_SESSION_HEADER_NAME] = _SESSION_TOKEN
+        session = client.get("/api/app-activity/sessions/session-1")
+        artifact = client.post("/api/app-activity/artifacts/artifact-1/launch")
+
+    assert unauthenticated.status_code == 401
+    assert session.status_code == 200
+    assert session.json() == timeline
+    assert artifact.status_code == 201
+    assert artifact.json() == launch
+
+
 def test_package_export_import_uninstall_and_data_lifecycle(
     tmp_path: Path,
     _isolate_hermes_home,

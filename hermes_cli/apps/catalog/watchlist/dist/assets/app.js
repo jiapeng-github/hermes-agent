@@ -6,7 +6,8 @@
     detail: null,
     analysis: null,
     loading: false,
-    timer: null
+    timer: null,
+    capturePending: false
   }
 
   const elements = {
@@ -75,10 +76,15 @@
     elements.refresh.disabled = true
     elements.marketStatus.textContent = '正在读取最新行情'
     try {
-      state.snapshot = await window.HermesApp.run('snapshot', { auto_refresh: autoRefresh })
+      const tracked = await window.HermesApp.runTracked('snapshot', { auto_refresh: autoRefresh })
+      state.snapshot = tracked.result
       render()
       const asOf = state.snapshot.as_of ? `数据 ${state.snapshot.as_of}` : '等待交易数据'
       elements.marketStatus.textContent = `${asOf} · ${statusLabel(state.snapshot)}`
+      if (state.capturePending) {
+        state.capturePending = false
+        await publishDashboard(tracked.run_id)
+      }
     } catch (error) {
       showNotice(error.message, true)
       elements.marketStatus.textContent = '行情读取失败，保留上次结果'
@@ -94,6 +100,7 @@
     elements.refresh.disabled = true
     elements.marketStatus.textContent = '妙想数据刷新中'
     try {
+      state.capturePending = true
       await window.HermesApp.run('refresh', {})
       await wait(900)
     } catch (error) {
@@ -114,6 +121,7 @@
       const result = await window.HermesApp.run('add_stock', { query })
       elements.query.value = ''
       showNotice(result.added === false ? '该股票已在自选股中' : `已添加 ${result.item?.name || query}`)
+      state.capturePending = true
       await wait(300)
       await loadSnapshot(false)
     } catch (error) {
@@ -129,6 +137,7 @@
     try {
       await window.HermesApp.run('remove_stock', { code: stock.code })
       showNotice(`已删除 ${stock.name}`)
+      state.capturePending = true
       await loadSnapshot(false)
     } catch (error) {
       showNotice(error.message, true)
@@ -265,8 +274,10 @@
     elements.detailDialog.showModal()
     renderLoading()
     try {
-      state.detail = await window.HermesApp.run('detail', { code: stock.code, force: false })
+      const tracked = await window.HermesApp.runTracked('detail', { code: stock.code, force: false })
+      state.detail = tracked.result
       renderMarketDetail()
+      await publishDetail(tracked.run_id, '行情与 K 线详情')
     } catch (error) {
       renderDialogError(error.message)
     }
@@ -287,10 +298,38 @@
     }
     renderLoading('正在整理公司分析')
     try {
-      state.analysis = await window.HermesApp.run('analyze', { query: state.selected.code })
+      const tracked = await window.HermesApp.runTracked('analyze', { query: state.selected.code })
+      state.analysis = tracked.result
       renderAnalysis()
+      await publishDetail(tracked.run_id, '公司详细分析')
     } catch (error) {
       renderDialogError(error.message)
+    }
+  }
+
+  async function publishDashboard(runId) {
+    const summary = state.snapshot?.summary || {}
+    try {
+      await window.HermesApp.publishCurrentPage(runId, {
+        title: '自选股盯盘看板',
+        summary: `${summary.total || 0} 只自选股，${summary.rising || 0} 涨、${summary.falling || 0} 跌的盯盘快照`,
+        snapshot: { as_of: state.snapshot?.as_of || null, total: summary.total || 0 }
+      })
+    } catch (error) {
+      console.warn('应用产物保存失败', error)
+    }
+  }
+
+  async function publishDetail(runId, kind) {
+    const stock = state.selected || {}
+    try {
+      await window.HermesApp.publishCurrentPage(runId, {
+        title: `${stock.name || stock.code || '个股'} ${kind}`,
+        summary: `${stock.name || stock.code || '个股'} 的${kind}快照`,
+        snapshot: { code: stock.code || '', name: stock.name || '', kind }
+      })
+    } catch (error) {
+      console.warn('应用产物保存失败', error)
     }
   }
 

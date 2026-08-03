@@ -458,6 +458,43 @@ class AppRegistry:
         self._discard_staged(data_backup)
         return existing
 
+    def retire_builtin(self, app_id: str) -> AppRecord | None:
+        """Completely remove a superseded built-in identity and its local data."""
+        package_root = self.paths.app_package(app_id)
+        data_root = self.paths.app_runtime_data(app_id)
+        self.paths.ensure()
+        with app_file_lock(self.paths.registry_lock):
+            document = self._read_unlocked()
+            existing = document.apps.get(app_id)
+            if existing is not None and existing.lineage != "builtin":
+                raise AppRegistryError(
+                    "APP_VERSION_CONFLICT",
+                    "only built-in applications can be retired",
+                    details={"app_id": app_id},
+                )
+
+            package_backup = self._stage_for_removal(package_root, "retire-builtin")
+            try:
+                data_backup = self._stage_for_removal(data_root, "retire-builtin-data")
+            except BaseException:
+                self._restore_staged(package_backup, package_root)
+                raise
+            if existing is not None:
+                data = document.model_dump(mode="python")
+                data["revision"] = document.revision + 1
+                data["apps"] = copy.deepcopy(data["apps"])
+                del data["apps"][app_id]
+                try:
+                    self._write_unlocked(AppRegistryDocument.model_validate(data))
+                except BaseException:
+                    self._restore_staged(package_backup, package_root)
+                    self._restore_staged(data_backup, data_root)
+                    raise
+
+        self._discard_staged(package_backup)
+        self._discard_staged(data_backup)
+        return existing
+
     def delete_data(self, app_id: str) -> bool:
         """Delete app-scoped runtime data without touching the installed package."""
         self.paths.ensure()

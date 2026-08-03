@@ -46,6 +46,7 @@ import { titlebarHeaderBaseClass, titlebarHeaderShadowClass, titlebarHeaderTitle
 
 import { ChatDropOverlay } from './chat-drop-overlay'
 import { ChatSwapOverlay } from './chat-swap-overlay'
+import { AppActivityView } from './app-activity-view'
 import { ChatBar, ChatBarFallback } from './composer'
 import { requestComposerInsert } from './composer/focus'
 import { droppedFileInlineRefs } from './composer/inline-refs'
@@ -280,6 +281,9 @@ export function ChatView({
   const lastVisibleIsUser = useStore(view.$lastVisibleIsUser)
   const selectedSessionId = useStore(view.$storedId)
   const sessions = useStore($sessions)
+  const selectedStoredSession =
+    (selectedSessionId && sessions.find(session => sessionMatchesStoredId(session, selectedSessionId))) || null
+  const isAppActivitySession = selectedStoredSession?.source === 'app'
   const resumeExhaustedSessionId = useStore($resumeExhaustedSessionId)
 
   // Durable composer/queue scope (lineage root) so auto-compression tip rotation
@@ -346,13 +350,16 @@ export function ChatView({
   const resumeExhausted = isPrimary && isRoutedSessionView && resumeExhaustedSessionId === routedSessionId
 
   const loadingSession =
-    !resumeExhausted && isRoutedSessionView && (routeSessionMismatch || (messagesEmpty && !activeSessionId))
+    !isAppActivitySession &&
+    !resumeExhausted &&
+    isRoutedSessionView &&
+    (routeSessionMismatch || (messagesEmpty && !activeSessionId))
 
   const threadLoading = threadLoadingState(loadingSession, busy, awaitingResponse, lastVisibleIsUser)
   // Hide the composer in the exhausted error state too: there's no live runtime
   // to send to until a retry rebinds one. Watch windows are pure spectators of a
   // subagent run driven elsewhere — no composer, transcript is read-only.
-  const showChatBar = !loadingSession && !resumeExhausted && !isWatchWindow()
+  const showChatBar = !isAppActivitySession && !loadingSession && !resumeExhausted && !isWatchWindow()
   const threadKey = selectedSessionId || activeSessionId || (isRoutedSessionView ? location.pathname : 'new')
 
   const modelOptionsQuery = useQuery<ModelOptionsResponse>({
@@ -371,7 +378,7 @@ export function ChatView({
         explicit_only: true
       })
     },
-    enabled: gatewayOpen
+    enabled: gatewayOpen && !isAppActivitySession
   })
 
   const quickModels = useMemo(
@@ -467,68 +474,71 @@ export function ChatView({
       {/* Mounted for the primary AND every tile, each scoped to its own session
           so a tiled/background session's blocking prompt surfaces instead of
           stalling to timeout. */}
-      <PromptOverlays sessionId={activeSessionId} />
+      {!isAppActivitySession && <PromptOverlays sessionId={activeSessionId} />}
 
-      <ChatRuntimeBoundary
-        busy={busy}
-        onCancel={haltRun}
-        onEdit={onEdit}
-        onReload={onReload}
-        onThreadMessagesChange={onThreadMessagesChange}
-        suppressMessages={routeSessionMismatch}
-      >
-        <div
-          className="relative min-h-0 max-w-full flex-1 overflow-hidden bg-(--ui-chat-surface-background) contain-[layout_paint]"
-          data-slot="composer-bounds"
-          {...dropHandlers}
+      {isAppActivitySession && selectedSessionId ? (
+        <AppActivityView profile={selectedStoredSession?.profile} sessionId={selectedSessionId} />
+      ) : (
+        <ChatRuntimeBoundary
+          busy={busy}
+          onCancel={haltRun}
+          onEdit={onEdit}
+          onReload={onReload}
+          onThreadMessagesChange={onThreadMessagesChange}
+          suppressMessages={routeSessionMismatch}
         >
-          <Thread
-            clampToComposer={showChatBar}
-            cwd={currentCwd}
-            gateway={gateway}
-            intro={showIntro ? { personality: introPersonality, seed: introSeed } : undefined}
-            loading={threadLoading}
-            onBranchInNewChat={onBranchInNewChat}
-            onCancel={haltRun}
-            onDismissError={onDismissError}
-            onRestoreToMessage={onRestoreToMessage}
-            sessionId={activeSessionId}
-            sessionKey={threadKey}
-          />
-          {resumeExhausted && routedSessionId && (
-            <div className="absolute inset-0 z-10 grid place-items-center bg-(--ui-chat-surface-background) px-8 py-10">
-              <ErrorState
-                className="max-w-sm"
-                description={t.desktop.resumeStrandedBody}
-                title={t.desktop.resumeStrandedTitle}
-              >
-                <div className="grid justify-items-center">
-                  <Button onClick={() => onRetryResume(routedSessionId)} size="sm" variant="outline">
-                    {t.desktop.resumeRetry}
-                  </Button>
-                </div>
-              </ErrorState>
-            </div>
-          )}
-          {showChatBar && <ScrollToBottomButton />}
-          {/* Vibe hearts rise from the composer only when no pet is out (else
-              they play on the pet). Fired by the core `reaction` event. */}
-          {!petPresent && (
-            <HeartField
-              className="absolute inset-x-0 z-30"
-              config={COMPOSER_HEART_CONFIG}
-              style={{
-                top: 0,
-                bottom: 'calc(var(--composer-measured-height) + var(--status-stack-measured-height) + 0.25rem)'
-              }}
+          <div
+            className="relative min-h-0 max-w-full flex-1 overflow-hidden bg-(--ui-chat-surface-background) contain-[layout_paint]"
+            data-slot="composer-bounds"
+            {...dropHandlers}
+          >
+            <Thread
+              clampToComposer={showChatBar}
+              cwd={currentCwd}
+              gateway={gateway}
+              intro={showIntro ? { personality: introPersonality, seed: introSeed } : undefined}
+              loading={threadLoading}
+              onBranchInNewChat={onBranchInNewChat}
+              onCancel={haltRun}
+              onDismissError={onDismissError}
+              onRestoreToMessage={onRestoreToMessage}
+              sessionId={activeSessionId}
+              sessionKey={threadKey}
             />
-          )}
-          {/* A session drag hovering an EDGE hands the visual to the zone
+            {resumeExhausted && routedSessionId && (
+              <div className="absolute inset-0 z-10 grid place-items-center bg-(--ui-chat-surface-background) px-8 py-10">
+                <ErrorState
+                  className="max-w-sm"
+                  description={t.desktop.resumeStrandedBody}
+                  title={t.desktop.resumeStrandedTitle}
+                >
+                  <div className="grid justify-items-center">
+                    <Button onClick={() => onRetryResume(routedSessionId)} size="sm" variant="outline">
+                      {t.desktop.resumeRetry}
+                    </Button>
+                  </div>
+                </ErrorState>
+              </div>
+            )}
+            {showChatBar && <ScrollToBottomButton />}
+            {/* Vibe hearts rise from the composer only when no pet is out (else
+              they play on the pet). Fired by the core `reaction` event. */}
+            {!petPresent && (
+              <HeartField
+                className="absolute inset-x-0 z-30"
+                config={COMPOSER_HEART_CONFIG}
+                style={{
+                  top: 0,
+                  bottom: 'calc(var(--composer-measured-height) + var(--status-stack-measured-height) + 0.25rem)'
+                }}
+              />
+            )}
+            {/* A session drag hovering an EDGE hands the visual to the zone
               target; the link overlay shows only for the center region. */}
-          <ChatDropOverlay kind={overlayKind} />
-          <ChatSwapOverlay profile={gatewaySwapTarget} />
-        </div>
-        {/* Composer renders OUTSIDE the contain:[layout paint] wrapper above:
+            <ChatDropOverlay kind={overlayKind} />
+            <ChatSwapOverlay profile={gatewaySwapTarget} />
+          </div>
+          {/* Composer renders OUTSIDE the contain:[layout paint] wrapper above:
             that wrapper is a containing block for — and clips — position:fixed
             descendants, so the popped-out (fixed) composer would anchor to the
             chat column (which shifts/resizes with the sidebars) and get clipped
@@ -536,35 +546,36 @@ export function ChatView({
             anchors to the outer relative container instead: docked is absolute
             (identical placement), floating resolves against the viewport. Both
             states stay mounted here, so dock⇄float never remounts the editor. */}
-        {showChatBar && (
-          <Suspense fallback={<ChatBarFallback />}>
-            <ChatBar
-              busy={busy}
-              cwd={currentCwd}
-              disabled={!gatewayOpen}
-              focusKey={activeSessionId}
-              gateway={gateway}
-              maxRecordingSeconds={maxVoiceRecordingSeconds}
-              onAddContextRef={onAddContextRef}
-              onAddUrl={onAddUrl}
-              onAttachDroppedItems={onAttachDroppedItems}
-              onAttachImageBlob={onAttachImageBlob}
-              onCancel={onCancel}
-              onPasteClipboardImage={onPasteClipboardImage}
-              onPickFiles={onPickFiles}
-              onPickFolders={onPickFolders}
-              onPickImages={onPickImages}
-              onRemoveAttachment={onRemoveAttachment}
-              onSteer={onSteer}
-              onSubmit={onSubmit}
-              onTranscribeAudio={onTranscribeAudio}
-              queueSessionKey={queueSessionKey}
-              sessionId={activeSessionId}
-              state={chatBarState}
-            />
-          </Suspense>
-        )}
-      </ChatRuntimeBoundary>
+          {showChatBar && (
+            <Suspense fallback={<ChatBarFallback />}>
+              <ChatBar
+                busy={busy}
+                cwd={currentCwd}
+                disabled={!gatewayOpen}
+                focusKey={activeSessionId}
+                gateway={gateway}
+                maxRecordingSeconds={maxVoiceRecordingSeconds}
+                onAddContextRef={onAddContextRef}
+                onAddUrl={onAddUrl}
+                onAttachDroppedItems={onAttachDroppedItems}
+                onAttachImageBlob={onAttachImageBlob}
+                onCancel={onCancel}
+                onPasteClipboardImage={onPasteClipboardImage}
+                onPickFiles={onPickFiles}
+                onPickFolders={onPickFolders}
+                onPickImages={onPickImages}
+                onRemoveAttachment={onRemoveAttachment}
+                onSteer={onSteer}
+                onSubmit={onSubmit}
+                onTranscribeAudio={onTranscribeAudio}
+                queueSessionKey={queueSessionKey}
+                sessionId={activeSessionId}
+                state={chatBarState}
+              />
+            </Suspense>
+          )}
+        </ChatRuntimeBoundary>
+      )}
     </div>
   )
 }

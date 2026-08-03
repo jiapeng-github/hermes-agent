@@ -3,8 +3,8 @@
 # backends. Do not put user secrets or model credentials here.
 hub:
   enabled: true
-  base_url: http://175.24.139.183/app-api/hub/v1
-  allow_insecure_http: true
+  base_url: https://www.stocksense.work/app-api/hub/v1
+  allow_insecure_http: false
   channel: stable
   request_timeout_seconds: 15
   catalog_cache_minutes: 5

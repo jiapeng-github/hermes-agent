@@ -109,6 +109,19 @@ export async function readDesktopFileDataUrl(path: string): Promise<string> {
   return typeof result === 'string' ? result : result.dataUrl || ''
 }
 
+export async function desktopFileExists(path: string, profile?: string): Promise<boolean> {
+  try {
+    const result = await bridge().api<{ exists: boolean }>({
+      path: fsPath('exists', path),
+      ...(profile ? { profile } : { profile: desktopFsProfile() })
+    })
+
+    return result.exists
+  } catch {
+    return false
+  }
+}
+
 export async function desktopGitRoot(path: string): Promise<string | null> {
   const desktop = bridge()
 

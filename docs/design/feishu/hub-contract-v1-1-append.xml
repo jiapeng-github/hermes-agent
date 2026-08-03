@@ -11,7 +11,7 @@
   "platform": "windows-x64"
 }</code></pre>
 <pre lang="json" caption="resolve 响应"><code>{
-  "item": {"id": "ai.hermes.watchlist", "name": "自选股盯盘看板"},
+  "item": {"id": "ai.stocksense.watchlist", "name": "自选股盯盘看板"},
   "artifact": {
     "kind": "happ",
     "artifact_id": "art_01J...",

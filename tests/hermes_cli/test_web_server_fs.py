@@ -107,6 +107,22 @@ def test_fs_read_text_flags_binary(client, tmp_path):
     assert body["text"].startswith("hello")
 
 
+def test_fs_exists_only_accepts_regular_files(client, tmp_path):
+    target = tmp_path / "artifact.pdf"
+    target.write_bytes(b"pdf")
+
+    present = client.get("/api/fs/exists", params={"path": str(target)})
+    missing = client.get("/api/fs/exists", params={"path": str(tmp_path / "missing.pdf")})
+    directory = client.get("/api/fs/exists", params={"path": str(tmp_path)})
+
+    assert present.status_code == 200
+    assert present.json() == {"exists": True}
+    assert missing.status_code == 200
+    assert missing.json() == {"exists": False}
+    assert directory.status_code == 200
+    assert directory.json() == {"exists": False}
+
+
 def test_fs_read_data_url_returns_capped_data_url(client, tmp_path, monkeypatch):
     monkeypatch.setattr(web_server, "_FS_DATA_URL_MAX_BYTES", 16)
     target = tmp_path / "image.png"

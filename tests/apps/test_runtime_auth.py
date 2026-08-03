@@ -95,7 +95,7 @@ def test_bootstrap_requires_runtime_cookie_and_exposes_no_credentials(tmp_path: 
 
     assert response.status_code == 200
     body = response.json()
-    assert body["app_id"] == "ai.hermes.watchlist"
+    assert body["app_id"] == "ai.stocksense.watchlist"
     assert "csrf_token" in body
     serialized = response.text.lower()
     assert "api_key" not in serialized

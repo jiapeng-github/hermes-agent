@@ -1,0 +1,36 @@
+<h2>5.3 应用活动会话与 HTML 产物历史</h2>
+
+<p>应用运行历史采用“应用活动会话”模型：每个 Profile 内，每个应用固定对应一条只读活动会话。应用动作、运行结果和 HTML 产物由应用平台保存，不写入模型可见的消息表，不改变既有对话上下文，也不触发模型推理。该模型用于让用户在侧栏中持续找到同一应用的历史结果，同时保持对话缓存、角色交替和普通会话语义不受影响。</p>
+
+<p><b>可见性规则。</b>首次打开应用、后台轮询、自动刷新和失败重试不会创建可见会话。只有用户主动完成一次有业务意义的操作，并成功发布静态 HTML 产物后，Desktop 才在侧栏显示该应用的活动会话。之后同一 Profile、同一应用始终复用该会话，并按最新产物时间排序。</p>
+
+<table>
+  <thead><tr><th>对象</th><th>作用</th><th>持久化与可见性</th></tr></thead>
+  <tbody>
+    <tr><td>AppActivitySession</td><td>稳定承载一个应用在一个 Profile 下的活动历史</td><td>每个 Profile 与 app_id 唯一；首个产物成功后才同步为 source=app 的零消息会话</td></tr>
+    <tr><td>AppRun</td><td>记录动作、输入、状态、结果摘要和错误</td><td>每次 Runtime 动作均记录；用于追踪和诊断，第一阶段不直接展示为聊天消息</td></tr>
+    <tr><td>AppArtifact</td><td>保存用户可回看的页面快照</td><td>一个已完成 Run 最多发布一个不可变 HTML 产物，并可附带紧凑 JSON 快照</td></tr>
+  </tbody>
+</table>
+
+<p><b>产物触发边界。</b>第一阶段仅为显式且有业务意义的用户动作保存产物：搜索或生成分析、手动刷新、自选股添加与删除、打开个股详情、执行详细分析。初始页面加载、定时轮询、同一次操作内部的异步补数、失败重试不生成重复产物。内置的自选股盯盘看板、行业轮动和资金流向监控、上市公司基本面分析、个股三维深度分析均遵循该边界。</p>
+
+<p><b>Runtime SDK。</b>应用通过 <code>runTracked(actionId, input)</code> 获得 run_id 与结果；兼容方法 <code>run</code> 保留。页面稳定后调用 <code>publishCurrentPage(runId, metadata)</code>，SDK 将 Canvas 转为静态图片，移除脚本、Frame、Object、Embed、Base、事件属性和 javascript URL，禁用表单控件，再提交完整 HTML、标题、摘要和紧凑快照。Run 的完成状态先持久化再向应用暴露，避免完成后立即发布产生竞态。</p>
+
+<table>
+  <thead><tr><th>接口或路径</th><th>用途</th><th>边界</th></tr></thead>
+  <tbody>
+    <tr><td>POST /api/runs/{run_id}/artifacts</td><td>由 AppHost 内的应用发布当前 Run 的静态产物</td><td>同源、CSRF、Runtime Session 与 Run 归属校验；仅 completed 状态可发布</td></tr>
+    <tr><td>GET /api/app-activity/sessions/{session_id}</td><td>Desktop 获取只读时间线</td><td>Dashboard 本地认证；不返回或构造模型消息</td></tr>
+    <tr><td>POST /api/app-activity/artifacts/{artifact_id}/launch</td><td>获取一次性 AppHost 产物地址</td><td>校验产物与应用归属；不直接暴露文件协议地址</td></tr>
+    <tr><td>GET /__hermes/artifacts/{artifact_id}</td><td>在浏览器中展示不可变 HTML</td><td>需要 AppHost Runtime Cookie，并应用严格 CSP 与 no-store</td></tr>
+  </tbody>
+</table>
+
+<p><b>存储基线。</b>活动元数据位于 Profile 目录下的 <code>apps/activity.sqlite3</code>；HTML 与 JSON 快照位于 <code>app-data/{app_id}/artifacts/{artifact_id}/</code>。每个产物同时记录生成它的应用版本，打开历史产物时使用该不可变版本的静态资产，不受当前激活版本更新影响。HTML 上限为 5 MiB，JSON 快照上限为 2 MiB；时间线接口返回最近 200 条产物与运行记录。产物默认保留至用户删除该应用数据，删除时同时移除活动库记录、文件和侧栏会话行。</p>
+
+<p><b>安全基线。</b>客户端预清理不能替代服务端校验。服务端拒绝 Script、Iframe、Frame、Object、Embed、Base、内联事件、javascript URL 与 Meta Refresh，并向产物注入 <code>default-src 'none'</code> 的 CSP；仅允许本地样式、本地或 data 图片与字体。发布接口校验当前 Runtime Session 拥有该 Run，防止同一 AppHost 中另一浏览器会话借用 run_id 发布内容。HTML 文件以原子写入方式保存，产物 ID 使用 UUID，文件读取再次校验路径必须位于对应应用的产物根目录。</p>
+
+<p><b>Desktop 交互。</b><code>source=app</code> 的会话使用独立只读时间线视图，不展示输入框、模型选择器或阻塞式模型提示，也绝不调用 <code>session.resume</code>。用户可“打开产物”查看当时的静态页面；可选择“继续分析”，此操作会创建普通新会话，并把产物 HTML 作为文件引用和摘要预填到输入框中。应用活动会话本身始终不变成模型会话。</p>
+
+<p><b>实现与验收状态。</b>上述基线已在 Desktop、AppHost、应用 Runtime SDK 和四个预置应用中落地。自动化测试覆盖 Profile 隔离、稳定会话 ID、首个产物后可见、零消息侧栏展示、幂等发布、未完成 Run 拒绝、活动 HTML 拒绝、跨 Runtime Session 拒绝、严格 CSP、删除联动、Desktop 只读渲染以及禁止恢复模型会话。该能力属于本地应用平台内部接口扩展，不修改已冻结的 Manifest Schema、.happ、Hub 公开 API 与 Runtime Event Protocol v1。</p>

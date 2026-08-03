@@ -632,6 +632,19 @@ describe('resumeSession failure recovery', () => {
     await resume!('stored-1', true)
   }
 
+  it('opens application activity sessions without resuming an agent', async () => {
+    setSessions([storedSession({ id: 'stored-1', source: 'app', title: '自选股盯盘看板（应用记录）' })])
+    const requestGateway = vi.fn(async () => ({}) as never)
+
+    await runResume(requestGateway)
+
+    expect(requestGateway).not.toHaveBeenCalled()
+    expect(getSessionMessages).not.toHaveBeenCalled()
+    expect($activeSessionId.get()).toBeNull()
+    expect($selectedStoredSessionId.get()).toBe('stored-1')
+    expect($messages.get()).toEqual([])
+  })
+
   it('arms $resumeFailedSessionId when resume RPC and REST fallback both fail', async () => {
     // session.resume rejects (e.g. timeout against a wedged backend)...
     const requestGateway = vi.fn(async (method: string) => {

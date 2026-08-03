@@ -15,7 +15,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 def manifest_data(*, version: str = "1.0.0", description: str = "自选股应用") -> dict[str, Any]:
     return {
         "schema_version": 1,
-        "id": "ai.hermes.watchlist",
+        "id": "ai.stocksense.watchlist",
         "name": "自选股",
         "version": version,
         "description": description,

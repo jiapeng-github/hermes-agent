@@ -578,6 +578,25 @@ export function useSessionActions({
 
       await ensureGatewayProfile(sessionProfile)
 
+      // Application activity sessions are presentation-only timelines. Their
+      // runs and artifacts live in the app activity store, deliberately outside
+      // the LLM transcript, so never ask the gateway to resume an agent for one.
+      if (storedForProfile?.source === 'app') {
+        setFreshDraftReady(false)
+        setSelectedStoredSessionId(storedSessionId)
+        selectedStoredSessionIdRef.current = storedSessionId
+        setActiveSessionId(null)
+        activeSessionIdRef.current = null
+        setMessages([])
+        busyRef.current = false
+        setBusy(false)
+        setAwaitingResponse(false)
+        setResumeFailedSessionId(null)
+        setResumeExhaustedSessionId(null)
+        setSessionStartedAt(Date.now())
+        return
+      }
+
       // Re-check after the profile-resolve / gateway-swap awaits above: the
       // cache may have changed, and takeWarmCache re-validates belongs-to and
       // purges a cross-wired mapping before we trust the fast-path.

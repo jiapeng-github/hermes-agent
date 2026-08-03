@@ -44,7 +44,11 @@ function normalizeTrustedKeys(value: unknown): Record<string, string> | null {
   const trustedKeys: Record<string, string> = {}
 
   for (const [key, rawValue] of Object.entries(value)) {
-    if (!/^[A-Za-z0-9._-]{1,128}$/.test(key) || typeof rawValue !== 'string' || Buffer.from(rawValue, 'base64').length !== 32) {
+    if (
+      !/^[A-Za-z0-9._-]{1,128}$/.test(key) ||
+      typeof rawValue !== 'string' ||
+      Buffer.from(rawValue, 'base64').length !== 32
+    ) {
       return null
     }
 
@@ -126,6 +130,17 @@ export function managedConfigPaths(rootDir: string) {
 
 export function hasPersistedManagedConfig(rootDir: string): boolean {
   return fs.existsSync(managedConfigPaths(rootDir).configPath)
+}
+
+export function hasSecurePersistedManagedConfig(rootDir: string): boolean {
+  try {
+    const raw = JSON.parse(fs.readFileSync(managedConfigPaths(rootDir).configPath, 'utf8'))
+    const config = normalizeStockSenseManagedConfig(raw)
+
+    return Boolean(config && new URL(String(config.hub.base_url)).protocol === 'https:')
+  } catch {
+    return false
+  }
 }
 
 export function readManagedConfigMetadata(rootDir: string): ManagedConfigMetadata | null {

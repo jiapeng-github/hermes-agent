@@ -4,19 +4,21 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import socket
 import threading
 import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 
 from ..manifest import validate_manifest_files
+from ..activity import AppActivityError, AppActivityStore
 from ..models import AppManifest, AppPermissions
 from ..permissions import validate_permission_grants
 from .auth import (
@@ -47,6 +49,7 @@ def create_apphost_app(
     touch: Callable[[], None] | None = None,
     service_registry: ServiceActionRegistry | None = None,
     storage_root: Path | None = None,
+    activity_store: AppActivityStore | None = None,
 ) -> FastAPI:
     """Create the same-origin Runtime for one immutable app version."""
     validate_permission_grants(manifest.permissions, granted_permissions)
@@ -58,7 +61,7 @@ def create_apphost_app(
     )
     assets = StaticAssetResolver(app_root, manifest.entry)
     action_runtime = (
-        ActionRuntime(manifest, app_root, service_registry)
+        ActionRuntime(manifest, app_root, service_registry, activity_store)
         if service_registry is not None
         else None
     )
@@ -122,11 +125,19 @@ def create_apphost_app(
         return _apply_security_headers(response, api_path=request.url.path.startswith(("/api/", "/__hermes/")))
 
     @app.get("/launch/{code}", include_in_schema=False)
-    async def exchange_launch(code: str) -> Response:
+    async def exchange_launch(code: str, request: Request) -> Response:
         session = auth.exchange_launch_code(code)
         if session is None:
             return _secured_error(404, "RUNTIME_LAUNCH_INVALID", "launch link is invalid or expired")
-        response = RedirectResponse(url="/", status_code=302)
+        target = request.query_params.get("next") or "/"
+        if target != "/" and not re.fullmatch(r"/__hermes/artifacts/[0-9a-f-]{36}", target):
+            return _secured_error(400, "RUNTIME_LAUNCH_INVALID", "launch target is invalid")
+        if target != "/" and activity_store is not None:
+            try:
+                activity_store.get_artifact(target.rsplit("/", 1)[-1], app_id=manifest.id)
+            except AppActivityError:
+                return _secured_error(404, "APP_ARTIFACT_NOT_FOUND", "artifact was not found")
+        response = RedirectResponse(url=target, status_code=302)
         response.set_cookie(
             auth.cookie_name,
             session,
@@ -259,6 +270,54 @@ def create_apphost_app(
         except RuntimeRunError as exc:
             return _runtime_error(exc)
 
+    @app.post("/api/runs/{run_id}/artifacts")
+    async def publish_artifact(run_id: str, request: Request) -> JSONResponse:
+        if action_runtime is None or activity_store is None:
+            return _secured_error(503, "APP_ACTIVITY_DISABLED", "application activity history is unavailable")
+        content_length = request.headers.get("content-length")
+        if content_length and content_length.isdigit() and int(content_length) > 8 * 1024 * 1024:
+            return _secured_error(413, "APP_ARTIFACT_TOO_LARGE", "artifact request exceeds 8 MiB")
+        try:
+            record = action_runtime.get(run_id)
+            if record.runtime_session != request.state.runtime_session:
+                return _secured_error(404, "RUN_NOT_FOUND", "run was not found")
+            body = await request.json()
+            if not isinstance(body, dict) or not set(body).issubset({"title", "summary", "html", "snapshot"}):
+                return _secured_error(400, "APP_ARTIFACT_INVALID", "artifact request contains unknown fields")
+            if set(body) < {"title", "summary", "html"}:
+                return _secured_error(400, "APP_ARTIFACT_INVALID", "title, summary, and html are required")
+            if body.get("snapshot") is not None and not isinstance(body["snapshot"], dict):
+                return _secured_error(400, "APP_ARTIFACT_INVALID", "snapshot must be a JSON object")
+            artifact = activity_store.publish_artifact(
+                manifest,
+                run_id,
+                title=body["title"],
+                summary=body["summary"],
+                html=body["html"],
+                snapshot=body.get("snapshot"),
+            )
+            return JSONResponse({"artifact": artifact.as_dict()}, status_code=201)
+        except AppActivityError as exc:
+            return _secured_error(exc.status_code, exc.code, exc.message)
+        except (ValueError, json.JSONDecodeError):
+            return _secured_error(400, "APP_ARTIFACT_INVALID", "artifact request must be JSON")
+
+    @app.get("/__hermes/artifacts/{artifact_id}")
+    async def get_artifact(artifact_id: str) -> Response:
+        if activity_store is None:
+            return _secured_error(404, "APP_ARTIFACT_NOT_FOUND", "artifact was not found")
+        try:
+            artifact = activity_store.get_artifact(artifact_id, app_id=manifest.id)
+        except AppActivityError as exc:
+            return _secured_error(exc.status_code, exc.code, exc.message)
+        response = FileResponse(artifact.html_path, media_type="text/html; charset=utf-8")
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
+            "font-src 'self' data:; form-action 'none'; frame-ancestors 'none'; base-uri 'none'"
+        )
+        return response
+
     @app.get("/api/storage/{key}")
     async def get_storage(key: str) -> JSONResponse:
         try:
@@ -320,6 +379,7 @@ class AppHost:
         idle_timeout_seconds: int = 30 * 60,
         service_registry: ServiceActionRegistry | None = None,
         storage_root: Path | None = None,
+        activity_store: AppActivityStore | None = None,
     ):
         self.manifest = manifest
         self.app_root = app_root
@@ -327,6 +387,7 @@ class AppHost:
         self.idle_timeout_seconds = idle_timeout_seconds
         self.service_registry = service_registry
         self.storage_root = storage_root
+        self.activity_store = activity_store
         self.runtime_auth = RuntimeAuth()
         self._socket: socket.socket | None = None
         self._server: uvicorn.Server | None = None
@@ -364,6 +425,7 @@ class AppHost:
                 touch=self._touch,
                 service_registry=self.service_registry,
                 storage_root=self.storage_root,
+                activity_store=self.activity_store,
             )
             config = uvicorn.Config(
                 app,
@@ -394,9 +456,10 @@ class AppHost:
             self.stop()
             raise RuntimeError("AppHost failed to start on loopback")
 
-    def issue_launch_url(self) -> str:
+    def issue_launch_url(self, target_path: str = "/") -> str:
         code = self.runtime_auth.issue_launch_code()
-        return f"{self.origin}/launch/{quote(code, safe='')}"
+        query = "" if target_path == "/" else f"?{urlencode({'next': target_path})}"
+        return f"{self.origin}/launch/{quote(code, safe='')}{query}"
 
     def is_idle(self) -> bool:
         with self._activity_lock:
@@ -415,6 +478,8 @@ class AppHost:
             except OSError:
                 pass
         self.runtime_auth.close()
+        if self.activity_store is not None:
+            self.activity_store.close()
         self._server = None
         self._thread = None
         self._socket = None
@@ -445,7 +510,8 @@ def _secured_error(
 
 def _apply_security_headers(response: Response, *, api_path: bool) -> Response:
     for name, value in SECURITY_HEADERS.items():
-        response.headers[name] = value
+        if name not in response.headers:
+            response.headers[name] = value
     if api_path:
         response.headers["Cache-Control"] = "no-store"
     return response

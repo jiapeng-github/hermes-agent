@@ -1011,12 +1011,12 @@ DEFAULT_CONFIG = {
     "fallback_providers": [],
     "credential_pool_strategies": {},
     "toolsets": ["hermes-cli"],
-    # First-party StockSense Hub. HTTP is a temporary exception while the
-    # production domain certificate is pending; switch back to HTTPS afterward.
+    # First-party StockSense Hub. The public service is HTTPS-only; desktop
+    # managed configuration pins this value over stale per-user settings.
     "hub": {
         "enabled": True,
-        "base_url": "http://175.24.139.183/app-api/hub/v1",
-        "allow_insecure_http": True,
+        "base_url": "https://www.stocksense.work/app-api/hub/v1",
+        "allow_insecure_http": False,
         "channel": "stable",
         "request_timeout_seconds": 15,
         "catalog_cache_minutes": 5,

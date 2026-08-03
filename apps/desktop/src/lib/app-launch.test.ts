@@ -42,4 +42,18 @@ describe('application browser launch', () => {
 
     expect(openLaunchUrl).not.toHaveBeenCalled()
   })
+
+  it('opens an application in the activity session profile', async () => {
+    launchHermesApp.mockResolvedValue({
+      launch_id: '91dfb287-c638-4cc9-9a12-0cb61dcbab55',
+      url: 'http://127.0.0.1:49182/launch/profile-scoped',
+      expires_at: '2026-07-13T10:00:30+00:00'
+    })
+    openLaunchUrl.mockResolvedValue(true)
+
+    await launchAppInBrowser(WATCHLIST_APP_ID, 'research')
+
+    expect(launchHermesApp).toHaveBeenCalledWith(WATCHLIST_APP_ID, 'research')
+    expect(openLaunchUrl).toHaveBeenCalledWith('http://127.0.0.1:49182/launch/profile-scoped')
+  })
 })

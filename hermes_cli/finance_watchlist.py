@@ -918,7 +918,7 @@ def _watchlist_path(home_key: str) -> Path:
     return (
         Path(home_key)
         / "app-data"
-        / "ai.hermes.watchlist"
+        / "ai.stocksense.watchlist"
         / "storage"
         / "watchlist.json"
     )

@@ -3782,7 +3782,11 @@ class SessionDB:
             where_clauses.append(clause)
             params.extend(clause_params)
         if min_message_count > 0:
-            where_clauses.append("s.message_count >= ?")
+            # Application activity sessions intentionally keep their events in
+            # the app-owned activity store, not in model conversation messages.
+            # They still belong in conversation navigation once an artifact is
+            # published, even though their message_count remains zero.
+            where_clauses.append("(s.message_count >= ? OR s.source = 'app')")
             params.append(min_message_count)
         if archived_only:
             where_clauses.append("s.archived = 1")
@@ -5844,6 +5848,25 @@ class SessionDB:
                 )
             return [dict(row) for row in cursor.fetchall()]
 
+    def touch_empty_session(self, session_id: str, timestamp: float = None) -> bool:
+        """Move a message-less presentation session to the latest activity.
+
+        App activity sessions are durable navigation records whose event data
+        lives outside the model transcript. Updating ``started_at`` keeps those
+        zero-message rows ordered by their latest artifact without inventing a
+        synthetic user/assistant message pair.
+        """
+        activity_at = time.time() if timestamp is None else float(timestamp)
+
+        def _do(conn):
+            cursor = conn.execute(
+                "UPDATE sessions SET started_at = ? WHERE id = ? AND message_count = 0",
+                (activity_at, session_id),
+            )
+            return cursor.rowcount
+
+        return bool(self._execute_write(_do))
+
     # =========================================================================
     # Utility
     # =========================================================================
@@ -5893,7 +5916,7 @@ class SessionDB:
             where_clauses.append(clause)
             params.extend(clause_params)
         if min_message_count > 0:
-            where_clauses.append("s.message_count >= ?")
+            where_clauses.append("(s.message_count >= ? OR s.source = 'app')")
             params.append(min_message_count)
         if archived_only:
             where_clauses.append("s.archived = 1")

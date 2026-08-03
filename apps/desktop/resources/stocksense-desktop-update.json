@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "endpoint": "http://175.24.139.183/app-api/desktop/v1/check",
-  "allowInsecureHttp": true,
+  "endpoint": "https://www.stocksense.work/app-api/desktop/v1/check",
+  "allowInsecureHttp": false,
   "automaticUpdatesEnabled": false,
   "backgroundDownloadEnabled": true,
   "channel": "stable",
