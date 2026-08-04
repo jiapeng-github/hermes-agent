@@ -41,7 +41,7 @@ import { canImportHermesCli, verifyHermesCli } from './backend-probes'
 import { waitForDashboardPortAnnouncement } from './backend-ready'
 import { shouldLatchBackendStartFailure } from './backend-start-failure'
 import { detectRemoteDisplay, isWindowsBinaryPathInWsl, isWslEnvironment } from './bootstrap-platform'
-import { runBootstrap } from './bootstrap-runner'
+import { resolveWindowsPowerShell, runBootstrap } from './bootstrap-runner'
 import { applyConnectionChange, resolveTerminalConnection } from './connection-apply'
 import {
   authModeFromStatus,
@@ -75,7 +75,8 @@ import {
   normalizeDesktopReleaseServiceConfig,
   type ValidatedDesktopManagedConfig,
   type ValidatedDesktopRelease,
-  validateDesktopReleaseCheck
+  validateDesktopReleaseCheck,
+  type ValidatedRuntimeRelease
 } from './desktop-release'
 import {
   buildPosixCleanupScript,
@@ -138,6 +139,7 @@ import { createKeepAwake } from './power-save'
 import { decideProfileDeleteAction, profileNameFromDeleteRequest, resolveRouteProfile } from './profile-delete-routing'
 import * as remoteLifecycle from './remote-lifecycle'
 import { RemoteLivenessTracker, RemoteRevalidationCoordinator, revalidateRemoteConnection } from './remote-liveness'
+import { currentRuntimeRevision, runtimeTarget, validateRuntimeBundle } from './runtime-release'
 import {
   buildSessionWindowUrl,
   chatWindowWebPreferences,
@@ -620,11 +622,7 @@ function resolveOfflineRuntimePath() {
     try {
       const manifest = JSON.parse(fs.readFileSync(path.join(candidate, 'manifest.json'), 'utf8'))
 
-      if (
-        manifest.bundled !== true ||
-        manifest.target !== expectedTarget ||
-        !manifest.files
-      ) {
+      if (manifest.bundled !== true || manifest.target !== expectedTarget || !manifest.files) {
         continue
       }
 
@@ -2902,8 +2900,11 @@ async function applyGitUpdates(opts = {}) {
 }
 
 let activeDesktopRelease: ValidatedDesktopRelease | null = null
+let activeRuntimeRelease: ValidatedRuntimeRelease | null = null
 let downloadedDesktopRelease: ValidatedDesktopRelease | null = null
+let downloadedRuntimeRelease: { archivePath: string; release: ValidatedRuntimeRelease } | null = null
 let desktopReleaseDownload: { promise: Promise<void>; version: string } | null = null
+let runtimeReleaseDownload: { promise: Promise<void>; revision: string } | null = null
 let desktopAutoUpdaterEventsBound = false
 
 function canUseAutomaticDesktopUpdates(release: ValidatedDesktopRelease, config = STOCKSENSE_DESKTOP_UPDATE_CONFIG) {
@@ -3016,6 +3017,297 @@ async function downloadDesktopRelease(release: ValidatedDesktopRelease) {
   return promise
 }
 
+function runtimeUpdateCacheDir() {
+  return path.join(HERMES_HOME, 'runtime-updates')
+}
+
+function runtimeArchivePath(release: ValidatedRuntimeRelease) {
+  return path.join(runtimeUpdateCacheDir(), `${release.version}-${release.revision}.zip`)
+}
+
+async function sha256File(filePath: string) {
+  const hash = crypto.createHash('sha256')
+
+  await new Promise<void>((resolve, reject) => {
+    const input = fs.createReadStream(filePath)
+    input.on('data', chunk => hash.update(chunk))
+    input.on('error', reject)
+    input.on('end', resolve)
+  })
+
+  return hash.digest('hex')
+}
+
+async function cachedRuntimeArchiveIsValid(filePath: string, release: ValidatedRuntimeRelease) {
+  try {
+    const stat = fs.statSync(filePath)
+
+    return stat.isFile() && stat.size === release.sizeBytes && (await sha256File(filePath)) === release.sha256
+  } catch {
+    return false
+  }
+}
+
+async function downloadRuntimeRelease(release: ValidatedRuntimeRelease) {
+  if (
+    downloadedRuntimeRelease?.release.revision === release.revision &&
+    (await cachedRuntimeArchiveIsValid(downloadedRuntimeRelease.archivePath, release))
+  ) {
+    return
+  }
+
+  if (runtimeReleaseDownload) {
+    if (runtimeReleaseDownload.revision !== release.revision) {
+      throw new Error(`Runtime ${runtimeReleaseDownload.revision.slice(0, 12)} is already downloading.`)
+    }
+
+    return runtimeReleaseDownload.promise
+  }
+
+  const promise = (async () => {
+    fs.mkdirSync(runtimeUpdateCacheDir(), { recursive: true })
+    const archivePath = runtimeArchivePath(release)
+
+    if (await cachedRuntimeArchiveIsValid(archivePath, release)) {
+      downloadedRuntimeRelease = { archivePath, release }
+
+      return
+    }
+
+    const temporaryPath = `${archivePath}.download`
+    fs.rmSync(temporaryPath, { force: true })
+    const response = await electronNet.fetch(release.artifactUrl, { redirect: 'follow' })
+
+    if (!response.ok || !response.body) {
+      throw new Error(`Runtime update returned HTTP ${response.status}.`)
+    }
+
+    if (new URL(response.url).protocol !== 'https:') {
+      throw new Error('Runtime update redirected to an insecure URL.')
+    }
+
+    const reader = response.body.getReader()
+    const output = fs.createWriteStream(temporaryPath, { flags: 'wx' })
+    let outputError: Error | null = null
+    output.on('error', error => {
+      outputError = error
+    })
+    const hash = crypto.createHash('sha256')
+    let received = 0
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+
+        if (done) {
+          break
+        }
+
+        const chunk = Buffer.from(value)
+        received += chunk.length
+
+        if (received > release.sizeBytes) {
+          throw new Error('Runtime update exceeded its signed size.')
+        }
+
+        hash.update(chunk)
+
+        if (!output.write(chunk)) {
+          await new Promise<void>((resolve, reject) => {
+            if (outputError) {
+              reject(outputError)
+
+              return
+            }
+
+            const onDrain = () => {
+              output.off('error', onError)
+
+              resolve()
+            }
+
+            const onError = (error: Error) => {
+              output.off('drain', onDrain)
+
+              reject(error)
+            }
+
+            output.once('drain', onDrain)
+            output.once('error', onError)
+          })
+        }
+
+        emitUpdateProgress({
+          stage: 'fetch',
+          message: `正在下载 Runtime ${release.version}（${Math.min(100, Math.round((received / release.sizeBytes) * 100))}%）…`,
+          percent: Math.min(100, (received / release.sizeBytes) * 100)
+        })
+      }
+
+      if (outputError) {
+        throw outputError
+      }
+
+      await new Promise<void>((resolve, reject) => {
+        const onError = (error: Error) => reject(error)
+        output.once('error', onError)
+        output.end(() => {
+          output.off('error', onError)
+          resolve()
+        })
+      })
+    } catch (error) {
+      output.destroy()
+      throw error
+    }
+
+    if (received !== release.sizeBytes || hash.digest('hex') !== release.sha256) {
+      throw new Error('Runtime update SHA-256 or size verification failed.')
+    }
+
+    fs.renameSync(temporaryPath, archivePath)
+    downloadedRuntimeRelease = { archivePath, release }
+  })().catch(error => {
+    fs.rmSync(`${runtimeArchivePath(release)}.download`, { force: true })
+    throw error
+  })
+
+  runtimeReleaseDownload = { promise, revision: release.revision }
+
+  const clearDownload = () => {
+    if (runtimeReleaseDownload?.revision === release.revision) {
+      runtimeReleaseDownload = null
+    }
+  }
+
+  void promise.then(clearDownload, clearDownload)
+
+  return promise
+}
+
+function execFilePromise(command: string, args: string[]) {
+  return new Promise<void>((resolve, reject) => {
+    execFile(command, args, { windowsHide: true }, error => (error ? reject(error) : resolve()))
+  })
+}
+
+async function extractRuntimeRelease(archivePath: string) {
+  const stagingRoot = path.join(runtimeUpdateCacheDir(), 'staging')
+  fs.mkdirSync(stagingRoot, { recursive: true })
+  const destination = fs.mkdtempSync(path.join(stagingRoot, 'runtime-'))
+
+  try {
+    if (IS_WINDOWS) {
+      await execFilePromise(resolveWindowsPowerShell(), [
+        '-NoProfile',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-Command',
+        'Expand-Archive -LiteralPath $args[0] -DestinationPath $args[1] -Force',
+        archivePath,
+        destination
+      ])
+    } else {
+      await execFilePromise('/usr/bin/ditto', ['-x', '-k', archivePath, destination])
+    }
+
+    return destination
+  } catch (error) {
+    fs.rmSync(destination, { force: true, recursive: true })
+    throw error
+  }
+}
+
+async function installRuntimeRelease(release: ValidatedRuntimeRelease) {
+  const downloaded = downloadedRuntimeRelease
+  const target = runtimeTarget()
+
+  if (!downloaded || downloaded.release.revision !== release.revision || !target) {
+    throw new Error('Runtime update is not downloaded for this platform.')
+  }
+
+  emitUpdateProgress({ stage: 'update', message: `正在安装 Runtime ${release.version}…`, percent: 100 })
+  const staging = await extractRuntimeRelease(downloaded.archivePath)
+  validateRuntimeBundle(staging, release, target)
+
+  await teardownPrimaryBackendAndWait()
+  stopAllPoolBackends()
+  const lock = await releaseBackendLockForUpdate(ACTIVE_HERMES_ROOT)
+
+  if (!lock.unlocked) {
+    fs.rmSync(staging, { force: true, recursive: true })
+    throw new Error('The current Runtime is still in use.')
+  }
+
+  const backupRoot = path.join(runtimeUpdateCacheDir(), 'rollback')
+  const backup = path.join(backupRoot, `hermes-agent-${Date.now()}`)
+  fs.mkdirSync(backupRoot, { recursive: true })
+  let movedCurrent = false
+
+  try {
+    if (directoryExists(ACTIVE_HERMES_ROOT)) {
+      fs.renameSync(ACTIVE_HERMES_ROOT, backup)
+      movedCurrent = true
+    }
+
+    const runtimeStamp = {
+      branch: 'release',
+      builtAt: new Date().toISOString(),
+      commit: release.revision,
+      dirty: false,
+      schemaVersion: INSTALL_STAMP_SCHEMA_VERSION,
+      source: 'stocksense-runtime-update'
+    }
+
+    const result = await runBootstrap({
+      activeRoot: ACTIVE_HERMES_ROOT,
+      hermesHome: HERMES_HOME,
+      installStamp: runtimeStamp,
+      logRoot: path.join(HERMES_HOME, 'logs'),
+      offlineRuntimePath: staging,
+      onEvent: event => {
+        if (event.type === 'stage') {
+          emitUpdateProgress({
+            stage: 'update',
+            message: `Runtime：${event.name} ${event.state}`,
+            percent: null
+          })
+        }
+      },
+      sourceRepoRoot: null,
+      stockMcpDefaultsPath: resolveStockMcpDefaultsPath(),
+      writeMarker: payload =>
+        writeBootstrapMarker({
+          ...payload,
+          runtimeRevision: release.revision,
+          runtimeVersion: release.version
+        })
+    })
+
+    if (!result.ok || !isActiveRuntimeUsable()) {
+      throw new Error(result.error || 'Runtime health check failed.')
+    }
+
+    if (movedCurrent) {
+      fs.rmSync(backup, { force: true, recursive: true })
+    }
+
+    fs.rmSync(downloaded.archivePath, { force: true })
+    downloadedRuntimeRelease = null
+    rememberLog(`[desktop-release] installed Runtime ${release.version} (${release.revision.slice(0, 12)})`)
+  } catch (error) {
+    fs.rmSync(ACTIVE_HERMES_ROOT, { force: true, recursive: true })
+
+    if (movedCurrent && directoryExists(backup)) {
+      fs.renameSync(backup, ACTIVE_HERMES_ROOT)
+    }
+
+    throw error
+  } finally {
+    fs.rmSync(staging, { force: true, recursive: true })
+  }
+}
+
 function desktopReleasePlatform() {
   if (process.platform === 'win32') {
     return 'windows'
@@ -3120,7 +3412,9 @@ async function checkDesktopReleaseUpdates() {
     }
   }
 
-  if (desktopReleaseDownload && activeDesktopRelease) {
+  if ((desktopReleaseDownload && activeDesktopRelease) || (runtimeReleaseDownload && activeRuntimeRelease)) {
+    const activeVersion = activeDesktopRelease?.version || activeRuntimeRelease?.version
+
     return {
       supported: true,
       updateAvailable: true,
@@ -3128,28 +3422,41 @@ async function checkDesktopReleaseUpdates() {
       branch: config.channel,
       currentBranch: config.channel,
       fetchedAt: Date.now(),
-      mandatory: activeDesktopRelease.mandatory,
-      releaseNotes: activeDesktopRelease.notes,
-      releaseVersion: activeDesktopRelease.version,
-      targetSha: `release:${activeDesktopRelease.version}`
+      mandatory: activeDesktopRelease?.mandatory === true || activeRuntimeRelease?.required === true,
+      releaseNotes: [activeDesktopRelease?.notes, activeRuntimeRelease?.notes].filter(Boolean).join('\n'),
+      releaseVersion: activeVersion,
+      runtimeRevision: activeRuntimeRelease?.revision,
+      runtimeVersion: activeRuntimeRelease?.version,
+      targetSha: `release:${activeVersion}`
     }
   }
 
   activeDesktopRelease = null
+  activeRuntimeRelease = null
 
   const currentVersion = app.getVersion()
+  const currentRuntime = currentRuntimeRevision(readBootstrapMarker())
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 12_000)
 
   try {
-    const response = await fetch(buildDesktopReleaseCheckUrl(config, { arch, currentVersion, platform }), {
-      headers: {
-        Accept: 'application/json',
-        'X-StockSense-Client-Version': currentVersion,
-        'X-StockSense-Installation-Id': desktopInstallationId
-      },
-      signal: controller.signal
-    })
+    const response = await fetch(
+      buildDesktopReleaseCheckUrl(config, {
+        arch,
+        currentRuntimeRevision: currentRuntime,
+        currentVersion,
+        platform
+      }),
+      {
+        headers: {
+          Accept: 'application/json',
+          'X-StockSense-Client-Version': currentVersion,
+          'X-StockSense-Installation-Id': desktopInstallationId,
+          ...(currentRuntime ? { 'X-StockSense-Runtime-Revision': currentRuntime } : {})
+        },
+        signal: controller.signal
+      }
+    )
 
     if (!response.ok) {
       throw new Error(`version service returned HTTP ${response.status}`)
@@ -3182,7 +3489,7 @@ async function checkDesktopReleaseUpdates() {
       }
     }
 
-    if (!check.available || !check.release) {
+    if (!check.available) {
       return {
         supported: true,
         updateAvailable: false,
@@ -3193,15 +3500,25 @@ async function checkDesktopReleaseUpdates() {
       }
     }
 
-    activeDesktopRelease = check.release
+    activeDesktopRelease = check.release || null
+    activeRuntimeRelease = check.runtime || null
 
-    if (downloadedDesktopRelease && downloadedDesktopRelease.version !== check.release.version) {
+    if (check.release && downloadedDesktopRelease && downloadedDesktopRelease.version !== check.release.version) {
       downloadedDesktopRelease = null
     }
 
-    if (check.release.deliveryMode === 'auto') {
+    if (
+      check.runtime &&
+      downloadedRuntimeRelease &&
+      downloadedRuntimeRelease.release.revision !== check.runtime.revision
+    ) {
+      downloadedRuntimeRelease = null
+    }
+
+    if (check.release?.deliveryMode === 'auto') {
       if (!canUseAutomaticDesktopUpdates(check.release, config)) {
         activeDesktopRelease = null
+        activeRuntimeRelease = null
 
         return {
           supported: false,
@@ -3224,6 +3541,18 @@ async function checkDesktopReleaseUpdates() {
       }
     }
 
+    if (
+      check.runtime &&
+      config.backgroundDownloadEnabled &&
+      downloadedRuntimeRelease?.release.revision !== check.runtime.revision
+    ) {
+      void downloadRuntimeRelease(check.runtime).catch(error => {
+        rememberLog(`[desktop-release] Runtime background download failed: ${String(error)}`)
+      })
+    }
+
+    const releaseVersion = check.release?.version || check.runtime?.version
+
     return {
       supported: true,
       updateAvailable: true,
@@ -3231,13 +3560,16 @@ async function checkDesktopReleaseUpdates() {
       branch: config.channel,
       currentBranch: config.channel,
       fetchedAt: Date.now(),
-      mandatory: check.release.mandatory,
-      releaseNotes: check.release.notes,
-      releaseVersion: check.release.version,
-      targetSha: `release:${check.release.version}`
+      mandatory: check.release?.mandatory === true || check.runtime?.required === true,
+      releaseNotes: [check.release?.notes, check.runtime?.notes].filter(Boolean).join('\n'),
+      releaseVersion,
+      runtimeRevision: check.runtime?.revision,
+      runtimeVersion: check.runtime?.version,
+      targetSha: check.releaseId ? `release:${check.releaseId}` : `release:${releaseVersion}`
     }
   } catch (error) {
     activeDesktopRelease = null
+    activeRuntimeRelease = null
     rememberLog(`[desktop-release] version check failed: ${String(error)}`)
 
     return {
@@ -3256,19 +3588,19 @@ async function checkUpdates() {
 }
 
 async function applyDesktopReleaseUpdate(opts: { install?: boolean } = {}) {
-  if (!activeDesktopRelease) {
+  if (!activeDesktopRelease && !activeRuntimeRelease) {
     await checkDesktopReleaseUpdates()
   }
 
-  if (!activeDesktopRelease) {
+  if (!activeDesktopRelease && !activeRuntimeRelease) {
     return {
       ok: false,
       error: 'release-not-available',
-      message: '未找到已验证的更新安装包，请先重新检查更新。'
+      message: '未找到已验证的更新载荷，请先重新检查更新。'
     }
   }
 
-  if (activeDesktopRelease.deliveryMode === 'manual') {
+  if (activeDesktopRelease?.deliveryMode === 'manual') {
     if (!activeDesktopRelease.installerUrl) {
       return { ok: false, error: 'installer-not-available', message: '未找到可验证的更新安装包。' }
     }
@@ -3284,7 +3616,7 @@ async function applyDesktopReleaseUpdate(opts: { install?: boolean } = {}) {
     }
   }
 
-  if (!canUseAutomaticDesktopUpdates(activeDesktopRelease)) {
+  if (activeDesktopRelease && !canUseAutomaticDesktopUpdates(activeDesktopRelease)) {
     return {
       ok: false,
       error: 'automatic-updates-not-enabled',
@@ -3292,26 +3624,56 @@ async function applyDesktopReleaseUpdate(opts: { install?: boolean } = {}) {
     }
   }
 
-  configureDesktopAutoUpdater(activeDesktopRelease)
+  if (activeDesktopRelease) {
+    configureDesktopAutoUpdater(activeDesktopRelease)
+  }
 
   if (opts.install) {
-    if (!downloadedDesktopRelease || downloadedDesktopRelease.version !== activeDesktopRelease.version) {
-      return { ok: false, error: 'update-not-downloaded', message: '更新包尚未下载完成。' }
+    if (
+      activeDesktopRelease &&
+      (!downloadedDesktopRelease || downloadedDesktopRelease.version !== activeDesktopRelease.version)
+    ) {
+      return { ok: false, error: 'update-not-downloaded', message: '桌面更新包尚未下载完成。' }
     }
 
-    emitUpdateProgress({ stage: 'restart', message: '正在重启并安装 StockSense 更新…', percent: 100 })
-    autoUpdater.quitAndInstall(false, true)
+    if (
+      activeRuntimeRelease &&
+      (!downloadedRuntimeRelease || downloadedRuntimeRelease.release.revision !== activeRuntimeRelease.revision)
+    ) {
+      return { ok: false, error: 'runtime-not-downloaded', message: 'Runtime 更新包尚未下载完成。' }
+    }
+
+    if (activeRuntimeRelease) {
+      await installRuntimeRelease(activeRuntimeRelease)
+    }
+
+    if (activeDesktopRelease) {
+      emitUpdateProgress({ stage: 'restart', message: '正在重启并安装 StockSense 更新…', percent: 100 })
+      autoUpdater.quitAndInstall(false, true)
+
+      return { ok: true, handedOff: true }
+    }
+
+    emitUpdateProgress({ stage: 'restart', message: 'Runtime 更新完成，正在重启 StockSense…', percent: 100 })
+    isQuittingForHandoff = true
+    app.relaunch()
+    setTimeout(() => app.quit(), 250)
 
     return { ok: true, handedOff: true }
   }
 
-  await downloadDesktopRelease(activeDesktopRelease)
+  await Promise.all([
+    activeDesktopRelease ? downloadDesktopRelease(activeDesktopRelease) : Promise.resolve(),
+    activeRuntimeRelease ? downloadRuntimeRelease(activeRuntimeRelease) : Promise.resolve()
+  ])
+
+  const version = activeDesktopRelease?.version || activeRuntimeRelease?.version
 
   return {
     ok: true,
     readyToInstall: true,
-    message: `StockSense ${activeDesktopRelease.version} 已下载，重启后即可完成更新。`,
-    releaseVersion: activeDesktopRelease.version
+    message: `StockSense ${version} 更新载荷已下载，重启后即可完成更新。`,
+    releaseVersion: version
   }
 }
 
@@ -3827,6 +4189,8 @@ function writeBootstrapMarker(payload) {
     schemaVersion: BOOTSTRAP_MARKER_SCHEMA_VERSION,
     pinnedCommit: payload.pinnedCommit || null,
     pinnedBranch: payload.pinnedBranch || null,
+    ...(payload.runtimeRevision ? { runtimeRevision: payload.runtimeRevision } : {}),
+    ...(payload.runtimeVersion ? { runtimeVersion: payload.runtimeVersion } : {}),
     completedAt: new Date().toISOString(),
     desktopVersion: app.getVersion()
   }
@@ -7975,11 +8339,11 @@ async function spawnPoolBackend(profile, entry) {
     backend.args,
     hiddenWindowsChildOptions({
       cwd: hermesCwd,
-        env: {
-          ...process.env,
-          HERMES_HOME,
-          ...backend.env,
-          ...(resolveStockSenseManagedConfigDir() ? { HERMES_MANAGED_DIR: resolveStockSenseManagedConfigDir() } : {}),
+      env: {
+        ...process.env,
+        HERMES_HOME,
+        ...backend.env,
+        ...(resolveStockSenseManagedConfigDir() ? { HERMES_MANAGED_DIR: resolveStockSenseManagedConfigDir() } : {}),
         // Pin the gateway's tool/terminal cwd to the same directory we chose for
         // the child process. Inherited TERMINAL_CWD (or a stale config bridge)
         // can still point at the install dir even when spawn cwd is home.

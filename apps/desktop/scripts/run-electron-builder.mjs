@@ -43,8 +43,16 @@ function runtimeFlavor(expectedOfflineTarget) {
   const scriptsDir = path.dirname(new URL(import.meta.url).pathname)
   const manifestPath = path.resolve(scriptsDir, "..", "build", "offline-runtime", "manifest.json")
 
+  const requestedFlavor = String(process.env.STOCKSENSE_PACKAGE_FLAVOR || 'offline').trim().toLowerCase()
+
   try {
     const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"))
+    if (requestedFlavor === 'update') {
+      if (manifest?.bundled === false && manifest?.source_bundled === false) {
+        return 'update'
+      }
+      throw new Error('Lightweight update builds must use the placeholder runtime manifest.')
+    }
     if (manifest?.bundled === true && manifest.target === expectedOfflineTarget) {
       return "offline"
     }
@@ -54,7 +62,8 @@ function runtimeFlavor(expectedOfflineTarget) {
 
   if (expectedOfflineTarget) {
     throw new Error(
-      `Offline runtime ${expectedOfflineTarget} is not prepared. Run the platform dist command instead of invoking the builder directly.`
+      `${requestedFlavor === 'update' ? 'Update placeholder' : `Offline runtime ${expectedOfflineTarget}`} is not prepared. ` +
+        `Run the matching platform dist command instead of invoking the builder directly.`
     )
   }
 

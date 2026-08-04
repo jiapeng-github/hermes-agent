@@ -434,7 +434,7 @@ function powershellUnderRoot(root) {
 // install.ps1 ever runs — the installer stalls at "0 of 0 steps". Resolve by
 // absolute path first, then fall back to PATH (powershell 5.1, then pwsh 7),
 // then a bare name as a last resort.
-function resolveWindowsPowerShell() {
+export function resolveWindowsPowerShell() {
   for (const v of ['SystemRoot', 'windir']) {
     const root = process.env[v]
 

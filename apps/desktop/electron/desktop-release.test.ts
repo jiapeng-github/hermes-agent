@@ -53,7 +53,10 @@ function signedPayload(privateKey: crypto.KeyObject) {
   return payload
 }
 
-function signedAutoPayload(privateKey: crypto.KeyObject, feedUrl = 'https://cdn.stocksense.work/desktop/feeds/stable/macos-arm64/offline') {
+function signedAutoPayload(
+  privateKey: crypto.KeyObject,
+  feedUrl = 'https://cdn.stocksense.work/desktop/feeds/stable/macos-arm64/offline'
+) {
   const payload: Record<string, unknown> = {
     protocol_version: 1,
     signature_key_id: 'current',
@@ -92,16 +95,56 @@ function signedManagedConfigPayload(privateKey: crypto.KeyObject) {
   return payload
 }
 
+function signedSplitPayload(privateKey: crypto.KeyObject, desktopAvailable = true) {
+  const payload: Record<string, unknown> = {
+    protocol_version: 2,
+    release_id: 'stocksense-0.20.0',
+    runtime: {
+      artifact: {
+        sha256: 'c'.repeat(64),
+        size_bytes: 4096,
+        url: 'https://cdn.stocksense.work/runtime/0.20.0/windows-x64.zip'
+      },
+      available: true,
+      notes: '更新本地分析运行时。',
+      required: true,
+      revision: 'd'.repeat(40),
+      version: '0.20.0'
+    },
+    signature_key_id: 'current',
+    update: desktopAvailable
+      ? {
+          available: true,
+          delivery_mode: 'auto',
+          feed_url: 'https://cdn.stocksense.work/desktop/0.20.0/windows-x64/update',
+          mandatory: false,
+          notes: '更新桌面端。',
+          version: '0.20.0'
+        }
+      : { available: false }
+  }
+
+  payload.signature = crypto.sign(null, Buffer.from(canonicalJson(payload)), privateKey).toString('base64')
+
+  return payload
+}
+
 test('normalizes only explicitly allowed HTTP release service endpoints', () => {
-  assert.equal(normalizeDesktopReleaseServiceConfig({ endpoint: 'http://updates.example/check', signingKeys: { k: 'x' } }), null)
   assert.equal(
-    normalizeDesktopReleaseServiceConfig({ allowInsecureHttp: true, endpoint: 'http://updates.example/check', signingKeys: { k: 'x' } })
-      ?.endpoint,
+    normalizeDesktopReleaseServiceConfig({ endpoint: 'http://updates.example/check', signingKeys: { k: 'x' } }),
+    null
+  )
+  assert.equal(
+    normalizeDesktopReleaseServiceConfig({
+      allowInsecureHttp: true,
+      endpoint: 'http://updates.example/check',
+      signingKeys: { k: 'x' }
+    })?.endpoint,
     'http://updates.example/check'
   )
 })
 
-test('builds the public check URL with platform, architecture, package flavor and version', () => {
+test('builds the public check URL with platform, architecture, package flavor and versions', () => {
   const config = normalizeDesktopReleaseServiceConfig({
     backgroundDownloadEnabled: true,
     endpoint: 'https://updates.example/app-api/desktop/v1/check',
@@ -110,12 +153,20 @@ test('builds the public check URL with platform, architecture, package flavor an
   })
   assert.ok(config)
   assert.equal(config.backgroundDownloadEnabled, true)
-  const url = new URL(buildDesktopReleaseCheckUrl(config, { arch: 'x64', currentVersion: '0.19.0', platform: 'windows' }))
+  const url = new URL(
+    buildDesktopReleaseCheckUrl(config, {
+      arch: 'x64',
+      currentRuntimeRevision: 'e'.repeat(40),
+      currentVersion: '0.19.0',
+      platform: 'windows'
+    })
+  )
 
   assert.equal(url.searchParams.get('platform'), 'windows')
   assert.equal(url.searchParams.get('arch'), 'x64')
   assert.equal(url.searchParams.get('flavor'), 'offline')
   assert.equal(url.searchParams.get('current_version'), '0.19.0')
+  assert.equal(url.searchParams.get('current_runtime_revision'), 'e'.repeat(40))
 })
 
 test('accepts an authenticated newer manual release', () => {
@@ -181,8 +232,43 @@ test('accepts a separately signed HTTPS managed-config descriptor', () => {
 
   const tampered = signedManagedConfigPayload(privateKey)
   ;((tampered.managed_config as Record<string, unknown>).sha256 as string) = 'c'.repeat(64)
-  assert.equal(
-    validateDesktopReleaseCheck(tampered, { currentVersion: '0.19.0', signingKeys }).supported,
-    false
-  )
+  assert.equal(validateDesktopReleaseCheck(tampered, { currentVersion: '0.19.0', signingKeys }).supported, false)
+})
+
+test('accepts one signed release plan containing desktop and runtime updates', () => {
+  const { privateKey, publicKey } = crypto.generateKeyPairSync('ed25519')
+  const result = validateDesktopReleaseCheck(signedSplitPayload(privateKey), {
+    currentVersion: '0.19.0',
+    signingKeys: { current: rawEd25519PublicKey(publicKey) }
+  })
+
+  assert.equal(result.supported, true)
+  assert.equal(result.available, true)
+  assert.equal(result.releaseId, 'stocksense-0.20.0')
+  assert.equal(result.release?.version, '0.20.0')
+  assert.equal(result.runtime?.version, '0.20.0')
+  assert.equal(result.runtime?.revision, 'd'.repeat(40))
+  assert.equal(result.runtime?.required, true)
+})
+
+test('accepts a runtime-only release plan and rejects a malformed runtime artifact', () => {
+  const { privateKey, publicKey } = crypto.generateKeyPairSync('ed25519')
+  const signingKeys = { current: rawEd25519PublicKey(publicKey) }
+  const runtimeOnly = validateDesktopReleaseCheck(signedSplitPayload(privateKey, false), {
+    currentVersion: '0.20.0',
+    signingKeys
+  })
+
+  assert.equal(runtimeOnly.supported, true)
+  assert.equal(runtimeOnly.available, true)
+  assert.equal(runtimeOnly.release, undefined)
+  assert.equal(runtimeOnly.runtime?.version, '0.20.0')
+
+  const malformed = signedSplitPayload(privateKey, false)
+  ;((malformed.runtime as Record<string, unknown>).artifact as Record<string, unknown>).url =
+    'http://cdn.example/runtime.zip'
+  delete malformed.signature
+  malformed.signature = crypto.sign(null, Buffer.from(canonicalJson(malformed)), privateKey).toString('base64')
+
+  assert.equal(validateDesktopReleaseCheck(malformed, { currentVersion: '0.20.0', signingKeys }).supported, false)
 })

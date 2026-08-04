@@ -1,0 +1,220 @@
+<title>StockSense 桌面端版本管理与自动更新设计 v1</title>
+<p>状态：桌面端拆分更新已实现，stock-sense-admin 待按本文契约改造并联调。适用范围：Windows x64、macOS arm64、GitHub Actions、腾讯云 COS 与 stock-sense-admin。本文是桌面端版本管理与自动更新的当前实现基线，替代此前 offline/network 双包型和协议 v1 的描述。</p>
+<callout emoji="📌" background-color="light-blue" border-color="blue"><p><b>冻结结论：</b>首次安装只发布包含 Python 与全部依赖的离线安装包；后续更新拆成“轻量桌面更新包”和“Runtime 更新包”，两者独立下载、统一编排。客户端后台静默下载，安装时始终先更新 Runtime，再更新桌面程序。用户只看到一次更新，不需要判断两个包，也不需要访问 GitHub。</p></callout>
+
+<h1>1. 目标与边界</h1>
+<p>方案解决三个问题：首次安装在国内网络环境下不依赖在线下载 Python 与 wheels；普通桌面 UI 更新不重复携带运行时；Python 后端、依赖或源码变化时可以独立更新 Runtime。所有终端下载均通过 stock-sense-admin 返回的腾讯 COS HTTPS 地址完成，GitHub Actions 只承担构建，不作为客户端更新源。</p>
+<p>第一阶段仅支持 Windows x64 与 macOS arm64。Linux、macOS x64、跨架构更新、二进制差分补丁和无 Python 的首次安装包不在范围内。Runtime 更新包不是在线安装包，它仍包含当前版本的 Agent 源码与 uv 离线缓存，只复用首次安装已落盘的 Python。</p>
+
+<h1>2. 总体架构与更新事务</h1>
+<pre lang="text" caption="构建、发布与客户端更新链路"><code>GitHub Actions
+  ├─ Offline Installer：首次安装与人工修复
+  ├─ Desktop Update：轻量 Electron/React 更新
+  ├─ Runtime Update：Agent 源码 + uv + 离线依赖缓存
+  └─ Split Release Bundle：管理端一次上传的发布包
+
+stock-sense-admin
+  ├─ 校验 release-manifest.json、包结构、哈希与 feed
+  ├─ 将不可变资产上传腾讯 COS
+  ├─ 维护版本、灰度、强制更新与发布说明
+  └─ 返回 Ed25519 签名的协议 v2 发布计划
+
+StockSense Desktop
+  ├─ 检查桌面版本、Runtime revision 与受管配置
+  ├─ 后台并行下载 Desktop Update 与 Runtime Update
+  ├─ 校验签名、HTTPS、大小、SHA-256/内部 Manifest
+  └─ 用户确认后：Runtime 安装与健康检查 → Desktop 替换 → 重启</code></pre>
+<p>“分开打包”只存在于构建与存储层。管理端以一个 release_id 组织同一次发布，客户端以一个更新事务下载和安装。若仅桌面变化，runtime.available=false；若仅 Python 后端变化，update.available=false；两者同时变化时同时返回。</p>
+
+<h1>3. 三类发布物</h1>
+<table><colgroup><col width="155"/><col width="210"/><col width="260"/><col width="220"/></colgroup><thead><tr><th background-color="light-gray">发布物</th><th background-color="light-gray">用途</th><th background-color="light-gray">Windows x64</th><th background-color="light-gray">macOS arm64</th></tr></thead><tbody>
+<tr><td><b>Offline Installer</b></td><td>首次安装、Runtime 严重损坏后的人工修复</td><td>StockSense-{version}-win-x64-offline.exe</td><td>StockSense-{version}-mac-arm64-offline.dmg</td></tr>
+<tr><td><b>Desktop Update</b></td><td>后续 Electron/React 桌面程序更新，不携带 Python 与依赖</td><td>StockSense-{version}-win-x64-update.exe、blockmap、latest.yml</td><td>StockSense-{version}-mac-arm64-update.zip、blockmap、latest-mac.yml</td></tr>
+<tr><td><b>Runtime Update</b></td><td>Agent Python 源码及锁定依赖更新，复用已安装 Python</td><td>StockSense-Runtime-{version}-win-x64.zip</td><td>StockSense-Runtime-{version}-mac-arm64.zip</td></tr>
+</tbody></table>
+<p>macOS 的 DMG 只用于首次安装，自动更新必须使用包含签名 .app 的 ZIP。Windows 的 Desktop Update 仍是 NSIS EXE，但其 resources/offline-runtime 只有占位 Manifest，不包含 Python 与 uv 缓存。Desktop Update 与 Offline Installer 使用相同 appId、产品名和版本，electron-updater 可以用轻量 NSIS/ZIP 替换首次离线安装的应用程序。</p>
+
+<h1>4. Runtime Update 包规范</h1>
+<pre lang="text" caption="Runtime ZIP 根目录"><code>manifest.json
+hermes-agent-source.zip
+install.sh | install.ps1
+bin/uv | bin/uv.exe
+uv-cache/**
+
+# 明确不包含
+python/**</code></pre>
+<p>manifest.json 的 product 固定为 stocksense-runtime，schema_version 固定为 1；必须包含 target、version、revision、python、python_bundled=false、source_bundled=true、cache_bundled=true 与 files。revision 是构建提交的 40 至 64 位十六进制 SHA；files 记录除 Manifest 外每个文件的相对路径与 SHA-256。</p>
+<pre lang="json" caption="Runtime Manifest 示例"><code>{
+  "product": "stocksense-runtime",
+  "schema_version": 1,
+  "target": "windows-x64",
+  "version": "0.20.0",
+  "revision": "40-to-64-char-git-sha",
+  "python": "3.11",
+  "python_bundled": false,
+  "source_bundled": true,
+  "cache_bundled": true,
+  "files": {
+    "hermes-agent-source.zip": "sha256",
+    "install.ps1": "sha256",
+    "bin/uv.exe": "sha256",
+    "uv-cache/...": "sha256"
+  }
+}</code></pre>
+<p>客户端先校验协议中签名保护的 Runtime ZIP 大小与 SHA-256，再解压到暂存目录，并逐文件验证 Manifest 哈希。目标平台、SemVer、revision、源码包、安装脚本与 uv-cache 任一不一致都拒绝安装。</p>
+
+<h1>5. GitHub Actions 构建约定</h1>
+<p>继续使用 Build StockSense Desktop 手动工作流。输入只保留 target：all、windows-x64 或 macos-arm64；不再提供 offline/network flavor 选择。每个平台 job 在原生 runner 上依次构建 Offline Installer、Runtime Update 与 Desktop Update。Runtime 包必须在离线 Runtime 准备完成后、轻量构建清空离线目录前生成。</p>
+<pre lang="text" caption="工作流主要脚本"><code>Windows x64
+  npm run dist:win:offline
+  npm run runtime:pack:win
+  npm run dist:win:update
+
+macOS arm64
+  npm run dist:mac:offline
+  npm run runtime:pack:mac
+  npm run dist:mac:update</code></pre>
+<p>两个平台都成功后，release-bundle job 生成 desktop-release-bundle-{version}-split.zip。管理员只需下载并上传这一份管理包。平台构建 Artifact 仍保留，便于单独下载首次安装器或排查构建问题。</p>
+
+<h1>6. Split Release Bundle 契约</h1>
+<p>管理包根目录包含十个目标资产、release-manifest.json 与 SHA256SUMS.txt。release-manifest.json 的 schema_version 固定为 2，product 固定为 stocksense，flavor 只允许 offline、update、runtime，asset role 只允许 installer、updater、feed、blockmap、runtime。</p>
+<pre lang="json" caption="发布清单核心结构"><code>{
+  "schema_version": 2,
+  "product": "stocksense",
+  "release_id": "stocksense-0.20.0",
+  "version": "0.20.0",
+  "channel": "stable",
+  "install_order": ["runtime", "desktop"],
+  "runtime": {
+    "version": "0.20.0",
+    "revision": "git-sha"
+  },
+  "assets": [
+    {
+      "platform": "windows",
+      "arch": "x64",
+      "flavor": "offline",
+      "role": "installer",
+      "relative_path": "...-offline.exe",
+      "size_bytes": 123,
+      "sha256": "..."
+    },
+    {
+      "platform": "windows",
+      "arch": "x64",
+      "flavor": "update",
+      "role": "updater",
+      "relative_path": "...-update.exe",
+      "size_bytes": 123,
+      "sha256": "...",
+      "sha512": "base64"
+    }
+  ]
+}</code></pre>
+<p>管理端上传校验必须验证文件白名单、路径安全、文件唯一性、清单与实际文件集合一致、size、SHA-256、updater 的 SHA-512、feed 中 version/path/sha512 与 updater 一致、Runtime 内部 Manifest、两个目标平台资产齐全。发布后 COS 对象不可覆盖；修复必须产生更高版本或新的 release_id。</p>
+
+<h1>7. COS 目录与 feed</h1>
+<pre lang="text" caption="建议对象路径"><code>desktop/releases/{channel}/{version}/{platform}-{arch}/offline/*
+desktop/releases/{channel}/{version}/{platform}-{arch}/update/*
+runtime/releases/{channel}/{runtime_version}/{revision}/{platform}-{arch}/*
+
+desktop/feeds/{channel}/{platform}-{arch}/update/latest.yml
+desktop/feeds/{channel}/{platform}-{arch}/update/latest-mac.yml</code></pre>
+<p>版本资产使用不可变路径并设置长缓存；feed 使用稳定路径并设置短缓存或 no-cache。发布顺序必须是先上传所有不可变资产，再写数据库发布状态，最后原子更新 feed。check 接口返回的 feed_url 必须指向 update 目录，不能指向 offline 安装器。</p>
+
+<h1>8. 公开版本发现协议 v2</h1>
+<pre lang="http" caption="版本检查请求"><code>GET /app-api/desktop/v1/check?platform=windows&amp;arch=x64&amp;channel=stable&amp;flavor=split&amp;current_version=0.19.0&amp;current_runtime_revision={sha}
+Accept: application/json
+X-StockSense-Installation-Id: {local-random-uuid}
+X-StockSense-Client-Version: 0.19.0
+X-StockSense-Runtime-Revision: {sha}</code></pre>
+<p>flavor 固定为 split。客户端同时上报桌面版本和当前 Runtime revision，服务端分别判断两个组件是否需要更新。installation_id 只用于稳定灰度，不用于用户画像。</p>
+<pre lang="json" caption="桌面与 Runtime 同时更新"><code>{
+  "protocol_version": 2,
+  "release_id": "stocksense-stable-0.20.0-r1",
+  "server_time": "2026-08-04T00:00:00Z",
+  "update": {
+    "available": true,
+    "delivery_mode": "auto",
+    "version": "0.20.0",
+    "mandatory": false,
+    "notes": "桌面功能与稳定性更新。",
+    "feed_url": "https://cos.example/desktop/feeds/stable/windows-x64/update/"
+  },
+  "runtime": {
+    "available": true,
+    "version": "0.20.0",
+    "revision": "40-to-64-char-git-sha",
+    "required": true,
+    "notes": "Agent Runtime 与依赖更新。",
+    "artifact": {
+      "url": "https://cos.example/runtime/.../StockSense-Runtime-0.20.0-win-x64.zip",
+      "sha256": "64-char-sha256",
+      "size_bytes": 12345678
+    }
+  },
+  "managed_config": null,
+  "signature_key_id": "stocksense-desktop-2026-07-29",
+  "signature": "base64-ed25519-signature"
+}</code></pre>
+<p>Runtime-only 发布时 update 必须保留为 {"available": false}，runtime.available=true。Desktop-only 发布时 runtime 可省略或返回 {"available": false}。没有任何二进制更新时两者均为 false，但仍可携带 managed_config。协议响应使用规范化 JSON，对除 signature 字段外的整个顶层对象做 Ed25519 签名。</p>
+
+<h1>9. 桌面端下载与安装状态机</h1>
+<ol>
+<li seq="auto">启动后按现有调度检查版本；检查失败只记日志，不影响会话、Hub 或本地后端启动。</li>
+<li seq="auto">验签协议 v2，分别验证 Desktop feed 与 Runtime 元数据。任何签名、协议或 HTTPS 校验失败都不展示更新。</li>
+<li seq="auto">backgroundDownloadEnabled=true 时并行静默下载两个组件。Desktop Update 由 electron-updater 处理；Runtime 使用 Electron net 下载并校验签名中的大小与 SHA-256。</li>
+<li seq="auto">下载完成后提示“重启并更新”。下载完成不等于安装，普通更新不在用户工作过程中强制退出。</li>
+<li seq="auto">用户确认后先停止本地 Agent 后端，将当前 Runtime 原子移动到 rollback 目录，再使用 Runtime 包执行现有 install.sh/install.ps1。</li>
+<li seq="auto">Runtime 安装完成后执行 CLI import 与目录健康检查。成功则删除回滚目录；失败则删除新 Runtime 并恢复旧目录。</li>
+<li seq="auto">若同一事务还有 Desktop Update，调用 electron-updater.quitAndInstall；若只有 Runtime，调用 app.relaunch 后退出。</li>
+</ol>
+<p>Runtime 与 Desktop 的下载可以并行，但安装顺序不可调整。原因是新版桌面程序可能依赖新版 Runtime RPC，而新版 Runtime 应继续兼容当前桌面直到应用重启完成。</p>
+
+<h1>10. 首装、修复与版本兼容</h1>
+<p>首次离线安装将 Python 与 uv-cache 复制到 HERMES_HOME/bootstrap-cache/offline-runtime，并在 HERMES_HOME/hermes-agent 创建活动 Runtime。后续 Runtime 包没有 Python；安装脚本发现包内无 Python 时必须保留 managed Python，只替换 uv-cache、源码与虚拟环境。若 managed Python 丢失或损坏，Runtime 更新必须失败并回滚，客户端提示使用完整 Offline Installer 修复。</p>
+<p>桌面版本和 Runtime 版本不要求始终相同。兼容性由发布计划控制：Runtime required=true 表示本次桌面更新必须与该 Runtime 一起安装；服务端不得向低于最低兼容桌面版本的客户端单独下发不兼容 Runtime。管理端后续可增加 min_desktop_version 与 min_runtime_revision，但协议 v2 第一版通过同一 release_id 和 required 约束即可。</p>
+
+<h1>11. 受管配置与二进制更新</h1>
+<p>受管配置仍是独立通道，用于 Hub base_url、远程中心开关和 channel 等产品参数。它可以在没有二进制更新时下发，验签、白名单校验和 SHA-256 通过后原子覆盖；失败保留上一有效修订。模型密钥、MCP API Key 和用户会话不得通过受管配置发布。</p>
+<p>轻量 Desktop Update 会携带最新的包内默认配置，因此新版本可更新默认 Hub 地址；已存在的远程受管配置优先级更高。管理端不得继续发布指向 localhost 的受管配置，否则会覆盖新包默认值。</p>
+
+<h1>12. stock-sense-admin 开发基线</h1>
+<p>管理端继续复用 desktop_release、desktop_release_asset、desktop_managed_config 三张表，不复用 Hub 内容表。desktop_release 表应允许 Desktop 与 Runtime 独立可选，增加或明确 release_key、desktop_version、runtime_version、runtime_revision、runtime_required、install_order、mandatory、rollout_percent、status 与 release_notes。desktop_release_asset 增加 component_type（installer、desktop_update、runtime）或等价字段，asset_role 使用 installer、updater、feed、blockmap、runtime。</p>
+<p>同一发布记录至少包含一个可更新组件。唯一约束建议为 channel + release_key；桌面版本同 channel 不得倒退；同一 runtime_revision 不得用不同内容重复发布。资产唯一约束建议为 release_id + platform + arch + flavor + asset_role。</p>
+<pre lang="text" caption="管理端接口"><code>GET    /admin-api/desktop/release/page
+POST   /admin-api/desktop/release/create
+PUT    /admin-api/desktop/release/update
+POST   /admin-api/desktop/release/{id}/bundle-upload
+GET    /admin-api/desktop/release/{id}/validation-report
+POST   /admin-api/desktop/release/{id}/publish
+POST   /admin-api/desktop/release/{id}/pause-rollout
+POST   /admin-api/desktop/release/{id}/withdraw
+
+GET    /app-api/desktop/v1/check</code></pre>
+<p>bundle-upload 必须使用临时目录两阶段处理：第一阶段只解压和校验，不写发布表状态；第二阶段全部通过后上传 COS、写资产记录。任一失败清理临时文件且不产生部分发布。publish 最后生成或更新 feed，并用当前活动 Ed25519 私钥签名公开响应。</p>
+
+<h1>13. 发布、灰度与回退</h1>
+<ol>
+<li seq="auto">在 release 分支设置正确 SemVer，手动运行 Build StockSense Desktop，target 推荐选择 all。</li>
+<li seq="auto">下载 stocksense-release-bundle-split Artifact，上传管理端草稿。</li>
+<li seq="auto">管理端完成 schema、平台矩阵、feed、Runtime Manifest、哈希与签名报告校验后写入 COS。</li>
+<li seq="auto">先发布 5% stable 灰度，再观察检查失败、下载失败、Runtime 回滚、更新后启动失败与 Hub 连接错误。</li>
+<li seq="auto">逐步扩大至 25% 和 100%。发现问题时暂停或撤回，已安装客户端不做自动降级。</li>
+<li seq="auto">修复桌面问题发布更高 Desktop 版本；修复 Runtime 问题发布新的 revision。不要原地覆盖 COS 旧对象或旧 feed 指向的资产。</li>
+</ol>
+
+<h1>14. 验收标准</h1>
+<table><colgroup><col width="205"/><col width="430"/><col width="130"/></colgroup><thead><tr><th background-color="light-gray">场景</th><th background-color="light-gray">验收结果</th><th background-color="light-gray">责任侧</th></tr></thead><tbody>
+<tr><td>全新离线安装</td><td>断网环境可完成首次安装并启动 Agent，不访问 GitHub、PyPI 或 Electron 下载源</td><td>桌面/CI</td></tr>
+<tr><td>Desktop-only</td><td>只下载轻量 NSIS/ZIP，重启后 UI 更新，现有 Runtime 不变</td><td>桌面/管理端</td></tr>
+<tr><td>Runtime-only</td><td>复用 managed Python，离线重建 Runtime，健康检查通过后重启桌面</td><td>桌面/管理端</td></tr>
+<tr><td>Desktop + Runtime</td><td>后台并行下载，只提示一次；安装顺序严格为 Runtime 后 Desktop</td><td>桌面</td></tr>
+<tr><td>Runtime 安装失败</td><td>恢复旧活动目录，客户端仍可启动；记录失败原因</td><td>桌面</td></tr>
+<tr><td>包被篡改</td><td>协议签名、外层 SHA-256、feed SHA-512 或内部 Manifest 任一失败即拒绝</td><td>全链路</td></tr>
+<tr><td>发布不完整</td><td>管理端禁止发布，不更新 feed，不产生可被客户端发现的半成品版本</td><td>管理端</td></tr>
+</tbody></table>
+
+<h1>15. 当前实现状态与下一步</h1>
+<p><b>桌面端已完成：</b>协议 v2、split flavor、Runtime revision 上报、轻量 Desktop Update、Runtime ZIP 构建、后台下载、HTTPS/大小/SHA-256/内部文件校验、Runtime 原子切换与回滚、Runtime-first 安装、GitHub Actions 三类产物和 split release bundle。默认已启用 HTTPS 自动检查与后台下载。</p>
+<p><b>管理端待完成：</b>支持 schema_version=2 的 bundle 校验与资产分类；COS 分目录发布；协议 v2 响应与 Ed25519 签名；Desktop-only、Runtime-only 与组合发布；feed 指向 update 资产；灰度、撤回和校验报告 UI。管理端完成后进行 Windows x64 与 macOS arm64 两个平台的首次安装、三种更新组合及失败回滚联调。</p>

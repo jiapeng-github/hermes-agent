@@ -21,15 +21,15 @@ permissions:
   contents: read
 
 concurrency:
-  group: desktop-build-${{ github.ref }}-${{ inputs.target }}-offline
+  group: desktop-build-${{ github.ref }}-${{ inputs.target }}-split
   cancel-in-progress: false
 
 jobs:
   windows:
-    name: Windows x64 (offline)
+    name: Windows x64 (offline + update + runtime)
     if: inputs.target == 'all' || inputs.target == 'windows-x64'
     runs-on: windows-2022
-    timeout-minutes: 90
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -67,37 +67,48 @@ jobs:
         with:
           command: npm ci
 
-      - name: Build installer
+      - name: Build offline installer
         working-directory: apps/desktop
-        run: npm run dist:win
+        run: npm run dist:win:offline
+
+      - name: Build Runtime update
+        working-directory: apps/desktop
+        run: npm run runtime:pack:win
+
+      - name: Build lightweight desktop update
+        working-directory: apps/desktop
+        run: npm run dist:win:update
 
       - name: Write checksums
         shell: pwsh
         run: |
-          Get-ChildItem 'apps/desktop/release' -File |
-            Where-Object { $_.Name -match '\.(exe|blockmap|yml)$' } |
+          $releaseRoot = (Resolve-Path 'apps/desktop/release').Path
+          Get-ChildItem 'apps/desktop/release' -File -Recurse |
+            Where-Object { $_.Name -match '\.(exe|zip|blockmap|yml)$' } |
             Get-FileHash -Algorithm SHA256 |
-            ForEach-Object { "$($_.Hash.ToLower())  $($_.Name)" } |
+            ForEach-Object { "$($_.Hash.ToLower())  $($_.Path.Replace($releaseRoot + '\', ''))" } |
             Set-Content 'apps/desktop/release/SHA256SUMS.txt'
 
       - name: Upload Windows installer
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.0
         with:
-          name: stocksense-windows-x64-offline
+          name: stocksense-windows-x64-release
           path: |
-            apps/desktop/release/*.exe
-            apps/desktop/release/*.blockmap
-            apps/desktop/release/*.yml
+            apps/desktop/release/offline/*.exe
+            apps/desktop/release/update/*.exe
+            apps/desktop/release/update/*.blockmap
+            apps/desktop/release/update/*.yml
+            apps/desktop/release/runtime/*.zip
             apps/desktop/release/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 14
           compression-level: 0
 
   macos:
-    name: macOS arm64 (offline)
+    name: macOS arm64 (offline + update + runtime)
     if: inputs.target == 'all' || inputs.target == 'macos-arm64'
     runs-on: macos-14
-    timeout-minutes: 90
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -133,31 +144,41 @@ jobs:
         with:
           command: npm ci
 
-      - name: Build installer
+      - name: Build offline installer
         working-directory: apps/desktop
-        run: npm run dist:mac
+        run: npm run dist:mac:offline
+
+      - name: Build Runtime update
+        working-directory: apps/desktop
+        run: npm run runtime:pack:mac
+
+      - name: Build lightweight desktop update
+        working-directory: apps/desktop
+        run: npm run dist:mac:update
 
       - name: Write checksums
         run: |
           cd apps/desktop/release
-          shasum -a 256 *.dmg *.zip *.blockmap *.yml > SHA256SUMS.txt
+          find offline update runtime -type f \( -name '*.dmg' -o -name '*.zip' -o -name '*.blockmap' -o -name '*.yml' \) -print0 |
+            xargs -0 shasum -a 256 > SHA256SUMS.txt
 
       - name: Upload macOS installers
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.0
         with:
-          name: stocksense-macos-arm64-offline
+          name: stocksense-macos-arm64-release
           path: |
-            apps/desktop/release/*.dmg
-            apps/desktop/release/*.zip
-            apps/desktop/release/*.blockmap
-            apps/desktop/release/*.yml
+            apps/desktop/release/offline/*.dmg
+            apps/desktop/release/update/*.zip
+            apps/desktop/release/update/*.blockmap
+            apps/desktop/release/update/*.yml
+            apps/desktop/release/runtime/*.zip
             apps/desktop/release/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 14
           compression-level: 0
 
   release-bundle:
-    name: Desktop release bundle (offline)
+    name: Desktop release bundle (split delivery)
     if: inputs.target == 'all' && needs.windows.result == 'success' && needs.macos.result == 'success'
     needs: [windows, macos]
     runs-on: ubuntu-24.04
@@ -180,14 +201,14 @@ jobs:
       - name: Download platform artifacts
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          pattern: stocksense-*-offline
+          pattern: stocksense-*-release
           path: desktop-release-input
 
       - name: Create upload bundle
         id: bundle
         run: |
           VERSION=$(node -p "require('./apps/desktop/package.json').version")
-          BUNDLE="desktop-release-bundle-${VERSION}-offline.zip"
+          BUNDLE="desktop-release-bundle-${VERSION}-split.zip"
           node apps/desktop/scripts/create-release-bundle.mjs \
             --input desktop-release-input \
             --output "$BUNDLE" \
@@ -198,7 +219,7 @@ jobs:
       - name: Upload management release bundle
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.0
         with:
-          name: stocksense-release-bundle-offline
+          name: stocksense-release-bundle-split
           path: ${{ steps.bundle.outputs.bundle }}
           if-no-files-found: error
           retention-days: 14

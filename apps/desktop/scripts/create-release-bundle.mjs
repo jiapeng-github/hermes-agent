@@ -48,6 +48,16 @@ function fileByBasename(files, name) {
   return matches[0]
 }
 
+function fileByBasenameUnder(files, name, directory) {
+  const matches = files.filter(file => path.basename(file) === name && file.split(path.sep).includes(directory))
+
+  if (matches.length !== 1) {
+    throw new Error(`Expected exactly one ${directory}/${name} in build artifacts, found ${matches.length}.`)
+  }
+
+  return matches[0]
+}
+
 function fileHash(file, algorithm) {
   return crypto.createHash(algorithm).update(fs.readFileSync(file)).digest(algorithm === 'sha512' ? 'base64' : 'hex')
 }
@@ -72,35 +82,39 @@ function main() {
   const output = path.resolve(requiredArgument('output'))
   const version = requiredArgument('version')
   const channel = requiredArgument('channel')
-  const flavor = 'offline'
+  const installerFlavor = 'offline'
+  const updaterFlavor = 'update'
   const files = walk(input)
   const stagingDir = fs.mkdtempSync(path.join(os.tmpdir(), 'stocksense-release-bundle-'))
   const assets = []
 
   try {
-    const windowsBase = `StockSense-${version}-win-x64-${flavor}`
-    const windowsUpdater = fileByBasename(files, `${windowsBase}.exe`)
-    const windowsBlockmap = fileByBasename(files, `${windowsBase}.exe.blockmap`)
-    const windowsFeed = fileByBasename(files, 'latest.yml')
+    const windowsInstallerBase = `StockSense-${version}-win-x64-${installerFlavor}`
+    const windowsUpdaterBase = `StockSense-${version}-win-x64-${updaterFlavor}`
+    const windowsInstaller = fileByBasenameUnder(files, `${windowsInstallerBase}.exe`, 'offline')
+    const windowsUpdater = fileByBasenameUnder(files, `${windowsUpdaterBase}.exe`, 'update')
+    const windowsBlockmap = fileByBasenameUnder(files, `${windowsUpdaterBase}.exe.blockmap`, 'update')
+    const windowsFeed = fileByBasenameUnder(files, 'latest.yml', 'update')
+    const windowsRuntime = fileByBasename(files, `StockSense-Runtime-${version}-win-x64.zip`)
     copyAsset(assets, stagingDir, {
       arch: 'x64',
-      flavor,
+      flavor: installerFlavor,
       platform: 'windows',
       role: 'installer',
-      source: windowsUpdater,
-      target: `${windowsBase}-installer.exe`
+      source: windowsInstaller,
+      target: `${windowsInstallerBase}.exe`
     })
     copyAsset(assets, stagingDir, {
       arch: 'x64',
-      flavor,
+      flavor: updaterFlavor,
       platform: 'windows',
       role: 'updater',
       source: windowsUpdater,
-      target: `${windowsBase}.exe`
+      target: `${windowsUpdaterBase}.exe`
     })
     copyAsset(assets, stagingDir, {
       arch: 'x64',
-      flavor,
+      flavor: updaterFlavor,
       platform: 'windows',
       role: 'feed',
       source: windowsFeed,
@@ -108,37 +122,47 @@ function main() {
     })
     copyAsset(assets, stagingDir, {
       arch: 'x64',
-      flavor,
+      flavor: updaterFlavor,
       platform: 'windows',
       role: 'blockmap',
       source: windowsBlockmap,
-      target: `${windowsBase}.exe.blockmap`
+      target: `${windowsUpdaterBase}.exe.blockmap`
+    })
+    copyAsset(assets, stagingDir, {
+      arch: 'x64',
+      flavor: 'runtime',
+      platform: 'windows',
+      role: 'runtime',
+      source: windowsRuntime,
+      target: `StockSense-Runtime-${version}-win-x64.zip`
     })
 
-    const macBase = `StockSense-${version}-mac-arm64-${flavor}`
-    const macInstaller = fileByBasename(files, `${macBase}.dmg`)
-    const macUpdater = fileByBasename(files, `${macBase}.zip`)
-    const macBlockmap = fileByBasename(files, `${macBase}.zip.blockmap`)
-    const macFeed = fileByBasename(files, 'latest-mac.yml')
+    const macInstallerBase = `StockSense-${version}-mac-arm64-${installerFlavor}`
+    const macUpdaterBase = `StockSense-${version}-mac-arm64-${updaterFlavor}`
+    const macInstaller = fileByBasenameUnder(files, `${macInstallerBase}.dmg`, 'offline')
+    const macUpdater = fileByBasenameUnder(files, `${macUpdaterBase}.zip`, 'update')
+    const macBlockmap = fileByBasenameUnder(files, `${macUpdaterBase}.zip.blockmap`, 'update')
+    const macFeed = fileByBasenameUnder(files, 'latest-mac.yml', 'update')
+    const macRuntime = fileByBasename(files, `StockSense-Runtime-${version}-mac-arm64.zip`)
     copyAsset(assets, stagingDir, {
       arch: 'arm64',
-      flavor,
+      flavor: installerFlavor,
       platform: 'macos',
       role: 'installer',
       source: macInstaller,
-      target: `${macBase}.dmg`
+      target: `${macInstallerBase}.dmg`
     })
     copyAsset(assets, stagingDir, {
       arch: 'arm64',
-      flavor,
+      flavor: updaterFlavor,
       platform: 'macos',
       role: 'updater',
       source: macUpdater,
-      target: `${macBase}.zip`
+      target: `${macUpdaterBase}.zip`
     })
     copyAsset(assets, stagingDir, {
       arch: 'arm64',
-      flavor,
+      flavor: updaterFlavor,
       platform: 'macos',
       role: 'feed',
       source: macFeed,
@@ -146,18 +170,30 @@ function main() {
     })
     copyAsset(assets, stagingDir, {
       arch: 'arm64',
-      flavor,
+      flavor: updaterFlavor,
       platform: 'macos',
       role: 'blockmap',
       source: macBlockmap,
-      target: `${macBase}.zip.blockmap`
+      target: `${macUpdaterBase}.zip.blockmap`
+    })
+    copyAsset(assets, stagingDir, {
+      arch: 'arm64',
+      flavor: 'runtime',
+      platform: 'macos',
+      role: 'runtime',
+      source: macRuntime,
+      target: `StockSense-Runtime-${version}-mac-arm64.zip`
     })
 
+    const revision = String(process.env.GITHUB_SHA || '').trim() || execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()
     const manifest = {
       assets,
       channel,
+      install_order: ['runtime', 'desktop'],
       product: 'stocksense',
-      schema_version: 1,
+      release_id: `stocksense-${version}`,
+      runtime: { revision, version },
+      schema_version: 2,
       version
     }
     const checksums = assets.map(asset => `${asset.sha256}  ${asset.relative_path}`).join('\n') + '\n'
