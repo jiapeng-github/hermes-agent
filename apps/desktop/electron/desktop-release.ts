@@ -1,6 +1,6 @@
 import crypto from 'node:crypto'
 
-export const DESKTOP_RELEASE_PROTOCOL_VERSION = 1
+export const DESKTOP_RELEASE_PROTOCOL_VERSION = 2
 
 export interface DesktopReleaseServiceConfig {
   allowInsecureHttp?: boolean
@@ -23,6 +23,16 @@ export interface ValidatedDesktopRelease {
   version: string
 }
 
+export interface ValidatedRuntimeRelease {
+  artifactUrl: string
+  notes: string
+  required: boolean
+  revision: string
+  sha256: string
+  sizeBytes: number
+  version: string
+}
+
 export interface ValidatedDesktopManagedConfig {
   revision: number
   sha256: string
@@ -34,11 +44,14 @@ export interface DesktopReleaseCheck {
   managedConfig?: ValidatedDesktopManagedConfig
   message?: string
   release?: ValidatedDesktopRelease
+  releaseId?: string
+  runtime?: ValidatedRuntimeRelease
   supported: boolean
 }
 
 const SEMVER_RE = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/
 const SHA256_RE = /^[a-f0-9]{64}$/i
+const REVISION_RE = /^[a-f0-9]{40,64}$/i
 const ED25519_SPKI_PREFIX = Buffer.from('302a300506032b6570032100', 'hex')
 
 function canonicalJson(value: unknown): string {
@@ -147,7 +160,12 @@ function parseInstaller(value: unknown): Pick<ValidatedDesktopRelease, 'installe
   try {
     const url = new URL(installerUrl)
 
-    if (!['http:', 'https:'].includes(url.protocol) || !SHA256_RE.test(sha256) || !Number.isSafeInteger(sizeBytes) || sizeBytes <= 0) {
+    if (
+      !['http:', 'https:'].includes(url.protocol) ||
+      !SHA256_RE.test(sha256) ||
+      !Number.isSafeInteger(sizeBytes) ||
+      sizeBytes <= 0
+    ) {
       return null
     }
   } catch {
@@ -157,10 +175,47 @@ function parseInstaller(value: unknown): Pick<ValidatedDesktopRelease, 'installe
   return { installerUrl, sha256: sha256.toLowerCase(), sizeBytes }
 }
 
-function parseManagedConfig(
-  value: unknown,
-  signingKeys: Record<string, string>
-): ValidatedDesktopManagedConfig | null {
+function parseRuntime(value: unknown): ValidatedRuntimeRelease | null | undefined {
+  if (value === undefined) {
+    return undefined
+  }
+
+  if (!isPlainObject(value)) {
+    return null
+  }
+
+  if (value.available !== true) {
+    return undefined
+  }
+
+  const version = normalizeSemver(value.version)
+  const revision = typeof value.revision === 'string' ? value.revision.trim().toLowerCase() : ''
+  const artifact = parseInstaller(value.artifact)
+
+  if (!version || !REVISION_RE.test(revision) || !artifact) {
+    return null
+  }
+
+  try {
+    if (new URL(artifact.installerUrl).protocol !== 'https:') {
+      return null
+    }
+  } catch {
+    return null
+  }
+
+  return {
+    artifactUrl: artifact.installerUrl,
+    notes: typeof value.notes === 'string' ? value.notes.trim() : '',
+    required: value.required === true,
+    revision,
+    sha256: artifact.sha256,
+    sizeBytes: artifact.sizeBytes,
+    version
+  }
+}
+
+function parseManagedConfig(value: unknown, signingKeys: Record<string, string>): ValidatedDesktopManagedConfig | null {
   if (!isPlainObject(value) || !verifyEnvelope(value, signingKeys)) {
     return null
   }
@@ -170,7 +225,12 @@ function parseManagedConfig(
   const rawUrl = typeof value.url === 'string' ? value.url.trim() : ''
 
   try {
-    if (!Number.isSafeInteger(revision) || revision < 1 || !SHA256_RE.test(sha256) || new URL(rawUrl).protocol !== 'https:') {
+    if (
+      !Number.isSafeInteger(revision) ||
+      revision < 1 ||
+      !SHA256_RE.test(sha256) ||
+      new URL(rawUrl).protocol !== 'https:'
+    ) {
       return null
     }
   } catch {
@@ -185,7 +245,9 @@ function parseRelease(
   currentVersion: string,
   signingKeys: Record<string, string>
 ): DesktopReleaseCheck {
-  if (Number(payload.protocol_version) !== DESKTOP_RELEASE_PROTOCOL_VERSION || !isPlainObject(payload.update)) {
+  const protocolVersion = Number(payload.protocol_version)
+
+  if (![1, DESKTOP_RELEASE_PROTOCOL_VERSION].includes(protocolVersion) || !isPlainObject(payload.update)) {
     return { message: '桌面版本服务返回了不兼容的协议。', supported: false, available: false }
   }
 
@@ -197,9 +259,22 @@ function parseRelease(
   }
 
   const update = payload.update
+  const runtime = protocolVersion >= 2 ? parseRuntime(payload.runtime) : undefined
+
+  if (runtime === null) {
+    return { message: '桌面版本服务返回了无效的 Runtime 更新描述。', supported: false, available: false }
+  }
+
+  const releaseId = typeof payload.release_id === 'string' ? payload.release_id.trim() : ''
 
   if (update.available !== true) {
-    return { available: false, ...(managedConfig ? { managedConfig } : {}), supported: true }
+    return {
+      available: Boolean(runtime),
+      ...(managedConfig ? { managedConfig } : {}),
+      ...(releaseId ? { releaseId } : {}),
+      ...(runtime ? { runtime } : {}),
+      supported: true
+    }
   }
 
   const deliveryMode = update.delivery_mode
@@ -234,6 +309,7 @@ function parseRelease(
   return {
     available: true,
     ...(managedConfig ? { managedConfig } : {}),
+    ...(releaseId ? { releaseId } : {}),
     release: {
       ...(installer || {}),
       deliveryMode,
@@ -242,6 +318,7 @@ function parseRelease(
       notes: typeof update.notes === 'string' ? update.notes.trim() : '',
       version
     },
+    ...(runtime ? { runtime } : {}),
     supported: true
   }
 }
@@ -282,21 +359,30 @@ export function normalizeDesktopReleaseServiceConfig(raw: unknown): DesktopRelea
     backgroundDownloadEnabled: raw.backgroundDownloadEnabled === true,
     channel: typeof raw.channel === 'string' && raw.channel.trim() ? raw.channel.trim() : 'stable',
     endpoint,
-    flavor: typeof raw.flavor === 'string' && raw.flavor.trim() ? raw.flavor.trim() : 'offline',
+    flavor: typeof raw.flavor === 'string' && raw.flavor.trim() ? raw.flavor.trim() : 'split',
     signingKeys
   }
 }
 
 export function buildDesktopReleaseCheckUrl(
   config: DesktopReleaseServiceConfig,
-  { arch, currentVersion, platform }: { arch: string; currentVersion: string; platform: string }
+  {
+    arch,
+    currentRuntimeRevision,
+    currentVersion,
+    platform
+  }: { arch: string; currentRuntimeRevision?: string | null; currentVersion: string; platform: string }
 ): string {
   const url = new URL(config.endpoint || '')
   url.searchParams.set('arch', arch)
   url.searchParams.set('channel', config.channel || 'stable')
   url.searchParams.set('current_version', currentVersion)
-  url.searchParams.set('flavor', config.flavor || 'offline')
+  url.searchParams.set('flavor', config.flavor || 'split')
   url.searchParams.set('platform', platform)
+
+  if (currentRuntimeRevision) {
+    url.searchParams.set('current_runtime_revision', currentRuntimeRevision)
+  }
 
   return url.toString()
 }

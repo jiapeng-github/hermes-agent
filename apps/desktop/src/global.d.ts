@@ -338,6 +338,9 @@ export interface DesktopUpdateStatus {
   /** Signed release metadata returned by the StockSense version service. */
   releaseNotes?: string
   releaseVersion?: string
+  /** Runtime payload included in the same signed release transaction. */
+  runtimeRevision?: string
+  runtimeVersion?: string
   mandatory?: boolean
 }
 

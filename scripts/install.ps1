@@ -155,12 +155,13 @@ $script:OfflineRuntimeReady = $false
 $InstallStageProtocolVersion = 1
 
 function Test-BundledRuntime {
+    $managedPython = Join-Path $HermesHome "bootstrap-cache\offline-runtime\python"
     return (
         $OfflineRuntimePath `
         -and (Test-Path (Join-Path $OfflineRuntimePath "manifest.json")) `
         -and (Test-Path (Join-Path $OfflineRuntimePath "hermes-agent-source.zip")) `
-        -and (Test-Path (Join-Path $OfflineRuntimePath "python")) `
-        -and (Test-Path (Join-Path $OfflineRuntimePath "uv-cache"))
+        -and (Test-Path (Join-Path $OfflineRuntimePath "uv-cache")) `
+        -and ((Test-Path (Join-Path $OfflineRuntimePath "python")) -or (Test-Path $managedPython))
     )
 }
 
@@ -187,9 +188,15 @@ function Initialize-BundledRuntime {
         (Get-FileHash -LiteralPath $managedManifest -Algorithm SHA256).Hash
     )
     if (-not (Test-Path $readyMarker) -or -not $manifestMatches) {
-        Remove-Item -LiteralPath (Join-Path $managedRoot "python") -Recurse -Force -ErrorAction SilentlyContinue
         Remove-Item -LiteralPath (Join-Path $managedRoot "uv-cache") -Recurse -Force -ErrorAction SilentlyContinue
-        Copy-Item -LiteralPath (Join-Path $OfflineRuntimePath "python") -Destination (Join-Path $managedRoot "python") -Recurse -Force
+        $bundledPython = Join-Path $OfflineRuntimePath "python"
+        $managedPython = Join-Path $managedRoot "python"
+        if (Test-Path $bundledPython) {
+            Remove-Item -LiteralPath $managedPython -Recurse -Force -ErrorAction SilentlyContinue
+            Copy-Item -LiteralPath $bundledPython -Destination $managedPython -Recurse -Force
+        } elseif (-not (Test-Path $managedPython)) {
+            return $false
+        }
         Copy-Item -LiteralPath (Join-Path $OfflineRuntimePath "uv-cache") -Destination (Join-Path $managedRoot "uv-cache") -Recurse -Force
         Copy-Item -LiteralPath $bundledManifest -Destination $managedManifest -Force
         New-Item -ItemType File -Path $readyMarker -Force | Out-Null

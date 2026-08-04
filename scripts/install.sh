@@ -85,11 +85,12 @@ NON_INTERACTIVE=false
 INCLUDE_DESKTOP=false
 
 has_offline_runtime() {
+    local managed_python="$HERMES_HOME/bootstrap-cache/offline-runtime/python"
     [ -n "$OFFLINE_RUNTIME_PATH" ] \
         && [ -f "$OFFLINE_RUNTIME_PATH/manifest.json" ] \
         && [ -f "$OFFLINE_RUNTIME_PATH/hermes-agent-source.zip" ] \
-        && [ -d "$OFFLINE_RUNTIME_PATH/python" ] \
-        && [ -d "$OFFLINE_RUNTIME_PATH/uv-cache" ]
+        && [ -d "$OFFLINE_RUNTIME_PATH/uv-cache" ] \
+        && { [ -d "$OFFLINE_RUNTIME_PATH/python" ] || [ -d "$managed_python" ]; }
 }
 
 has_bundled_source() {
@@ -109,8 +110,13 @@ prepare_offline_runtime() {
     if [ ! -f "$ready_marker" ] \
         || [ ! -f "$managed_manifest" ] \
         || ! cmp -s "$OFFLINE_RUNTIME_PATH/manifest.json" "$managed_manifest"; then
-        rm -rf "$managed_root/python" "$managed_root/uv-cache"
-        cp -R "$OFFLINE_RUNTIME_PATH/python" "$managed_root/python"
+        rm -rf "$managed_root/uv-cache"
+        if [ -d "$OFFLINE_RUNTIME_PATH/python" ]; then
+            rm -rf "$managed_root/python"
+            cp -R "$OFFLINE_RUNTIME_PATH/python" "$managed_root/python"
+        elif [ ! -d "$managed_root/python" ]; then
+            return 1
+        fi
         cp -R "$OFFLINE_RUNTIME_PATH/uv-cache" "$managed_root/uv-cache"
         cp "$OFFLINE_RUNTIME_PATH/manifest.json" "$managed_manifest"
         touch "$ready_marker"

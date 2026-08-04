@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "endpoint": "https://www.stocksense.work/app-api/desktop/v1/check",
   "allowInsecureHttp": false,
-  "automaticUpdatesEnabled": false,
+  "automaticUpdatesEnabled": true,
   "backgroundDownloadEnabled": true,
   "channel": "stable",
-  "flavor": "offline",
+  "flavor": "split",
   "signingKeys": {
     "stocksense-desktop-2026-07-29": "RPqbPmFYog1JSOpuO26xbv5pNth9UvriHeZHl4s+Aec="
   }
