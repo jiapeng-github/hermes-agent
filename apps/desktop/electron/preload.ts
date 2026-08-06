@@ -55,6 +55,19 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
     discover: org => ipcRenderer.invoke('hermes:cloud:discover', org),
     agentSignIn: dashboardUrl => ipcRenderer.invoke('hermes:cloud:agent-sign-in', dashboardUrl)
   },
+  account: {
+    status: () => ipcRenderer.invoke('hermes:account:status'),
+    sendSms: mobile => ipcRenderer.invoke('hermes:account:sms:send', { mobile }),
+    login: payload => ipcRenderer.invoke('hermes:account:login', payload),
+    refresh: () => ipcRenderer.invoke('hermes:account:refresh'),
+    logout: () => ipcRenderer.invoke('hermes:account:logout'),
+    onChanged: callback => {
+      const listener = (_event, payload) => callback(payload)
+      ipcRenderer.on('hermes:account:changed', listener)
+
+      return () => ipcRenderer.removeListener('hermes:account:changed', listener)
+    }
+  },
   profile: {
     get: () => ipcRenderer.invoke('hermes:profile:get'),
     set: name => ipcRenderer.invoke('hermes:profile:set', name)

@@ -10,7 +10,21 @@ export interface ManagedConfigMetadata {
 
 export interface StockSenseManagedConfig {
   hub: Record<string, boolean | number | string | Record<string, string>>
+  account?: Record<string, boolean | number | string>
+  inference?: Record<string, string>
 }
+
+export interface StockSenseAccountServiceConfig {
+  accountBaseUrl: string
+  enabled: boolean
+  inferenceBaseUrl: string
+  privacyVersion: string
+  required: boolean
+  timeoutMs: number
+}
+
+export const DEFAULT_STOCKSENSE_ACCOUNT_BASE_URL = 'https://www.stocksense.work/app-api/account/v1'
+export const DEFAULT_STOCKSENSE_INFERENCE_BASE_URL = 'https://www.stocksense.work/app-api/inference/v1'
 
 const HUB_BOOLEAN_KEYS = new Set([
   'allow_community_sources',
@@ -18,9 +32,16 @@ const HUB_BOOLEAN_KEYS = new Set([
   'enabled',
   'require_artifact_signature'
 ])
+
 const HUB_INTEGER_KEYS = new Set(['catalog_cache_minutes', 'offline_cache_hours', 'request_timeout_seconds'])
 const HUB_STRING_KEYS = new Set(['base_url', 'channel'])
 const HUB_KEYS = new Set([...HUB_BOOLEAN_KEYS, ...HUB_INTEGER_KEYS, ...HUB_STRING_KEYS, 'trusted_keys'])
+const ACCOUNT_BOOLEAN_KEYS = new Set(['enabled', 'required'])
+const ACCOUNT_INTEGER_KEYS = new Set(['request_timeout_seconds'])
+const ACCOUNT_STRING_KEYS = new Set(['base_url', 'privacy_version'])
+const ACCOUNT_KEYS = new Set([...ACCOUNT_BOOLEAN_KEYS, ...ACCOUNT_INTEGER_KEYS, ...ACCOUNT_STRING_KEYS])
+const INFERENCE_KEYS = new Set(['base_url'])
+const ROOT_KEYS = new Set(['account', 'hub', 'inference'])
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
@@ -59,10 +80,17 @@ function normalizeTrustedKeys(value: unknown): Record<string, string> | null {
 }
 
 // This is intentionally strict. Remote managed configuration is product policy,
-// not a second user config.yaml channel: only documented Hub connection fields
-// are accepted, and an accidental server-side extra key fails closed.
+// not a second user config.yaml channel: only documented Hub, account, and
+// inference connection fields are accepted, and an accidental server-side
+// extra key fails closed.
 export function normalizeStockSenseManagedConfig(raw: unknown): StockSenseManagedConfig | null {
-  if (!isPlainObject(raw) || Object.keys(raw).length !== 1 || !isPlainObject(raw.hub)) {
+  if (
+    !isPlainObject(raw) ||
+    Object.keys(raw).some(key => !ROOT_KEYS.has(key)) ||
+    !isPlainObject(raw.hub) ||
+    (raw.account !== undefined && !isPlainObject(raw.account)) ||
+    (raw.inference !== undefined && !isPlainObject(raw.inference))
+  ) {
     return null
   }
 
@@ -80,6 +108,7 @@ export function normalizeStockSenseManagedConfig(raw: unknown): StockSenseManage
       }
 
       hub[key] = value
+
       continue
     }
 
@@ -89,6 +118,7 @@ export function normalizeStockSenseManagedConfig(raw: unknown): StockSenseManage
       }
 
       hub[key] = value
+
       continue
     }
 
@@ -98,6 +128,7 @@ export function normalizeStockSenseManagedConfig(raw: unknown): StockSenseManage
       }
 
       hub[key] = value.trim()
+
       continue
     }
 
@@ -118,7 +149,129 @@ export function normalizeStockSenseManagedConfig(raw: unknown): StockSenseManage
     return null
   }
 
-  return { hub }
+  const account: NonNullable<StockSenseManagedConfig['account']> = {}
+
+  for (const [key, value] of Object.entries(raw.account ?? {})) {
+    if (!ACCOUNT_KEYS.has(key)) {
+      return null
+    }
+
+    if (ACCOUNT_BOOLEAN_KEYS.has(key)) {
+      if (typeof value !== 'boolean') {
+        return null
+      }
+
+      account[key] = value
+
+      continue
+    }
+
+    if (ACCOUNT_INTEGER_KEYS.has(key)) {
+      if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 1 || value > 120) {
+        return null
+      }
+
+      account[key] = value
+
+      continue
+    }
+
+    if (typeof value !== 'string' || !value.trim()) {
+      return null
+    }
+
+    account[key] = value.trim()
+  }
+
+  if (typeof account.base_url === 'string' && !isValidHubUrl(account.base_url, false)) {
+    return null
+  }
+
+  const inference: NonNullable<StockSenseManagedConfig['inference']> = {}
+
+  for (const [key, value] of Object.entries(raw.inference ?? {})) {
+    if (!INFERENCE_KEYS.has(key) || typeof value !== 'string' || !value.trim()) {
+      return null
+    }
+
+    inference[key] = value.trim()
+  }
+
+  if (typeof inference.base_url === 'string' && !isValidHubUrl(inference.base_url, false)) {
+    return null
+  }
+
+  return {
+    hub,
+    ...(Object.keys(account).length > 0 ? { account } : {}),
+    ...(Object.keys(inference).length > 0 ? { inference } : {})
+  }
+}
+
+export function readStockSenseManagedConfig(rootDir: string): StockSenseManagedConfig | null {
+  try {
+    return normalizeStockSenseManagedConfig(JSON.parse(fs.readFileSync(managedConfigPaths(rootDir).configPath, 'utf8')))
+  } catch {
+    return null
+  }
+}
+
+export function stockSenseAccountServiceConfig(config: StockSenseManagedConfig | null): StockSenseAccountServiceConfig {
+  const account = config?.account ?? {}
+  const inference = config?.inference ?? {}
+  const timeoutSeconds = Number(account.request_timeout_seconds)
+
+  return {
+    accountBaseUrl: String(account.base_url || DEFAULT_STOCKSENSE_ACCOUNT_BASE_URL).replace(/\/+$/, ''),
+    enabled: account.enabled !== false,
+    inferenceBaseUrl: String(inference.base_url || DEFAULT_STOCKSENSE_INFERENCE_BASE_URL).replace(/\/+$/, ''),
+    privacyVersion: String(account.privacy_version || '2026-08-01'),
+    required: account.required !== false,
+    timeoutMs: Number.isSafeInteger(timeoutSeconds) && timeoutSeconds > 0 ? timeoutSeconds * 1000 : 15_000
+  }
+}
+
+export function materializeStockSenseRuntimeManagedConfig(
+  sourceDir: string,
+  targetDir: string,
+  inferenceBaseUrl?: string | null
+): string | null {
+  const config = readStockSenseManagedConfig(sourceDir)
+
+  if (!config) {
+    return null
+  }
+
+  const service = stockSenseAccountServiceConfig(config)
+
+  const runtimeConfig = {
+    ...config,
+    providers: {
+      stocksense: {
+        api: String(inferenceBaseUrl || service.inferenceBaseUrl).replace(/\/+$/, ''),
+        discover_models: true,
+        key_env: 'STOCKSENSE_MODEL_API_KEY',
+        name: 'StockSense 积分模型',
+        transport: 'openai_chat'
+      }
+    }
+  }
+
+  const next = `${JSON.stringify(runtimeConfig, null, 2)}\n`
+  const { configPath } = managedConfigPaths(targetDir)
+
+  try {
+    if (fs.readFileSync(configPath, 'utf8') === next) {
+      return targetDir
+    }
+  } catch {
+    // Missing or stale materialization is rewritten below.
+  }
+
+  fs.mkdirSync(targetDir, { recursive: true })
+  writeFileAtomic(configPath, next)
+
+  return targetDir
 }
 
 export function managedConfigPaths(rootDir: string) {
@@ -190,6 +343,7 @@ export function persistStockSenseManagedConfig(
     schemaVersion: 1,
     sha256
   }
+
   const { configPath, metadataPath } = managedConfigPaths(rootDir)
 
   // JSON is a YAML subset, so Hermes' managed config loader accepts this as

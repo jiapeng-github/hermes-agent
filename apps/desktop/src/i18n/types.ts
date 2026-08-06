@@ -90,6 +90,49 @@ export interface Translations {
     off: string
   }
 
+  account: {
+    brand: string
+    subtitle: string
+    loginTitle: string
+    loginSubtitle: string
+    initializing: string
+    mobileLabel: string
+    mobilePlaceholder: string
+    codeLabel: string
+    codePlaceholder: string
+    sendCode: string
+    sendingCode: string
+    resendIn: (seconds: number) => string
+    signIn: string
+    signingIn: string
+    agreementPrefix: string
+    terms: string
+    agreementAnd: string
+    privacy: string
+    agreementRequired: string
+    invalidMobile: string
+    invalidCode: string
+    secureStorageProtected: string
+    secureStorageUnavailable: string
+    retry: string
+    accountLabel: string
+    points: string
+    pointUnit: string
+    pointsUpdated: string
+    currentDevice: string
+    recentUsage: string
+    noRecentUsage: string
+    refreshPoints: string
+    refreshing: string
+    signOut: string
+    signingOut: string
+    modelProvided: string
+    defaultModel: string
+    modelDisabled: string
+    insufficientPoints: string
+    modelFee: (input: number | null, output: number | null) => string
+  }
+
   fileMenu: {
     revealFinder: string
     revealExplorer: string

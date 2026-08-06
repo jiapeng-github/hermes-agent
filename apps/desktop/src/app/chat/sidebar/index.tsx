@@ -5,6 +5,8 @@ import type * as React from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 
+import { AccountSummary } from '@/account/account-summary'
+import { $accountState } from '@/account/store'
 import { PlatformAvatar } from '@/app/messaging/platform-icon'
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
@@ -290,6 +292,7 @@ export function ChatSidebar({
   )
 
   const panesFlipped = useStore($panesFlipped)
+  const accountState = useStore($accountState)
   const agentsGrouped = useStore($sidebarAgentsGrouped)
   const pinnedSessionIds = useStore($pinnedSessionIds)
   const pinsOpen = useStore($sidebarPinsOpen)
@@ -1486,7 +1489,8 @@ export function ChatSidebar({
         {!showSessionSections && <SidebarBlankState onNewProject={openProjectCreate} />}
 
         <div className="shrink-0 px-0.5 pb-1 pt-0.5">
-          <ProfileRail />
+          <AccountSummary />
+          {accountState.status?.gateEnabled === false && <ProfileRail />}
         </div>
       </SidebarContent>
       <ProjectDialog />

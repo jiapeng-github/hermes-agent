@@ -74,6 +74,14 @@ declare global {
         discover: (org?: string) => Promise<DesktopCloudDiscoverResult>
         agentSignIn: (dashboardUrl: string) => Promise<DesktopCloudAgentSignInResult>
       }
+      account: {
+        status: () => Promise<DesktopAccountStatus>
+        sendSms: (mobile: string) => Promise<DesktopAccountOperation<{ cooldownSeconds: number }>>
+        login: (payload: { code: string; mobile: string }) => Promise<DesktopAccountOperation<DesktopAccountStatus>>
+        refresh: () => Promise<DesktopAccountOperation<DesktopAccountStatus>>
+        logout: () => Promise<DesktopAccountOperation<DesktopAccountStatus>>
+        onChanged: (callback: (status: DesktopAccountStatus) => void) => () => void
+      }
       profile: {
         get: () => Promise<DesktopActiveProfile>
         // Persists the desktop's profile choice and relaunches the local
@@ -489,6 +497,54 @@ export interface DesktopActiveProfile {
   // that defers to the sticky active_profile / default).
   profile: string | null
 }
+
+export interface DesktopAccountError {
+  code: string
+  message: string
+  retryAfterSeconds: number | null
+  retryable: boolean
+}
+
+export interface DesktopAccountSummary {
+  mobileMasked: string
+  pointsBalance: number
+  pointsUpdatedAt: string | null
+  recentPointsSpent: number | null
+  status: string
+  userId: string
+}
+
+export interface DesktopAccountModelCatalogItem {
+  default: boolean
+  displayName: string
+  enabled: boolean
+  id: string
+  inputPointsPerMillion: number | null
+  outputPointsPerMillion: number | null
+}
+
+export interface DesktopAccountModelCredential {
+  available: boolean
+  baseUrl: string
+  defaultModel: string
+  providerSlug: string
+}
+
+export interface DesktopAccountStatus {
+  account: DesktopAccountSummary | null
+  deviceName: string
+  error: DesktopAccountError | null
+  gateEnabled: boolean
+  modelCatalog: DesktopAccountModelCatalogItem[]
+  modelCredential: DesktopAccountModelCredential | null
+  phase: 'authenticated' | 'unauthenticated'
+  profile: string | null
+  secureStorageAvailable: boolean
+}
+
+export type DesktopAccountOperation<T> =
+  | { data: T; ok: true; error?: never }
+  | { data?: never; error: DesktopAccountError; ok: false }
 
 export interface DesktopConnectionConfig {
   envOverride: boolean

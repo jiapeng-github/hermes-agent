@@ -7,6 +7,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { HashRouter } from 'react-router-dom'
 
+import { AccountGate } from './account/account-gate'
 import App from './app'
 import { ErrorBoundary } from './components/error-boundary'
 import { HapticsProvider } from './components/haptics-provider'
@@ -49,7 +50,9 @@ if (import.meta.env.MODE !== 'production' && windowMode === 'app-market-preview'
                     both freeze for seconds despite the main thread being free.
                     Disabling transitions makes navigate() commit at default priority. */}
                 <HashRouter useTransitions={false}>
-                  <App />
+                  <AccountGate>
+                    <App />
+                  </AccountGate>
                 </HashRouter>
               </HapticsProvider>
             </ThemeProvider>
