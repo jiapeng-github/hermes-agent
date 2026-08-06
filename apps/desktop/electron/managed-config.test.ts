@@ -9,13 +9,23 @@ import {
   hasPersistedManagedConfig,
   hasSecurePersistedManagedConfig,
   managedConfigPaths,
+  materializeStockSenseRuntimeManagedConfig,
   normalizeStockSenseManagedConfig,
   persistStockSenseManagedConfig,
-  readManagedConfigMetadata
+  readManagedConfigMetadata,
+  readStockSenseManagedConfig,
+  stockSenseAccountServiceConfig
 } from './managed-config'
 
-test('accepts only the Hub managed-config whitelist', () => {
+test('accepts only the StockSense managed-config whitelist', () => {
   const config = normalizeStockSenseManagedConfig({
+    account: {
+      base_url: 'https://www.stocksense.work/app-api/account/v1',
+      enabled: true,
+      privacy_version: '2026-08-01',
+      request_timeout_seconds: 15,
+      required: true
+    },
     hub: {
       allow_insecure_http: false,
       base_url: 'https://www.stocksense.work/app-api/hub/v1',
@@ -23,15 +33,70 @@ test('accepts only the Hub managed-config whitelist', () => {
       channel: 'stable',
       enabled: true,
       trusted_keys: { current: Buffer.alloc(32, 7).toString('base64') }
-    }
+    },
+    inference: { base_url: 'https://www.stocksense.work/app-api/inference/v1' }
   })
 
   assert.equal(config?.hub.base_url, 'https://www.stocksense.work/app-api/hub/v1')
+  assert.deepEqual(stockSenseAccountServiceConfig(config), {
+    accountBaseUrl: 'https://www.stocksense.work/app-api/account/v1',
+    enabled: true,
+    inferenceBaseUrl: 'https://www.stocksense.work/app-api/inference/v1',
+    privacyVersion: '2026-08-01',
+    required: true,
+    timeoutMs: 15_000
+  })
   assert.equal(
     normalizeStockSenseManagedConfig({ hub: { enabled: true, base_url: 'https://hub.example', model: 'nope' } }),
     null
   )
   assert.equal(normalizeStockSenseManagedConfig({ hub: { enabled: true, base_url: 'http://hub.example' } }), null)
+  assert.equal(
+    normalizeStockSenseManagedConfig({
+      account: { base_url: 'http://account.example' },
+      hub: { enabled: true, base_url: 'https://hub.example' }
+    }),
+    null
+  )
+})
+
+test('materializes the StockSense model provider without writing its API key', () => {
+  const rootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'stocksense-managed-runtime-'))
+  const sourceDir = path.join(rootDir, 'source')
+  const targetDir = path.join(rootDir, 'runtime')
+
+  const config = normalizeStockSenseManagedConfig({
+    account: { enabled: true, required: true },
+    hub: { enabled: true, base_url: 'https://hub.example' },
+    inference: { base_url: 'https://inference.example/v1' }
+  })
+
+  try {
+    assert.ok(config)
+    persistStockSenseManagedConfig(sourceDir, config, { revision: 1, sha256: 'b'.repeat(64) })
+    assert.equal(materializeStockSenseRuntimeManagedConfig(sourceDir, targetDir), targetDir)
+
+    const materialized = JSON.parse(fs.readFileSync(managedConfigPaths(targetDir).configPath, 'utf8'))
+
+    assert.deepEqual(materialized.providers.stocksense, {
+      api: 'https://inference.example/v1',
+      discover_models: true,
+      key_env: 'STOCKSENSE_MODEL_API_KEY',
+      name: 'StockSense 积分模型',
+      transport: 'openai_chat'
+    })
+    assert.equal(JSON.stringify(materialized).includes('apiKey'), false)
+  } finally {
+    fs.rmSync(rootDir, { force: true, recursive: true })
+  }
+})
+
+test('reads the packaged StockSense account and inference configuration', () => {
+  const config = readStockSenseManagedConfig(path.join(import.meta.dirname, '..', 'resources', 'stocksense-managed'))
+
+  assert.equal(config?.account?.required, true)
+  assert.equal(config?.account?.base_url, 'https://www.stocksense.work/app-api/account/v1')
+  assert.equal(config?.inference?.base_url, 'https://www.stocksense.work/app-api/inference/v1')
 })
 
 test('persists a valid managed config atomically in the user-owned directory', () => {

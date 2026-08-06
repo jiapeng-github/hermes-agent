@@ -1,15 +1,26 @@
-# Product-managed StockSense settings. This file is packaged with the desktop
-# app and overlays legacy per-user config.yaml values for desktop-spawned
-# backends. Do not put user secrets or model credentials here.
-hub:
-  enabled: true
-  base_url: https://www.stocksense.work/app-api/hub/v1
-  allow_insecure_http: false
-  channel: stable
-  request_timeout_seconds: 15
-  catalog_cache_minutes: 5
-  offline_cache_hours: 24
-  allow_community_sources: true
-  require_artifact_signature: true
-  trusted_keys:
-    stocksense-hub-dev-2026-07: skeGk1m9eqmwzsnVq8tU6oI15NA9O5uRX/jtVJ83d6U=
+{
+  "hub": {
+    "enabled": true,
+    "base_url": "https://www.stocksense.work/app-api/hub/v1",
+    "allow_insecure_http": false,
+    "channel": "stable",
+    "request_timeout_seconds": 15,
+    "catalog_cache_minutes": 5,
+    "offline_cache_hours": 24,
+    "allow_community_sources": true,
+    "require_artifact_signature": true,
+    "trusted_keys": {
+      "stocksense-hub-dev-2026-07": "skeGk1m9eqmwzsnVq8tU6oI15NA9O5uRX/jtVJ83d6U="
+    }
+  },
+  "account": {
+    "enabled": true,
+    "required": true,
+    "base_url": "https://www.stocksense.work/app-api/account/v1",
+    "request_timeout_seconds": 15,
+    "privacy_version": "2026-08-01"
+  },
+  "inference": {
+    "base_url": "https://www.stocksense.work/app-api/inference/v1"
+  }
+}

@@ -31,6 +31,7 @@ import {
 import { autoUpdater } from 'electron-updater'
 import nodePty from 'node-pty'
 
+import { scopeApiRequestToAccountProfile, scopeApiResponseToAccountProfile } from './account-profile-scope'
 import { openAppLaunchUrl } from './app-browser.cjs'
 import { analyzeAppPackage, exportAppPackage } from './app-packages.cjs'
 import { stopBackendChild as stopBackendChildImpl } from './backend-child'
@@ -130,9 +131,12 @@ import { ensureMainWindow } from './main-window-lifecycle'
 import {
   hasPersistedManagedConfig,
   hasSecurePersistedManagedConfig,
+  materializeStockSenseRuntimeManagedConfig,
   normalizeStockSenseManagedConfig,
   persistStockSenseManagedConfig,
-  readManagedConfigMetadata
+  readManagedConfigMetadata,
+  readStockSenseManagedConfig,
+  stockSenseAccountServiceConfig
 } from './managed-config'
 import { serializeJsonBody, setJsonRequestHeaders } from './oauth-net-request'
 import { createKeepAwake } from './power-save'
@@ -158,6 +162,7 @@ import {
   redactSecrets,
   SshConnection
 } from './ssh-connection'
+import { accountOperationError, createStockSenseAccountManager } from './stocksense-account'
 import { nativeOverlayWidth as computeNativeOverlayWidth, macTitleBarOverlayHeight } from './titlebar-overlay-width'
 import { resolveBehindCount, shouldCountCommits } from './update-count'
 import { readLiveUpdateMarker, writeUpdateMarker } from './update-marker'
@@ -558,8 +563,11 @@ function resolveStockMcpDefaultsPath() {
   return candidates.find(candidate => candidate && fileExists(candidate)) || null
 }
 
-function resolveStockSenseManagedConfigDir() {
+let stockSenseAccountManager = null
+
+function resolveStockSenseBaseManagedConfigDir() {
   const remoteManagedConfigDir = path.join(app.getPath('userData'), 'managed-config')
+
   const candidates = [
     hasSecurePersistedManagedConfig(remoteManagedConfigDir) ? remoteManagedConfigDir : null,
     process.resourcesPath ? path.join(process.resourcesPath, 'stocksense-managed') : null,
@@ -567,6 +575,24 @@ function resolveStockSenseManagedConfigDir() {
   ]
 
   return candidates.find(candidate => candidate && fileExists(path.join(candidate, 'config.yaml'))) || null
+}
+
+function resolveStockSenseManagedConfigDir() {
+  const sourceDir = resolveStockSenseBaseManagedConfigDir()
+
+  if (!sourceDir) {
+    return null
+  }
+
+  const runtimeDir = path.join(app.getPath('userData'), 'runtime-managed-config')
+
+  return (
+    materializeStockSenseRuntimeManagedConfig(
+      sourceDir,
+      runtimeDir,
+      stockSenseAccountManager?.getInferenceBaseUrl?.()
+    ) || sourceDir
+  )
 }
 
 function resolveStockSenseDesktopUpdateConfigPath() {
@@ -589,6 +615,7 @@ function readStockSenseDesktopUpdateConfig() {
     return normalizeDesktopReleaseServiceConfig(JSON.parse(fs.readFileSync(configPath, 'utf8')))
   } catch (error) {
     rememberLog(`[desktop-release] failed to load release service config: ${String(error)}`)
+
     return null
   }
 }
@@ -634,6 +661,7 @@ function resolveOfflineRuntimePath() {
       }
 
       const root = path.resolve(candidate)
+
       const valid = Object.entries(manifest.files).every(([relative, expected]) => {
         const file = path.resolve(root, relative)
 
@@ -2073,6 +2101,7 @@ function findGitBash() {
       stdio: ['ignore', 'pipe', 'ignore'],
       ...hiddenWindowsChildOptions()
     }).trim()
+
     const roots = [path.resolve(execPath, '..', '..', '..'), path.resolve(execPath, '..', '..')]
 
     for (const root of roots) {
@@ -7467,6 +7496,130 @@ async function buildRemoteConnection(
 const sshConnections = new Map<string, any>()
 const desktopInstallationId = loadOrCreateInstallationId(DESKTOP_INSTALLATION_PATH)
 
+stockSenseAccountManager = createStockSenseAccountManager({
+  appVersion: app.getVersion(),
+  deviceId: desktopInstallationId,
+  fetch: (input, init) => electronNet.fetch(input, init),
+  getActiveProfile: readActiveDesktopProfile,
+  getServiceConfig: () => {
+    const managedDir = resolveStockSenseBaseManagedConfigDir()
+
+    return stockSenseAccountServiceConfig(managedDir ? readStockSenseManagedConfig(managedDir) : null)
+  },
+  log: rememberLog,
+  profileMapPath: path.join(app.getPath('userData'), 'stocksense-account-profiles.json'),
+  safeStorage,
+  sessionPath: path.join(app.getPath('userData'), 'stocksense-account-session.json')
+})
+
+function broadcastStockSenseAccountStatus(status) {
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (!window.isDestroyed() && !window.webContents.isDestroyed()) {
+      window.webContents.send('hermes:account:changed', status)
+    }
+  }
+}
+
+ipcMain.handle('hermes:account:status', async () => {
+  let status = await stockSenseAccountManager.getStatus()
+
+  if (status.phase === 'authenticated') {
+    try {
+      status = await stockSenseAccountManager.refreshAccount()
+    } catch (error) {
+      const result = accountOperationError(error)
+      const current = await stockSenseAccountManager.getStatus()
+
+      status = {
+        ...current,
+        // A cached token is not enough to unlock the workspace when the
+        // mandatory startup validation could not confirm the account.
+        ...(current.phase === 'authenticated'
+          ? { account: null, modelCatalog: [], modelCredential: null, phase: 'unauthenticated', profile: null }
+          : {}),
+        error: result.error
+      }
+    }
+  }
+
+  if (status.phase === 'authenticated' && status.profile !== readActiveDesktopProfile()) {
+    writeActiveDesktopProfile(status.profile)
+  }
+
+  return status
+})
+
+ipcMain.handle('hermes:account:sms:send', async (_event, payload) => {
+  try {
+    return { data: await stockSenseAccountManager.sendSms(payload?.mobile), ok: true }
+  } catch (error) {
+    return accountOperationError(error)
+  }
+})
+
+ipcMain.handle('hermes:account:login', async (_event, payload) => {
+  try {
+    const status = await stockSenseAccountManager.login(payload?.mobile, payload?.code)
+
+    if (status.profile) {
+      writeActiveDesktopProfile(status.profile)
+    }
+
+    await teardownPrimaryBackendAndWait({ soft: true })
+    stopAllPoolBackends()
+    broadcastStockSenseAccountStatus(status)
+
+    return { data: status, ok: true }
+  } catch (error) {
+    return accountOperationError(error)
+  }
+})
+
+ipcMain.handle('hermes:account:refresh', async () => {
+  try {
+    const previousModelKey = stockSenseAccountManager.backendEnvironment().STOCKSENSE_MODEL_API_KEY || ''
+    const previousInferenceBaseUrl = stockSenseAccountManager.getInferenceBaseUrl()
+    const status = await stockSenseAccountManager.refreshAccount()
+
+    const modelCredentialChanged =
+      previousModelKey !== (stockSenseAccountManager.backendEnvironment().STOCKSENSE_MODEL_API_KEY || '') ||
+      previousInferenceBaseUrl !== stockSenseAccountManager.getInferenceBaseUrl()
+
+    if (modelCredentialChanged) {
+      await teardownPrimaryBackendAndWait({ soft: true })
+      stopAllPoolBackends()
+      sendConnectionApplied()
+    }
+
+    broadcastStockSenseAccountStatus(status)
+
+    return { data: status, ok: true }
+  } catch (error) {
+    const result = accountOperationError(error)
+
+    if (['ACCOUNT_DISABLED', 'ACCOUNT_TOKEN_EXPIRED', 'HTTP_401', 'HTTP_403'].includes(result.error?.code)) {
+      await teardownPrimaryBackendAndWait({ soft: true })
+      stopAllPoolBackends()
+      broadcastStockSenseAccountStatus(await stockSenseAccountManager.getStatus())
+    }
+
+    return result
+  }
+})
+
+ipcMain.handle('hermes:account:logout', async () => {
+  try {
+    const status = await stockSenseAccountManager.logout()
+    await teardownPrimaryBackendAndWait({ soft: true })
+    stopAllPoolBackends()
+    broadcastStockSenseAccountStatus(status)
+
+    return { data: status, ok: true }
+  } catch (error) {
+    return accountOperationError(error)
+  }
+})
+
 const sshBootstrapCoordinator = createBootstrapCoordinator()
 
 let sshQuitTeardownDone = false
@@ -8199,6 +8352,7 @@ function primaryProfileKey() {
 // mode), and any OTHER profile to a lazily-spawned pool backend. An empty /
 // unknown profile resolves to the primary, so all legacy callers are unchanged.
 async function ensureBackend(profile) {
+  stockSenseAccountManager.assertBackendAccess(profile)
   const key = profile && String(profile).trim() ? String(profile).trim() : primaryProfileKey()
 
   if (key === primaryProfileKey()) {
@@ -8343,6 +8497,7 @@ async function spawnPoolBackend(profile, entry) {
         ...process.env,
         HERMES_HOME,
         ...backend.env,
+        ...stockSenseAccountManager.backendEnvironment(),
         ...(resolveStockSenseManagedConfigDir() ? { HERMES_MANAGED_DIR: resolveStockSenseManagedConfigDir() } : {}),
         // Pin the gateway's tool/terminal cwd to the same directory we chose for
         // the child process. Inherited TERMINAL_CWD (or a stale config bridge)
@@ -8489,6 +8644,8 @@ async function prepareProfileDeleteRequest(request) {
 }
 
 async function startHermes() {
+  stockSenseAccountManager.assertBackendAccess()
+
   // Latched-failure short-circuit: once bootstrap has failed in this
   // process, every subsequent startHermes() call re-throws the same error
   // without re-running install.ps1. This prevents the renderer's
@@ -8610,6 +8767,7 @@ async function startHermes() {
           // can't reliably do that, so we set it inline for every spawn.
           HERMES_HOME,
           ...backend.env,
+          ...stockSenseAccountManager.backendEnvironment(),
           ...(resolveStockSenseManagedConfigDir() ? { HERMES_MANAGED_DIR: resolveStockSenseManagedConfigDir() } : {}),
           TERMINAL_CWD: hermesCwd,
           HERMES_DASHBOARD_SESSION_TOKEN: token,
@@ -9326,7 +9484,9 @@ function createWindow() {
   // shared (backendConnectionState), so the renderer's getConnection() joins
   // this in-flight boot instead of duplicating it; early boot-progress events
   // the renderer misses are recovered by its getBootProgress() pull on mount.
-  startHermes().catch(error => rememberLog(error.stack || error.message))
+  if (stockSenseAccountManager.canPrewarmBackend() && stockSenseAccountManager.canStartBackend()) {
+    startHermes().catch(error => rememberLog(error.stack || error.message))
+  }
 
   mainWindow.webContents.once('did-finish-load', () => {
     // Zoom restore is handled by wireCommonWindowHandlers (shared with session
@@ -9731,6 +9891,13 @@ ipcMain.handle('hermes:connection-config:apply', async (_event, payload) => {
 
 ipcMain.handle('hermes:profile:get', async () => ({ profile: readActiveDesktopProfile() }))
 ipcMain.handle('hermes:profile:set', async (_event, name) => {
+  const allowedProfile = stockSenseAccountManager.allowedProfile()
+
+  if (allowedProfile && name !== allowedProfile) {
+    throw new Error('账号模式下由 StockSense 管理当前 Profile，不能切换到其他 Profile。')
+  }
+
+  stockSenseAccountManager.assertBackendAccess(name)
   const next = writeActiveDesktopProfile(name)
 
   // Switching profiles is a backend re-home: relaunch the dashboard under the
@@ -10000,7 +10167,10 @@ async function mergeRemoteProfileSessions(searchParams, remoteProfiles) {
   return { ...(base as any), sessions: merged.slice(offset, offset + limit), total, profile_totals: profileTotals }
 }
 
-ipcMain.handle('hermes:api', async (_event, request) => {
+ipcMain.handle('hermes:api', async (_event, rawRequest) => {
+  stockSenseAccountManager.assertBackendAccess()
+  const allowedProfile = stockSenseAccountManager.allowedProfile()
+  const request = scopeApiRequestToAccountProfile(rawRequest, allowedProfile)
   // Remote-profile session requests would otherwise hit the local primary off
   // each profile's on-disk state.db — fine for local profiles, but a remote
   // profile's sessions live on its remote host, so the UI's IDs 404 (or mutations
@@ -10040,19 +10210,23 @@ ipcMain.handle('hermes:api', async (_event, request) => {
       throw new Error('File uploads are not supported against OAuth-gated remote backends yet.')
     }
 
-    return fetchJsonViaOauthSession(url, {
+    const response = await fetchJsonViaOauthSession(url, {
       method: request?.method,
       body: request?.body,
       timeoutMs
     })
+
+    return scopeApiResponseToAccountProfile(request, response, allowedProfile)
   }
 
-  return fetchJson(url, connection.token, {
+  const response = await fetchJson(url, connection.token, {
     method: request?.method,
     body: request?.body,
     upload: request?.upload,
     timeoutMs
   })
+
+  return scopeApiResponseToAccountProfile(request, response, allowedProfile)
 })
 
 ipcMain.handle('hermes:apps:import:select', async (_event, profile) => {
@@ -10075,6 +10249,7 @@ ipcMain.handle('hermes:apps:open', (_event, url) => openAppLaunchUrl(url, value 
 
 ipcMain.handle('hermes:apps:export', async (_event, appId, options = {}, profile) => {
   const safeName = String(appId || 'application').replace(/[^A-Za-z0-9._-]/g, '_')
+
   const result = await dialog.showSaveDialog(mainWindow, {
     title: '导出应用',
     defaultPath: `${safeName}.happ`,

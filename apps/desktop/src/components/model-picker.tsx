@@ -1,6 +1,9 @@
+import { useStore } from '@nanostores/react'
 import { useQuery } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 
+import { $accountState } from '@/account/store'
+import type { DesktopAccountModelCatalogItem } from '@/global'
 import { useI18n } from '@/i18n'
 import { requestModelOptions } from '@/lib/model-options'
 import { currentPickerSelection } from '@/lib/model-status-label'
@@ -147,6 +150,13 @@ function ModelResults({
   search: string
 }) {
   const { t } = useI18n()
+  const accountState = useStore($accountState)
+
+  const accountModels = useMemo(
+    () => new Map((accountState.status?.modelCatalog ?? []).map(model => [model.id, model])),
+    [accountState.status?.modelCatalog]
+  )
+
   const copy = t.modelPicker
 
   if (loading) {
@@ -191,6 +201,7 @@ function ModelResults({
         }
 
         const unavailable = new Set(provider.unavailable_models ?? [])
+        const stockSenseProvider = isStockSenseProvider(provider, accountState.status?.modelCredential?.providerSlug)
 
         return (
           <CommandGroup heading={<ProviderHeading provider={provider} />} key={provider.slug}>
@@ -204,7 +215,25 @@ function ModelResults({
             {models.map(model => {
               const isCurrent = model === currentModel && provider.slug === currentProvider
               const price = provider.pricing?.[model]
-              const locked = unavailable.has(model)
+              const accountModel = stockSenseProvider ? accountModels.get(model) : undefined
+
+              const modelCostsPoints =
+                (accountModel?.inputPointsPerMillion ?? 0) > 0 || (accountModel?.outputPointsPerMillion ?? 0) > 0
+
+              const insufficientPoints =
+                stockSenseProvider && modelCostsPoints && (accountState.status?.account?.pointsBalance ?? 0) <= 0
+
+              const disabledByAccount =
+                accountModel?.enabled === false ||
+                (stockSenseProvider && accountState.status?.modelCredential?.available === false)
+
+              const locked = unavailable.has(model) || disabledByAccount || insufficientPoints
+
+              const lockLabel = disabledByAccount
+                ? t.account.modelDisabled
+                : insufficientPoints
+                  ? t.account.insufficientPoints
+                  : copy.pro
 
               return (
                 <CommandItem
@@ -223,11 +252,23 @@ function ModelResults({
                   }}
                   value={`${provider.slug}:${model}`}
                 >
-                  <span className="min-w-0 flex-1 truncate">{model}</span>
-                  {locked && (
-                    <span className="shrink-0 text-[0.62rem] uppercase tracking-wide opacity-80">{copy.pro}</span>
+                  <span className="min-w-0 flex-1 truncate">
+                    {accountModel?.displayName || model}
+                    {accountModel?.displayName && accountModel.displayName !== model && (
+                      <span className="ml-2 text-[0.65rem] text-muted-foreground">{model}</span>
+                    )}
+                  </span>
+                  {accountModel?.default && (
+                    <span className="shrink-0 rounded-sm bg-primary/12 px-1 py-0.5 text-[0.62rem] font-semibold text-primary">
+                      {t.account.defaultModel}
+                    </span>
                   )}
-                  <ModelPrice isCurrent={isCurrent} price={price} />
+                  {locked && <span className="shrink-0 text-[0.62rem] opacity-80">{lockLabel}</span>}
+                  {accountModel ? (
+                    <StockSenseModelFee isCurrent={isCurrent} model={accountModel} />
+                  ) : (
+                    <ModelPrice isCurrent={isCurrent} price={price} />
+                  )}
                 </CommandItem>
               )
             })}
@@ -240,6 +281,30 @@ function ModelResults({
         )
       })}
     </>
+  )
+}
+
+function isStockSenseProvider(provider: ModelOptionProvider, configuredSlug?: string): boolean {
+  return (
+    provider.slug === 'custom:stocksense' ||
+    provider.slug === 'stocksense' ||
+    Boolean(configuredSlug && provider.slug === configuredSlug)
+  )
+}
+
+function StockSenseModelFee({ model, isCurrent }: { model: DesktopAccountModelCatalogItem; isCurrent: boolean }) {
+  const { t } = useI18n()
+
+  return (
+    <span
+      className={cn(
+        'shrink-0 text-[0.66rem] tabular-nums',
+        isCurrent ? 'text-primary-foreground/80' : 'text-muted-foreground'
+      )}
+      title={t.account.modelFee(model.inputPointsPerMillion, model.outputPointsPerMillion)}
+    >
+      {model.inputPointsPerMillion ?? '—'} / {model.outputPointsPerMillion ?? '—'}
+    </span>
   )
 }
 
@@ -293,7 +358,9 @@ function LoadingResults() {
 
 function ProviderHeading({ provider }: { provider: ModelOptionProvider }) {
   const { t } = useI18n()
+  const accountState = useStore($accountState)
   const copy = t.modelPicker
+  const stockSenseProvider = isStockSenseProvider(provider, accountState.status?.modelCredential?.providerSlug)
 
   // free_tier is only set for Nous. true → "Free tier", false → "Pro".
   const tierBadge =
@@ -313,6 +380,11 @@ function ProviderHeading({ provider }: { provider: ModelOptionProvider }) {
       <span className="font-mono text-xs font-normal normal-case tracking-normal text-muted-foreground">
         {provider.slug} · {provider.total_models ?? provider.models?.length ?? 0}
       </span>
+      {stockSenseProvider && accountState.status?.account && (
+        <span className="rounded-sm bg-primary/10 px-1 py-0.5 text-[0.6rem] font-semibold text-primary">
+          {accountState.status.account.pointsBalance.toLocaleString()} {t.account.pointUnit}
+        </span>
+      )}
       {tierBadge}
     </span>
   )
