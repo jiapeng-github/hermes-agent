@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 _MAX_CATALOG_BYTES = 5 * 1024 * 1024
 _MAX_ARTIFACT_BYTES = 52_428_800
 _MAX_ICON_BYTES = 512 * 1024
+_MAX_PREVIEW_IMAGE_BYTES = 4 * 1024 * 1024
 _CACHE_SCHEMA_VERSION = 1
 
 
@@ -375,6 +376,30 @@ class HubClient:
 
     def fetch_icon(self, value: str) -> tuple[bytes, str]:
         """Fetch a small same-market icon for the local gateway to proxy."""
+        return self._fetch_image(
+            value,
+            max_bytes=_MAX_ICON_BYTES,
+            same_host_only=True,
+            label="图标",
+        )
+
+    def fetch_preview_image(self, value: str) -> tuple[bytes, str]:
+        """Fetch an HTTPS market preview image for the local gateway to proxy."""
+        return self._fetch_image(
+            value,
+            max_bytes=_MAX_PREVIEW_IMAGE_BYTES,
+            same_host_only=False,
+            label="预览图",
+        )
+
+    def _fetch_image(
+        self,
+        value: str,
+        *,
+        max_bytes: int,
+        same_host_only: bool,
+        label: str,
+    ) -> tuple[bytes, str]:
         self._require_enabled()
         url = urljoin(f"{self.config.base_url}/", value)
         parsed = urlparse(url)
@@ -383,8 +408,8 @@ class HubClient:
             url,
             allow_insecure_http=self.config.allow_insecure_http,
             allowed_http_host=hub_host,
-        ) or parsed.hostname != hub_host:
-            raise HubError("HUB_ARTIFACT_REJECTED", "中心图标地址不安全")
+        ) or (same_host_only and parsed.hostname != hub_host):
+            raise HubError("HUB_ARTIFACT_REJECTED", f"中心{label}地址不安全")
         try:
             response = self._client.get(
                 url,
@@ -394,21 +419,21 @@ class HubClient:
             )
             if response.is_redirect:
                 raise HubError(
-                    "HUB_ARTIFACT_REJECTED", "中心图标下载不允许重定向"
+                    "HUB_ARTIFACT_REJECTED", f"中心{label}下载不允许重定向"
                 )
             self._raise_for_status(response)
         except HubError:
             raise
         except httpx.HTTPError as exc:
             raise HubError(
-                "HUB_UNAVAILABLE", "中心图标下载失败", retryable=True
+                "HUB_UNAVAILABLE", f"中心{label}下载失败", retryable=True
             ) from exc
         content_type = response.headers.get("content-type", "").split(";", 1)[0].lower()
         if (
             not content_type.startswith("image/")
-            or len(response.content) > _MAX_ICON_BYTES
+            or len(response.content) > max_bytes
         ):
-            raise HubError("HUB_ARTIFACT_REJECTED", "中心图标格式或大小无效")
+            raise HubError("HUB_ARTIFACT_REJECTED", f"中心{label}格式或大小无效")
         return response.content, content_type
 
     def _catalog_get(

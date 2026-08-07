@@ -1127,6 +1127,7 @@ export interface HubAppSummary {
   category?: string
   publisher?: string
   icon_url?: string
+  preview_image_url?: string
   tags?: string[]
   compatibility?: Record<string, unknown>
   permissions?: string[]
@@ -1134,6 +1135,19 @@ export interface HubAppSummary {
     type: 'package' | 'external'
     message?: string
   }
+}
+
+export interface HubAppCategory {
+  id: string
+  name: string
+  description?: string
+  icon_url?: string
+}
+
+export interface HubAppCategoriesResponse {
+  items: HubAppCategory[]
+  cache_state: 'fresh' | 'stale'
+  cached_at?: string | null
 }
 
 export interface HubAppsResponse {
@@ -1153,6 +1167,7 @@ export interface HubAppOperation {
   operation_id: string
   hub_app_id: string
   version: string | null
+  category?: string | null
   state: 'queued' | 'resolving' | 'downloading' | 'analyzing' | 'completed' | 'failed' | 'cancelled'
   progress: number
   created_at: string

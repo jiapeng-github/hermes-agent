@@ -216,6 +216,7 @@ class ImportConfirmation(_PackageModel):
     conflict_mode: ConflictMode
     copy_app_id: AppId | None = None
     grants: AppPermissions
+    category: str | None = Field(default=None, min_length=1, max_length=100)
 
     @model_validator(mode="after")
     def validate_copy_target(self) -> "ImportConfirmation":
@@ -491,6 +492,7 @@ class HappImportService:
                 grants=confirmation.grants,
                 conflict_mode=confirmation.conflict_mode,
                 lineage="imported",
+                category=confirmation.category,
             )
         except BaseException:
             _safe_rmtree(workspace)

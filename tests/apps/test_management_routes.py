@@ -137,6 +137,7 @@ def test_package_export_import_uninstall_and_data_lifecycle(
                 "conflict_mode": "install",
                 "copy_app_id": None,
                 "grants": plan["requested_permissions"],
+                "category": "fundamental",
             },
         )
         deleted_data = client.delete(f"/api/apps/{app_id}/data")
@@ -152,6 +153,7 @@ def test_package_export_import_uninstall_and_data_lifecycle(
     assert analyzed.status_code == 201
     assert confirmed.status_code == 201
     assert confirmed.json()["id"] == app_id
+    assert confirmed.json()["category"] == "fundamental"
     assert deleted_data.status_code == 204
     assert not data.exists()
 

@@ -60,11 +60,7 @@ def create_apphost_app(
         allow_test_client=allow_test_client,
     )
     assets = StaticAssetResolver(app_root, manifest.entry)
-    action_runtime = (
-        ActionRuntime(manifest, app_root, service_registry, activity_store)
-        if service_registry is not None
-        else None
-    )
+    action_runtime = ActionRuntime(manifest, app_root, service_registry, activity_store)
     storage = RuntimeStorage(
         granted_permissions.storage.mode,
         granted_permissions.storage.quota_mb,

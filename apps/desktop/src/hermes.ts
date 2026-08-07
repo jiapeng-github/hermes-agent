@@ -29,6 +29,8 @@ import type {
   IndustryMonitorRefreshResponse,
   IndustryMonitorSnapshot,
   LogsResponse,
+  HubAppCategoriesResponse,
+  HubAppCategory,
   HubAppOperation,
   HubAppsResponse,
   HubAppSummary,
@@ -181,6 +183,8 @@ export type {
   HermesConfig,
   HermesConfigRecord,
   LogsResponse,
+  HubAppCategoriesResponse,
+  HubAppCategory,
   HubAppOperation,
   HubAppsResponse,
   HubAppSummary,
@@ -1511,11 +1515,22 @@ export function updateSkillsFromHub(): Promise<ActionResponse> {
 // gateway; the gateway owns remote catalog access and .happ verification.
 // ---------------------------------------------------------------------------
 
-export function listHubApps(query = ''): Promise<HubAppsResponse> {
+export function listHubApps({ category, query = '' }: { category?: string; query?: string } = {}): Promise<HubAppsResponse> {
   const params = new URLSearchParams({ q: query })
+  if (category) {
+    params.set('category', category)
+  }
   return window.hermesDesktop.api<HubAppsResponse>({
     ...profileScoped(),
     path: `/api/apps/hub?${params.toString()}`,
+    timeoutMs: HUB_REQUEST_TIMEOUT_MS
+  })
+}
+
+export function listHubAppCategories(): Promise<HubAppCategoriesResponse> {
+  return window.hermesDesktop.api<HubAppCategoriesResponse>({
+    ...profileScoped(),
+    path: '/api/apps/hub/categories',
     timeoutMs: HUB_REQUEST_TIMEOUT_MS
   })
 }
