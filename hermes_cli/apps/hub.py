@@ -39,6 +39,7 @@ class _Operation:
     id: str
     hub_app_id: str
     version: str | None
+    category: str | None = None
     state: str = "queued"
     created_at: str = field(default_factory=_now)
     updated_at: str = field(default_factory=_now)
@@ -51,6 +52,7 @@ class _Operation:
             "operation_id": self.id,
             "hub_app_id": self.hub_app_id,
             "version": self.version,
+            "category": self.category,
             "state": self.state,
             "progress": _operation_progress(self.state),
             "created_at": self.created_at,
@@ -138,6 +140,21 @@ class AppHubOperations:
         except HubError as exc:
             raise _hub_error(exc) from exc
 
+    def get_preview_image(
+        self, hub_app_id: str, *, version: str | None = None
+    ) -> tuple[bytes, str]:
+        detail = self.get_app(hub_app_id, version=version)
+        item = detail.get("item") if isinstance(detail.get("item"), dict) else detail
+        preview_url = item.get("preview_image_url") if isinstance(item, dict) else None
+        if not isinstance(preview_url, str) or not preview_url:
+            raise AppDomainError(
+                "APP_NOT_FOUND", "hub application does not provide a preview image"
+            )
+        try:
+            return self.client.fetch_preview_image(preview_url)
+        except HubError as exc:
+            raise _hub_error(exc) from exc
+
     def start_install(
         self, hub_app_id: str, *, version: str | None = None
     ) -> dict[str, Any]:
@@ -156,8 +173,12 @@ class AppHubOperations:
                 "HUB_EXTERNAL_INSTALL_REQUIRED",
                 str(delivery.get("message") or "外部安装，请联系运维人员。"),
             )
+        category = item.get("category") if isinstance(item, dict) else None
         operation = _Operation(
-            id=str(uuid.uuid4()), hub_app_id=hub_app_id, version=version
+            id=str(uuid.uuid4()),
+            hub_app_id=hub_app_id,
+            version=version,
+            category=category if isinstance(category, str) and category else None,
         )
         with self._lock:
             self._operations[operation.id] = operation

@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const launchHermesApp = vi.fn()
+const listHubAppCategories = vi.fn()
 const listHubApps = vi.fn()
 const startHubAppInstall = vi.fn()
 const getHubAppOperation = vi.fn()
@@ -11,6 +12,7 @@ const cancelHubAppOperation = vi.fn()
 
 vi.mock('@/hermes', () => ({
   launchHermesApp: (...args: unknown[]) => launchHermesApp(...args),
+  listHubAppCategories: (...args: unknown[]) => listHubAppCategories(...args),
   listHubApps: (...args: unknown[]) => listHubApps(...args),
   startHubAppInstall: (...args: unknown[]) => startHubAppInstall(...args),
   getHubAppOperation: (...args: unknown[]) => getHubAppOperation(...args),
@@ -77,11 +79,16 @@ describe('AppMarketView', () => {
     selectAndAnalyzePackage.mockReset()
     exportPackage.mockReset()
     launchHermesApp.mockReset()
+    listHubAppCategories.mockReset()
     listHubApps.mockReset()
     startHubAppInstall.mockReset()
     getHubAppOperation.mockReset()
     cancelHubAppOperation.mockReset()
     api.mockResolvedValue({ items: builtinFinanceApps, next_cursor: null })
+    listHubAppCategories.mockResolvedValue({
+      items: [{ id: 'finance', name: '金融' }],
+      cache_state: 'fresh'
+    })
     listHubApps.mockResolvedValue({ items: [], installed: {}, cache_state: 'fresh' })
     window.hermesDesktop = {
       api,
@@ -167,7 +174,8 @@ describe('AppMarketView', () => {
           name: '自选股盯盘看板',
           summary: 'A 股自选股盯盘应用',
           version: '1.1.0',
-          category: '金融'
+          category: 'finance',
+          preview_image_url: 'https://www.stocksense.work/previews/watchlist.webp'
         }
       ],
       installed: {
@@ -190,11 +198,54 @@ describe('AppMarketView', () => {
     fireEvent.click(screen.getByRole('button', { name: '应用中心' }))
 
     expect(await screen.findByRole('button', { name: '更新' })).toBeTruthy()
+    expect(screen.getByRole('img', { name: '自选股盯盘看板 预览图' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: '更新' }))
 
     await waitFor(() => expect(startHubAppInstall).toHaveBeenCalledWith('ai.stocksense.watchlist', '1.1.0'))
     expect(await screen.findByText('正在准备应用安装')).toBeTruthy()
     expect(screen.getByLabelText('安装进度')).toBeTruthy()
+  })
+
+  it('loads hub categories and passes the selected category code to the hub list', async () => {
+    listHubApps.mockResolvedValue({ items: [], installed: {}, cache_state: 'fresh' })
+    render(<AppMarketView onCreateApp={vi.fn()} onEditApp={vi.fn()} />)
+
+    await screen.findByText('自选股盯盘看板')
+    expect(await screen.findByRole('tab', { name: '金融' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '应用中心' }))
+    fireEvent.click(screen.getByRole('tab', { name: '金融' }))
+
+    await waitFor(() => expect(listHubApps).toHaveBeenLastCalledWith({ category: 'finance', query: '' }))
+  })
+
+  it('filters installed apps with their persisted category without rendering a preview image', async () => {
+    api.mockResolvedValue({
+      items: [
+        { ...builtinApp, category: 'finance' },
+        {
+          ...builtinApp,
+          id: 'ai.stocksense.company-analysis',
+          name: '上市公司基本面分析',
+          category: 'research'
+        }
+      ],
+      next_cursor: null
+    })
+    listHubAppCategories.mockResolvedValue({
+      items: [
+        { id: 'finance', name: '金融' },
+        { id: 'research', name: '研究' }
+      ],
+      cache_state: 'fresh'
+    })
+    render(<AppMarketView onCreateApp={vi.fn()} onEditApp={vi.fn()} />)
+
+    await screen.findByText('自选股盯盘看板')
+    fireEvent.click(await screen.findByRole('tab', { name: '金融' }))
+
+    expect(screen.getByText('自选股盯盘看板')).toBeTruthy()
+    expect(screen.queryByText('上市公司基本面分析')).toBeNull()
+    expect(screen.queryByRole('img', { name: /预览图/ })).toBeNull()
   })
 
   it('shows external-install guidance without starting a package operation', async () => {

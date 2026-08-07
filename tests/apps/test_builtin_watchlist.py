@@ -51,7 +51,12 @@ def test_finance_builtins_install_with_exact_runtime_owned_lineage(
     assert {item["id"] for item in items} == set(expected)
     assert {item["id"]: item["name"] for item in items} == expected_names
     assert all(item["id"].startswith("ai.stocksense.") for item in items)
-    assert all(item["version"] == "1.0.1" for item in items)
+    assert {item["id"]: item["version"] for item in items} == {
+        COMPANY_ANALYSIS_APP_ID: "1.0.1",
+        INDUSTRY_MONITOR_APP_ID: "1.0.1",
+        STOCK_DEEP_ANALYSIS_APP_ID: "1.0.1",
+        WATCHLIST_APP_ID: "1.0.1",
+    }
     assert all(item["status"] == "ready" for item in items)
     assert all(item["trust_state"] == "builtin" for item in items)
     for app_id, handlers in expected.items():

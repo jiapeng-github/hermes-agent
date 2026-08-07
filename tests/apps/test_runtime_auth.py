@@ -152,8 +152,7 @@ def test_mutation_requires_origin_and_csrf(tmp_path: Path) -> None:
 
     assert no_origin.status_code == 403
     assert no_csrf.status_code == 403
-    assert valid.status_code == 503
-    assert valid.json()["error"]["code"] == "APP_ACTION_GATEWAY_DISABLED"
+    assert valid.status_code == 202
 
 
 def test_csrf_is_session_bound_and_short_lived(tmp_path: Path) -> None:

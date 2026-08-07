@@ -610,10 +610,14 @@ components:
         - name
         - description
         - version
+        - lineage
+        - installed_at
+        - updated_at
         - enabled
         - source_editable
         - trust_state
         - status
+        - category
         - requested_permissions
         - granted_permissions
       properties:
@@ -628,6 +632,15 @@ components:
           maxLength: 500
         version:
           $ref: "#/components/schemas/Semver"
+        lineage:
+          type: string
+          enum: [builtin, user, imported]
+        installed_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
         enabled:
           type: boolean
         source_editable:
@@ -636,6 +649,12 @@ components:
           $ref: "#/components/schemas/TrustState"
         status:
           $ref: "#/components/schemas/AppStatus"
+        category:
+          oneOf:
+            - type: string
+              minLength: 1
+              maxLength: 100
+            - type: "null"
         requested_permissions:
           $ref: "#/components/schemas/PermissionRequest"
         granted_permissions:
@@ -648,10 +667,13 @@ components:
         - name
         - description
         - version
+        - lineage
+        - installed_at
         - enabled
         - source_editable
         - trust_state
         - status
+        - category
         - requested_permissions
         - granted_permissions
         - manifest
@@ -670,6 +692,12 @@ components:
           maxLength: 500
         version:
           $ref: "#/components/schemas/Semver"
+        lineage:
+          type: string
+          enum: [builtin, user, imported]
+        installed_at:
+          type: string
+          format: date-time
         enabled:
           type: boolean
         source_editable:
@@ -678,6 +706,12 @@ components:
           $ref: "#/components/schemas/TrustState"
         status:
           $ref: "#/components/schemas/AppStatus"
+        category:
+          oneOf:
+            - type: string
+              minLength: 1
+              maxLength: 100
+            - type: "null"
         requested_permissions:
           $ref: "#/components/schemas/PermissionRequest"
         granted_permissions:

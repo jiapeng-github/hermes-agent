@@ -10,12 +10,14 @@ import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from collections.abc import Callable
 from typing import Any
 
 from jsonschema import Draft202012Validator
 
-from ..models import AppManifest, ServiceAction
+from ..models import AppAction, AppManifest, McpAction, ServiceAction
 from ..activity import AppActivityStore
+from .mcp import invoke_mcp_action
 from .service import ServiceActionRegistry
 
 
@@ -132,13 +134,16 @@ class ActionRuntime:
         self,
         manifest: AppManifest,
         app_root: Path,
-        service_registry: ServiceActionRegistry,
+        service_registry: ServiceActionRegistry | None,
         activity_store: AppActivityStore | None = None,
+        *,
+        mcp_invoker: Callable[[McpAction, dict[str, Any]], dict[str, Any]] = invoke_mcp_action,
     ):
         self.manifest = manifest
         self.app_root = app_root
         self.service_registry = service_registry
         self.activity_store = activity_store
+        self.mcp_invoker = mcp_invoker
         self._runs: dict[str, RunRecord] = {}
         self._idempotency: dict[tuple[str, str, str], tuple[float, str, str]] = {}
         self._pending: dict[str, int] = {}
@@ -166,15 +171,22 @@ class ActionRuntime:
         action = self.manifest.actions.get(action_id)
         if action is None:
             raise RuntimeRunError(404, "RUN_ACTION_NOT_FOUND", "action was not found")
-        if not isinstance(action, ServiceAction):
+        if isinstance(action, ServiceAction) and self.service_registry is None:
+            raise RuntimeRunError(
+                503,
+                "RUN_ACTION_UNAVAILABLE",
+                "this service action is not available in the current runtime",
+                retryable=True,
+            )
+        if isinstance(action, ServiceAction) and action.handler not in self.service_registry.names:
+            raise RuntimeRunError(403, "RUN_ACTION_FORBIDDEN", "action handler is not inherited")
+        if not isinstance(action, (ServiceAction, McpAction)):
             raise RuntimeRunError(
                 503,
                 "RUN_ACTION_UNAVAILABLE",
                 "this action kind is not available in the current runtime",
                 retryable=True,
             )
-        if action.handler not in self.service_registry.names:
-            raise RuntimeRunError(403, "RUN_ACTION_FORBIDDEN", "action handler is not inherited")
 
         input_validator = self._validators[action_id][0]
         issues = sorted(input_validator.iter_errors(input_data), key=lambda issue: list(issue.path))
@@ -268,7 +280,7 @@ class ActionRuntime:
     def _execute(
         self,
         record: RunRecord,
-        action: ServiceAction,
+        action: AppAction,
         input_data: dict[str, Any],
     ) -> None:
         semaphore = self._semaphores[record.action_id]
@@ -293,18 +305,26 @@ class ActionRuntime:
             operation_id = str(uuid.uuid4())
             record.append(
                 "operation.started",
-                {"operation_id": operation_id, "kind": "service", "label": action.title},
+                {"operation_id": operation_id, "kind": action.kind, "label": action.title},
             )
 
             result_queue: queue.Queue[tuple[bool, Any]] = queue.Queue(maxsize=1)
 
             def invoke() -> None:
                 try:
-                    result_queue.put((True, self.service_registry.invoke(action.handler, input_data)))
+                    if isinstance(action, ServiceAction):
+                        if self.service_registry is None:
+                            raise RuntimeError("service registry is unavailable")
+                        result = self.service_registry.invoke(action.handler, input_data)
+                    elif isinstance(action, McpAction):
+                        result = self.mcp_invoker(action, input_data)
+                    else:
+                        raise RuntimeError("unsupported application action")
+                    result_queue.put((True, result))
                 except BaseException as exc:
                     result_queue.put((False, exc))
 
-            operation = threading.Thread(target=invoke, name=f"service-{record.run_id[:8]}", daemon=True)
+            operation = threading.Thread(target=invoke, name=f"app-action-{record.run_id[:8]}", daemon=True)
             operation.start()
             deadline = time.monotonic() + action.timeout_seconds
             heartbeat_at = time.monotonic() + 15
@@ -345,7 +365,7 @@ class ActionRuntime:
                 self._fail(
                     record,
                     "RUN_OUTPUT_INVALID",
-                    "service output did not match the application contract",
+                    "action output did not match the application contract",
                 )
                 return
             record.append(

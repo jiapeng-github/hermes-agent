@@ -11978,6 +11978,7 @@ class AppImportConfirmationRequest(BaseModel):
     conflict_mode: str
     copy_app_id: Optional[str] = None
     grants: Dict[str, Any]
+    category: Optional[str] = None
 
 
 class HubAppInstallRequest(BaseModel):
@@ -12076,6 +12077,27 @@ async def get_hub_app_icon(hub_app_id: str, request: Request, version: Optional[
             _app_hub_operations(request).get_icon, hub_app_id, version=version
         )
         return Response(content=content, media_type=content_type, headers={"Cache-Control": "private, max-age=300"})
+    except AppDomainError as exc:
+        return _app_api_error(exc)
+
+
+@app.get("/api/apps/hub/{hub_app_id}/preview")
+async def get_hub_app_preview(
+    hub_app_id: str,
+    request: Request,
+    version: Optional[str] = None,
+):
+    from hermes_cli.apps.errors import AppDomainError
+
+    try:
+        content, content_type = await asyncio.to_thread(
+            _app_hub_operations(request).get_preview_image, hub_app_id, version=version
+        )
+        return Response(
+            content=content,
+            media_type=content_type,
+            headers={"Cache-Control": "private, max-age=300"},
+        )
     except AppDomainError as exc:
         return _app_api_error(exc)
 

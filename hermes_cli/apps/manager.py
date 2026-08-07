@@ -398,6 +398,7 @@ class AppManager:
                 "source_editable": version_record.source_editable,
                 "trust_state": self._trust_state(record, version_record.trust_state),
                 "status": "invalid",
+                "category": record.category,
                 "requested_permissions": record.requested_permissions.model_dump(mode="json"),
                 "granted_permissions": record.granted_permissions.model_dump(mode="json"),
             }
@@ -416,6 +417,7 @@ class AppManager:
             "source_editable": version_record.source_editable,
             "trust_state": self._trust_state(record, version_record.trust_state),
             "status": status,
+            "category": record.category,
             "requested_permissions": record.requested_permissions.model_dump(mode="json"),
             "granted_permissions": record.granted_permissions.model_dump(mode="json"),
         }

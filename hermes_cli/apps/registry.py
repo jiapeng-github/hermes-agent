@@ -57,6 +57,7 @@ class AppRecord(_RegistryModel):
     versions: dict[str, AppVersionRecord]
     order: int = Field(ge=0)
     lineage: AppLineage = "user"
+    category: str | None = Field(default=None, min_length=1, max_length=100)
     service_handlers: list[str] = Field(default_factory=list, max_length=64)
     development_session: str | None = None
     last_opened_at: datetime | None = Field(default=None, strict=False)
@@ -157,6 +158,7 @@ class AppRegistry:
         development_session: str | None = None,
         lineage: AppLineage = "user",
         service_handlers: tuple[str, ...] = (),
+        category: str | None = None,
     ) -> InstallResult:
         """Atomically publish one validated staging directory and registry revision."""
         if conflict_mode not in {"install", "update", "copy"}:
@@ -196,6 +198,8 @@ class AppRegistry:
                 "APP_REQUEST_INVALID",
                 "only built-in applications can inherit service handlers",
             )
+        if category is not None and (not category.strip() or len(category) > 100):
+            raise AppRegistryError("APP_REQUEST_INVALID", "invalid application category")
         if staging_dir.is_symlink() or not resolved_staging.is_dir():
             raise AppRegistryError(
                 "APP_IMPORT_REJECTED",
@@ -313,6 +317,7 @@ class AppRegistry:
                     versions=versions,
                     order=len(document.apps),
                     lineage=lineage,
+                    category=category,
                     service_handlers=list(service_handlers),
                     development_session=development_session,
                     created_at=now,
@@ -334,6 +339,7 @@ class AppRegistry:
                             if development_session is not None
                             else existing.development_session
                         ),
+                        "category": category if category is not None else existing.category,
                         "updated_at": now,
                     }
                 )

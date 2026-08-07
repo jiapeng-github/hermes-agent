@@ -17,8 +17,10 @@ import type { AppImportPlan } from '@/global'
 import {
   cancelHubAppOperation,
   getHubAppOperation,
+  listHubAppCategories,
   listHubApps,
   startHubAppInstall,
+  type HubAppCategory,
   type HubAppOperation,
   type HubAppSummary
 } from '@/hermes'
@@ -51,6 +53,7 @@ export interface AppSummary {
   status: 'ready' | 'disabled' | 'incompatible' | 'invalid' | 'busy'
   requested_permissions: AppImportPlan['requested_permissions']
   granted_permissions: AppImportPlan['requested_permissions']
+  category?: string | null
 }
 
 interface AppList {
@@ -113,6 +116,41 @@ function hubStageLabel(state: HubAppOperation['state'] | undefined): string {
   }
 }
 
+function categoryLabel(category: string | null | undefined, categories: HubAppCategory[]): string {
+  if (!category) return ''
+  return categories.find(item => item.id === category)?.name ?? category
+}
+
+function selectedCategoryLabel(category: string, categories: HubAppCategory[]): string {
+  return category === 'all' ? '全部' : categoryLabel(category, categories)
+}
+
+function HubAppPreview({ app }: { app: HubAppSummary }) {
+  const [unavailable, setUnavailable] = useState(false)
+  const previewUrl = app.preview_image_url
+
+  useEffect(() => setUnavailable(false), [previewUrl])
+
+  return (
+    <div className="relative aspect-video overflow-hidden border-b border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary)">
+      {previewUrl && !unavailable ? (
+        <img
+          alt={`${app.name} 预览图`}
+          className="size-full object-cover"
+          onError={() => setUnavailable(true)}
+          src={`/api/apps/hub/${encodeURIComponent(app.id)}/preview?version=${encodeURIComponent(app.version)}`}
+        />
+      ) : (
+        <div className="grid size-full place-items-center text-(--ui-text-tertiary)">
+          <div className="grid size-11 place-items-center rounded-md border border-(--ui-stroke-secondary) bg-(--ui-bg-elevated) text-primary">
+            <Package className="size-5" />
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function AppMarketView({ onCreateApp, onEditApp }: AppMarketViewProps) {
   const [mode, setMode] = useState<'installed' | 'hub'>('installed')
   const [apps, setApps] = useState<AppSummary[]>([])
@@ -124,6 +162,9 @@ export function AppMarketView({ onCreateApp, onEditApp }: AppMarketViewProps) {
   const [importing, setImporting] = useState(false)
   const [removeTarget, setRemoveTarget] = useState<AppSummary | null>(null)
   const [hubApps, setHubApps] = useState<HubAppSummary[]>([])
+  const [categories, setCategories] = useState<HubAppCategory[]>([])
+  const [selectedCategory, setSelectedCategory] = useState('all')
+  const [categoryError, setCategoryError] = useState<string | null>(null)
   const [hubInstalled, setHubInstalled] = useState<
     Record<string, { version: string; state: 'installed' | 'update_available' }>
   >({})
@@ -151,6 +192,22 @@ export function AppMarketView({ onCreateApp, onEditApp }: AppMarketViewProps) {
   }, [])
 
   useEffect(() => {
+    let active = true
+
+    void listHubAppCategories()
+      .then(result => {
+        if (!active) return
+        setCategories(result.items)
+        setCategoryError(null)
+      })
+      .catch(reason => active && setCategoryError(hubErrorMessage(reason, '应用分类加载失败。')))
+
+    return () => {
+      active = false
+    }
+  }, [])
+
+  useEffect(() => {
     if (mode !== 'hub') {
       return
     }
@@ -159,7 +216,7 @@ export function AppMarketView({ onCreateApp, onEditApp }: AppMarketViewProps) {
     setHubLoading(true)
     setError(null)
     const timer = window.setTimeout(() => {
-      void listHubApps(query)
+      void listHubApps({ category: selectedCategory === 'all' ? undefined : selectedCategory, query })
         .then(result => {
           if (!active) return
           setHubApps(result.items)
@@ -173,7 +230,7 @@ export function AppMarketView({ onCreateApp, onEditApp }: AppMarketViewProps) {
       active = false
       window.clearTimeout(timer)
     }
-  }, [mode, query, hubRefreshEpoch])
+  }, [mode, query, selectedCategory, hubRefreshEpoch])
 
   useEffect(() => {
     if (!hubOperation || !['queued', 'resolving', 'downloading', 'analyzing'].includes(hubOperation.state)) {
@@ -201,12 +258,18 @@ export function AppMarketView({ onCreateApp, onEditApp }: AppMarketViewProps) {
   const visibleApps = useMemo(() => {
     const folded = query.trim().toLocaleLowerCase()
 
-    if (!folded) {
-      return apps
-    }
+    return apps.filter(app => {
+      const matchesQuery = !folded || `${app.name} ${app.id} ${app.description}`.toLocaleLowerCase().includes(folded)
+      const matchesCategory =
+        selectedCategory === 'all' ||
+        app.category === selectedCategory
+      return matchesQuery && matchesCategory
+    })
+  }, [apps, query, selectedCategory])
 
-    return apps.filter(app => `${app.name} ${app.id} ${app.description}`.toLocaleLowerCase().includes(folded))
-  }, [apps, query])
+  const categoryTabs = useMemo(() => {
+    return [{ id: 'all', name: '全部' }, ...categories]
+  }, [categories])
 
   async function chooseImport() {
     setError(null)
@@ -237,7 +300,8 @@ export function AppMarketView({ onCreateApp, onEditApp }: AppMarketViewProps) {
           package_sha256: importPlan.package_sha256,
           conflict_mode: importPlan.conflict.kind === 'none' ? 'install' : 'update',
           copy_app_id: null,
-          grants: importPlan.requested_permissions
+          grants: importPlan.requested_permissions,
+          category: hubOperation?.import_plan?.import_id === importPlan.import_id ? hubOperation.category ?? null : null
         }
       })
       const wasHubInstall = hubOperation?.import_plan?.import_id === importPlan.import_id
@@ -348,7 +412,7 @@ export function AppMarketView({ onCreateApp, onEditApp }: AppMarketViewProps) {
               </div>
             )}
           </div>
-          <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-(--ui-stroke-tertiary) pt-3">
+          <div className="mt-4 flex items-center justify-between gap-3 border-t border-(--ui-stroke-tertiary) pt-3">
             <div className="flex items-center rounded-md border border-(--ui-stroke-tertiary) p-0.5 text-xs">
               <Button
                 onClick={() => setMode('installed')}
@@ -357,11 +421,15 @@ export function AppMarketView({ onCreateApp, onEditApp }: AppMarketViewProps) {
               >
                 已安装
               </Button>
-              <Button onClick={() => setMode('hub')} size="xs" variant={mode === 'hub' ? 'secondary' : 'ghost'}>
+              <Button
+                onClick={() => setMode('hub')}
+                size="xs"
+                variant={mode === 'hub' ? 'secondary' : 'ghost'}
+              >
                 应用中心
               </Button>
             </div>
-            <div className="relative w-full sm:ml-auto sm:w-[20rem]">
+            <div className="relative w-[13rem] sm:w-[20rem]">
               <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-(--ui-text-tertiary)" />
               <Input
                 aria-label="搜索应用"
@@ -372,22 +440,40 @@ export function AppMarketView({ onCreateApp, onEditApp }: AppMarketViewProps) {
               />
             </div>
           </div>
+          <div className="mt-3 -mx-1 overflow-x-auto px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div aria-label="应用分类" className="flex min-w-max items-center gap-1" role="tablist">
+              {categoryTabs.map(category => (
+                <Button
+                  aria-selected={selectedCategory === category.id}
+                  key={category.id}
+                  onClick={() => setSelectedCategory(category.id)}
+                  role="tab"
+                  size="xs"
+                  variant={selectedCategory === category.id ? 'secondary' : 'ghost'}
+                >
+                  {category.name}
+                </Button>
+              ))}
+            </div>
+          </div>
         </div>
       </header>
 
       <main className="mx-auto max-w-[75rem] px-5 py-4">
-        {(error || notice) && (
+        {(error || notice || categoryError) && (
           <div
-            className={`mb-4 rounded-md border px-3 py-2 text-xs ${error ? 'border-destructive/30 bg-destructive/8 text-destructive' : 'border-emerald-500/25 bg-emerald-500/8 text-emerald-700 dark:text-emerald-300'}`}
-            role={error ? 'alert' : 'status'}
+            className={`mb-4 rounded-md border px-3 py-2 text-xs ${error || categoryError ? 'border-destructive/30 bg-destructive/8 text-destructive' : 'border-emerald-500/25 bg-emerald-500/8 text-emerald-700 dark:text-emerald-300'}`}
+            role={error || categoryError ? 'alert' : 'status'}
           >
-            {error ?? notice}
+            {error ?? categoryError ?? notice}
           </div>
         )}
 
         <div className="mb-3 flex items-center justify-between">
           <span className="text-xs font-medium text-(--ui-text-secondary)">
-            {mode === 'installed' ? `全部应用 · ${visibleApps.length}` : `应用中心 · ${hubApps.length}`}
+            {mode === 'installed'
+              ? `${selectedCategoryLabel(selectedCategory, categories)}应用 · ${visibleApps.length}`
+              : `${selectedCategoryLabel(selectedCategory, categories)}应用 · ${hubApps.length}`}
           </span>
           <span className="text-[0.6875rem] text-(--ui-text-tertiary)">
             {mode === 'installed' ? '应用不会主动请求行情数据' : '安装前将展示所需权限'}
@@ -396,16 +482,16 @@ export function AppMarketView({ onCreateApp, onEditApp }: AppMarketViewProps) {
 
         {mode === 'hub' ? (
           hubLoading ? (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {[0, 1, 2].map(item => (
                 <div
-                  className="h-36 animate-pulse rounded-md border border-(--ui-stroke-tertiary) bg-(--ui-bg-elevated)"
+                  className="h-72 animate-pulse rounded-md border border-(--ui-stroke-tertiary) bg-(--ui-bg-elevated)"
                   key={item}
                 />
               ))}
             </div>
           ) : hubApps.length ? (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {hubApps.map(app => {
                 const externalInstall = app.delivery?.type === 'external'
                 const installed = hubInstalled[app.id]
@@ -414,80 +500,85 @@ export function AppMarketView({ onCreateApp, onEditApp }: AppMarketViewProps) {
                 const retrying = hubOperation?.state === 'failed' && hubOperation.hub_app_id === app.id
                 return (
                   <article
-                    className="flex min-h-36 flex-col rounded-md border border-(--ui-stroke-tertiary) bg-(--ui-bg-elevated) p-3.5 shadow-sm"
+                    className="group flex min-w-0 flex-col overflow-hidden rounded-md border border-(--ui-stroke-tertiary) bg-(--ui-bg-elevated) shadow-sm transition-colors hover:border-primary/30"
                     key={app.id}
                   >
-                    <div className="flex items-start gap-3">
-                      <div className="grid size-10 shrink-0 place-items-center overflow-hidden rounded-md bg-primary/10 text-primary">
-                        {app.icon_url ? (
-                          <img
-                            alt=""
-                            className="size-full object-cover"
-                            src={`/api/apps/hub/${encodeURIComponent(app.id)}/icon?version=${encodeURIComponent(app.version)}`}
-                          />
-                        ) : (
-                          <Package className="size-5" />
-                        )}
+                    <HubAppPreview app={app} />
+                    <div className="flex flex-1 flex-col p-3.5">
+                      <div className="flex items-start gap-2.5">
+                        <div className="grid size-9 shrink-0 place-items-center overflow-hidden rounded-md bg-primary/10 text-primary">
+                          {app.icon_url ? (
+                            <img
+                              alt=""
+                              className="size-full object-cover"
+                              src={`/api/apps/hub/${encodeURIComponent(app.id)}/icon?version=${encodeURIComponent(app.version)}`}
+                            />
+                          ) : (
+                            <Package className="size-4" />
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <h2 className="line-clamp-1 text-sm font-semibold text-foreground break-words">{app.name}</h2>
+                          <p className="mt-0.5 truncate text-[0.6875rem] text-(--ui-text-tertiary)">
+                            {app.publisher || 'StockSense'}
+                          </p>
+                        </div>
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <h2 className="line-clamp-2 text-sm font-semibold text-foreground break-words">{app.name}</h2>
-                        <p className="mt-0.5 truncate font-mono text-[0.625rem] text-(--ui-text-tertiary)">{app.id}</p>
-                      </div>
-                    </div>
-                    <p className="mt-2.5 line-clamp-2 text-xs leading-5 text-(--ui-text-secondary)">
-                      {app.summary || app.description}
-                    </p>
-                    <div className="mt-auto flex items-center gap-2 pt-2.5">
-                      {app.category && <Badge variant="muted">{app.category}</Badge>}
-                      <span className="text-[0.6875rem] text-(--ui-text-tertiary)">v{app.version}</span>
-                      {externalInstall ? (
-                        <>
-                          <Badge variant="warn">外部安装</Badge>
+                      <p className="mt-3 line-clamp-2 text-xs leading-5 text-(--ui-text-secondary)">
+                        {app.summary || app.description}
+                      </p>
+                      <div className="mt-3 flex items-center gap-2">
+                        {app.category && <Badge variant="muted">{categoryLabel(app.category, categories)}</Badge>}
+                        <span className="text-[0.6875rem] text-(--ui-text-tertiary)">v{app.version}</span>
+                        {externalInstall ? (
+                          <>
+                            <Badge variant="warn">外部安装</Badge>
+                            <Button
+                              className="ml-auto"
+                              onClick={() => showExternalInstallNotice(app)}
+                              size="sm"
+                              variant="outline"
+                            >
+                              外部安装
+                            </Button>
+                          </>
+                        ) : installing ? (
+                          <Button className="ml-auto" disabled size="sm">
+                            <Loader2 className="size-3.5 animate-spin" /> 准备中…
+                          </Button>
+                        ) : retrying ? (
                           <Button
                             className="ml-auto"
-                            onClick={() => showExternalInstallNotice(app)}
+                            onClick={() => void installFromHub(app)}
                             size="sm"
                             variant="outline"
                           >
-                            外部安装
+                            <RefreshCw className="size-3.5" /> 重试
                           </Button>
-                        </>
-                      ) : installing ? (
-                        <Button className="ml-auto" disabled size="sm">
-                          <Loader2 className="size-3.5 animate-spin" /> 准备中…
-                        </Button>
-                      ) : retrying ? (
-                        <Button
-                          className="ml-auto"
-                          onClick={() => void installFromHub(app)}
-                          size="sm"
-                          variant="outline"
-                        >
-                          <RefreshCw className="size-3.5" /> 重试
-                        </Button>
-                      ) : updateAvailable ? (
-                        <Button
-                          className="ml-auto"
-                          disabled={hubBusy}
-                          onClick={() => void installFromHub(app)}
-                          size="sm"
-                        >
-                          <RefreshCw className="size-3.5" /> 更新
-                        </Button>
-                      ) : installed ? (
-                        <Badge className="ml-auto" variant="default">
-                          已是最新
-                        </Badge>
-                      ) : (
-                        <Button
-                          className="ml-auto"
-                          disabled={hubBusy}
-                          onClick={() => void installFromHub(app)}
-                          size="sm"
-                        >
-                          安装
-                        </Button>
-                      )}
+                        ) : updateAvailable ? (
+                          <Button
+                            className="ml-auto"
+                            disabled={hubBusy}
+                            onClick={() => void installFromHub(app)}
+                            size="sm"
+                          >
+                            <RefreshCw className="size-3.5" /> 更新
+                          </Button>
+                        ) : installed ? (
+                          <Badge className="ml-auto" variant="default">
+                            已是最新
+                          </Badge>
+                        ) : (
+                          <Button
+                            className="ml-auto"
+                            disabled={hubBusy}
+                            onClick={() => void installFromHub(app)}
+                            size="sm"
+                          >
+                            安装
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   </article>
                 )
@@ -564,7 +655,8 @@ export function AppMarketView({ onCreateApp, onEditApp }: AppMarketViewProps) {
                     </DropdownMenu>
                   </div>
                   <p className="mt-2.5 line-clamp-2 text-xs leading-5 text-(--ui-text-secondary)">{app.description}</p>
-                  <div className="mt-auto flex items-center gap-2 pt-2.5">
+                  <div className="mt-auto flex flex-wrap items-center gap-2 pt-2.5">
+                    {app.category && <Badge variant="muted">{categoryLabel(app.category, categories)}</Badge>}
                     <Badge variant={app.status === 'ready' ? 'default' : 'warn'}>{STATUS_LABEL[app.status]}</Badge>
                     <span className="text-[0.6875rem] text-(--ui-text-tertiary)">v{app.version}</span>
                     <span className="text-[0.6875rem] text-(--ui-text-tertiary)">{sourceLabel(app)}</span>
