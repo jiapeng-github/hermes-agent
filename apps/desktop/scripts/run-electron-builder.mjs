@@ -11,6 +11,7 @@ import fs from "node:fs"
 import path from "node:path"
 import { spawnSync } from "node:child_process"
 import { createRequire } from "node:module"
+import { fileURLToPath } from "node:url"
 
 const require = createRequire(import.meta.url)
 
@@ -40,7 +41,7 @@ function electronBuilderCli() {
 }
 
 function runtimeFlavor(expectedOfflineTarget) {
-  const scriptsDir = path.dirname(new URL(import.meta.url).pathname)
+  const scriptsDir = path.dirname(fileURLToPath(import.meta.url))
   const manifestPath = path.resolve(scriptsDir, "..", "build", "offline-runtime", "manifest.json")
 
   const requestedFlavor = String(process.env.STOCKSENSE_PACKAGE_FLAVOR || 'offline').trim().toLowerCase()
