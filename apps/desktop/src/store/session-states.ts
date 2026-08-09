@@ -544,8 +544,14 @@ export function openSessionTile(
  *  front its tab (and focus its zone) and return true. A sidebar click on an
  *  already-open chat JUMPS to its tab instead of reloading it; `false` means the
  *  caller must load it into main. Covers the two dead clicks: an open tile, and
- *  the main session while focus sits on a tile (route unchanged → no reload). */
-export function focusOpenSession(storedSessionId: string): boolean {
+ *  the main session while focus sits on a tile (route unchanged → no reload).
+ *  Full-page routes hide the chat workspace, so their callers pass
+ *  `workspaceVisible=false`; a hidden pane must never consume the click. */
+export function focusOpenSession(storedSessionId: string, workspaceVisible = true): boolean {
+  if (!workspaceVisible) {
+    return false
+  }
+
   if ($sessionTiles.get().some(t => t.storedSessionId === storedSessionId)) {
     const paneId = `${TILE_PANE_PREFIX}${storedSessionId}`
     revealTreePane(paneId) // un-dismiss + adopt + front in its group

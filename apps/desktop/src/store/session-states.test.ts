@@ -1,8 +1,9 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 
 import { group, split } from '@/components/pane-shell/tree/model'
+import { $selectedStoredSessionId } from '@/store/session'
 import type { SessionTile } from '@/store/session-states'
-import { orderTilesByTree, selectionHomesToWorkspace } from '@/store/session-states'
+import { focusOpenSession, orderTilesByTree, selectionHomesToWorkspace } from '@/store/session-states'
 
 const tile = (storedSessionId: string): SessionTile => ({ storedSessionId })
 const tilePane = (id: string) => `session-tile:${id}`
@@ -42,5 +43,17 @@ describe('selectionHomesToWorkspace', () => {
 
   it('skips homing when the selected id is already an open tile', () => {
     expect(selectionHomesToWorkspace('a', tiles)).toBe(false)
+  })
+})
+
+describe('focusOpenSession', () => {
+  afterEach(() => {
+    $selectedStoredSessionId.set(null)
+  })
+
+  it('does not consume a sidebar click while a full-page route hides the workspace', () => {
+    $selectedStoredSessionId.set('session-a')
+
+    expect(focusOpenSession('session-a', false)).toBe(false)
   })
 })

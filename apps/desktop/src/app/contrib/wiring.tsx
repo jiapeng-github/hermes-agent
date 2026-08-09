@@ -808,7 +808,7 @@ export function ContribWiring({ children }: { children: ReactNode }) {
     // Already on screen (open tile, or the main session)? Jump to its tab;
     // otherwise load it into main.
     onResumeSession: sessionId => {
-      if (!focusOpenSession(sessionId)) {
+      if (!focusOpenSession(sessionId, currentView === 'chat')) {
         navigate(sessionRoute(sessionId))
       }
     },
