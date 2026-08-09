@@ -20,6 +20,7 @@ from ..models import McpAction
 
 
 _INPUT_TOKEN = re.compile(r"^\{\{input\.([A-Za-z_][A-Za-z0-9_]*)\}\}$")
+_INPUT_TOKEN_ANYWHERE = re.compile(r"\{\{input\.([A-Za-z_][A-Za-z0-9_]*)\}\}")
 
 
 def invoke_mcp_action(action: McpAction, input_data: dict[str, Any]) -> dict[str, Any]:
@@ -90,6 +91,14 @@ def _render_arguments(template: Any, input_data: Mapping[str, Any]) -> Any:
             if key not in input_data:
                 raise ValueError(f"input field {key!r} is required by arguments_template")
             return input_data[key]
+        if _INPUT_TOKEN_ANYWHERE.search(template):
+            def replace(match: re.Match[str]) -> str:
+                key = match.group(1)
+                if key not in input_data:
+                    raise ValueError(f"input field {key!r} is required by arguments_template")
+                return str(input_data[key])
+
+            return _INPUT_TOKEN_ANYWHERE.sub(replace, template)
     return template
 
 
