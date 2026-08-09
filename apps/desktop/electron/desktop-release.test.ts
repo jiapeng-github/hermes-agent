@@ -80,7 +80,7 @@ function signedManagedConfigPayload(privateKey: crypto.KeyObject) {
     revision: 3,
     sha256: 'b'.repeat(64),
     signature_key_id: 'current',
-    url: 'https://cdn.stocksense.work/desktop/managed/stable.json'
+    url: 'https://www.stocksense.work/app-api/desktop/v1/managed-config/3?channel=stable'
   }
   managedConfig.signature = crypto.sign(null, Buffer.from(canonicalJson(managedConfig)), privateKey).toString('base64')
 
@@ -181,6 +181,26 @@ test('accepts an authenticated newer manual release', () => {
   assert.equal(result.release?.version, '0.20.0')
 })
 
+test('matches the backend canonical JSON and Ed25519 fixed vector', () => {
+  const backendVector = {
+    protocol_version: 2,
+    release_id: '',
+    runtime: { available: false },
+    server_time: '2026-08-09T05:00:00Z',
+    signature_key_id: 'test-key',
+    update: { available: false },
+    signature:
+      'bQf6y04noat9npkWUayxXeCQ+uKhqsBmyMTXeh2fARuaT7il3jquBudXIHG8h2p+0W64CkSOtMi4dACDPAe+Bw=='
+  }
+
+  const result = validateDesktopReleaseCheck(backendVector, {
+    currentVersion: '0.19.0',
+    signingKeys: { 'test-key': 'skeGk1m9eqmwzsnVq8tU6oI15NA9O5uRX/jtVJ83d6U=' }
+  })
+
+  assert.deepEqual(result, { available: false, supported: true })
+})
+
 test('accepts an authenticated HTTPS automatic release and rejects an insecure feed', () => {
   const { privateKey, publicKey } = crypto.generateKeyPairSync('ed25519')
   const signingKeys = { current: rawEd25519PublicKey(publicKey) }
@@ -229,6 +249,10 @@ test('accepts a separately signed HTTPS managed-config descriptor', () => {
   assert.equal(accepted.supported, true)
   assert.equal(accepted.available, false)
   assert.equal(accepted.managedConfig?.revision, 3)
+  assert.equal(
+    accepted.managedConfig?.url,
+    'https://www.stocksense.work/app-api/desktop/v1/managed-config/3?channel=stable'
+  )
 
   const tampered = signedManagedConfigPayload(privateKey)
   ;((tampered.managed_config as Record<string, unknown>).sha256 as string) = 'c'.repeat(64)
