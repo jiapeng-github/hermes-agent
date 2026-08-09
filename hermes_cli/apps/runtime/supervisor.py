@@ -13,7 +13,6 @@ from ..activity import AppActivityStore
 from ..paths import AppPaths
 from ..registry import AppRecord
 from .host import AppHost
-from .service import builtin_finance_service_registry
 
 
 class AppRuntimeSupervisor:
@@ -72,17 +71,6 @@ class AppRuntimeSupervisor:
         for _version, host in hosts:
             host.stop()
 
-    def _service_registry(self, record: AppRecord):
-        if record.lineage != "builtin":
-            return None
-        if record.service_handlers:
-            return builtin_finance_service_registry(
-                app_id=record.id,
-                app_data=self.paths.app_runtime_data(record.id),
-                inherited_handlers=tuple(record.service_handlers),
-            )
-        return None
-
     def _ensure_host_locked(
         self,
         record: AppRecord,
@@ -99,7 +87,7 @@ class AppRuntimeSupervisor:
                 manifest,
                 app_root,
                 record.granted_permissions,
-                service_registry=self._service_registry(record),
+                service_registry=None,
                 storage_root=self.paths.app_runtime_data(record.id) / "storage" / "kv",
                 activity_store=AppActivityStore(self.paths),
             )

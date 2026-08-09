@@ -5,7 +5,6 @@ from pathlib import Path
 import pytest
 
 from hermes_cli.apps.catalog import WATCHLIST_APP_ID
-from hermes_cli.apps.errors import AppDomainError
 from hermes_cli.apps.manager import AppManager
 from hermes_cli.apps.paths import AppPaths
 
@@ -78,24 +77,16 @@ def test_uninstall_rolls_files_back_when_registry_commit_fails(
     assert manager.registry.get(app_id) is not None
 
 
-def test_builtin_app_cannot_be_uninstalled_but_its_data_can_be_deleted(
+def test_retired_watchlist_app_and_data_are_removed(
     tmp_path: Path,
 ) -> None:
     manager = AppManager(AppPaths(tmp_path / "profile"))
-    manager.list_apps()
     data = manager.paths.app_runtime_data(WATCHLIST_APP_ID) / "storage" / "state.json"
     data.parent.mkdir(parents=True)
     data.write_text("{}", encoding="utf-8")
-    supervisor = RecordingSupervisor()
-
-    with pytest.raises(AppDomainError, match="built-in"):
-        manager.uninstall(WATCHLIST_APP_ID, supervisor)
-
-    manager.delete_data(WATCHLIST_APP_ID, supervisor)
-
-    assert manager.registry.get(WATCHLIST_APP_ID) is not None
+    manager.list_apps()
+    assert manager.registry.get(WATCHLIST_APP_ID) is None
     assert not data.exists()
-    assert supervisor.stopped == [WATCHLIST_APP_ID]
 
 
 @pytest.mark.parametrize("unsafe", ["../escape", "AI.Hermes.App", "ai.hermes", "ai/hermes/app"])
