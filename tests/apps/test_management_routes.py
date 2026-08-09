@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 from pathlib import Path
 
-from hermes_cli.apps.catalog import WATCHLIST_APP_ID
+from hermes_cli.apps.catalog import INDUSTRY_MONITOR_APP_ID, WATCHLIST_APP_ID
 from hermes_cli.apps.manager import AppManager
 
 
@@ -158,15 +158,15 @@ def test_package_export_import_uninstall_and_data_lifecycle(
     assert not data.exists()
 
 
-def test_builtin_uninstall_is_rejected(_isolate_hermes_home) -> None:
+def test_removed_builtin_uninstall_returns_not_found(_isolate_hermes_home) -> None:
     from hermes_cli.web_server import app, _SESSION_HEADER_NAME, _SESSION_TOKEN
 
     with TestClient(app) as client:
         client.headers[_SESSION_HEADER_NAME] = _SESSION_TOKEN
-        response = client.delete(f"/api/apps/{WATCHLIST_APP_ID}")
+        response = client.delete(f"/api/apps/{INDUSTRY_MONITOR_APP_ID}")
 
-    assert response.status_code == 409
-    assert response.json()["error"]["code"] == "APP_VERSION_CONFLICT"
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "APP_NOT_FOUND"
 
 
 def test_hub_routes_are_authenticated_and_can_be_explicitly_disabled(

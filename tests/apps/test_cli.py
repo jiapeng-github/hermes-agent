@@ -153,13 +153,7 @@ def test_cli_fixture_completes_create_modify_export_import_and_rollback(
 
     code, listed = _run(parser, primary, capsys, ["list"])
     assert code == 0
-    assert [item["id"] for item in listed["items"]] == [
-        "local.stockagent.cli-fixture",
-        "ai.stocksense.industry-monitor",
-        "ai.stocksense.company-analysis",
-        "ai.stocksense.stock-deep-analysis",
-        "ai.stocksense.watchlist",
-    ]
+    assert [item["id"] for item in listed["items"]] == ["local.stockagent.cli-fixture"]
     code, inspected = _run(
         parser,
         primary,

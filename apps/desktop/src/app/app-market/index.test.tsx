@@ -45,27 +45,7 @@ const builtinApp = {
   }
 }
 
-const builtinFinanceApps = [
-  {
-    ...builtinApp,
-    id: 'ai.stocksense.industry-monitor',
-    name: '行业轮动和资金流向监控',
-    description: 'A 股市场广度、热点题材、行业轮动、资金流与北向成交监控'
-  },
-  {
-    ...builtinApp,
-    id: 'ai.stocksense.company-analysis',
-    name: '上市公司基本面分析',
-    description: '按公司名称或股票代码生成公司画像、财务趋势与研报分析'
-  },
-  {
-    ...builtinApp,
-    id: 'ai.stocksense.stock-deep-analysis',
-    name: '个股三维深度分析',
-    description: '基于妙想 MCP 的公司质地、舆情摘要与交易活跃度三维个股研究应用'
-  },
-  builtinApp
-]
+const installedApps = [builtinApp]
 
 describe('AppMarketView', () => {
   const api = vi.fn()
@@ -84,7 +64,7 @@ describe('AppMarketView', () => {
     startHubAppInstall.mockReset()
     getHubAppOperation.mockReset()
     cancelHubAppOperation.mockReset()
-    api.mockResolvedValue({ items: builtinFinanceApps, next_cursor: null })
+    api.mockResolvedValue({ items: installedApps, next_cursor: null })
     listHubAppCategories.mockResolvedValue({
       items: [{ id: 'finance', name: '金融' }],
       cache_state: 'fresh'
@@ -98,7 +78,7 @@ describe('AppMarketView', () => {
 
   afterEach(cleanup)
 
-  it('lists all built-in finance apps, launches one, and starts the builder template', async () => {
+  it('lists installed apps, launches one, and starts the builder template', async () => {
     const onCreateApp = vi.fn()
     const onEditApp = vi.fn()
     launchHermesApp.mockResolvedValue({
@@ -110,21 +90,18 @@ describe('AppMarketView', () => {
     render(<AppMarketView onCreateApp={onCreateApp} onEditApp={onEditApp} />)
 
     expect(await screen.findByText('自选股盯盘看板')).toBeTruthy()
-    expect(screen.getByText('行业轮动和资金流向监控')).toBeTruthy()
-    expect(screen.getByText('上市公司基本面分析')).toBeTruthy()
-    expect(screen.getByText('个股三维深度分析')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: '创建应用' }))
-    fireEvent.click(screen.getByRole('button', { name: '打开 行业轮动和资金流向监控' }))
+    fireEvent.click(screen.getByRole('button', { name: '打开 自选股盯盘看板' }))
 
     expect(onCreateApp).toHaveBeenCalledOnce()
     await waitFor(() => expect(openLaunchUrl).toHaveBeenCalledWith('http://127.0.0.1:49182/launch/code'))
 
-    const manageButton = screen.getByRole('button', { name: '管理 行业轮动和资金流向监控' })
+    const manageButton = screen.getByRole('button', { name: '管理 自选股盯盘看板' })
     fireEvent.pointerDown(manageButton, { button: 0, ctrlKey: false })
     const exportItem = await screen.findByText('导出 .happ')
     expect(exportItem.getAttribute('data-disabled')).not.toBeNull()
     fireEvent.click(await screen.findByRole('menuitem', { name: '修改' }))
-    expect(onEditApp).toHaveBeenCalledWith(expect.objectContaining({ id: 'ai.stocksense.industry-monitor' }))
+    expect(onEditApp).toHaveBeenCalledWith(expect.objectContaining({ id: 'ai.stocksense.watchlist' }))
   })
 
   it('shows the immutable import plan before confirming installation', async () => {
@@ -224,8 +201,8 @@ describe('AppMarketView', () => {
         { ...builtinApp, category: 'finance' },
         {
           ...builtinApp,
-          id: 'ai.stocksense.company-analysis',
-          name: '上市公司基本面分析',
+          id: 'local.stockagent.research',
+          name: '研究助手',
           category: 'research'
         }
       ],
@@ -244,7 +221,7 @@ describe('AppMarketView', () => {
     fireEvent.click(await screen.findByRole('tab', { name: '金融' }))
 
     expect(screen.getByText('自选股盯盘看板')).toBeTruthy()
-    expect(screen.queryByText('上市公司基本面分析')).toBeNull()
+    expect(screen.queryByText('研究助手')).toBeNull()
     expect(screen.queryByRole('img', { name: /预览图/ })).toBeNull()
   })
 

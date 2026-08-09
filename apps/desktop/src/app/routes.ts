@@ -12,8 +12,6 @@ export const APP_MARKET_ROUTE = '/apps'
 export const MESSAGING_ROUTE = '/messaging'
 export const ARTIFACTS_ROUTE = '/artifacts'
 export const CRON_ROUTE = '/cron'
-/** @deprecated Financial experiences launch from Application Market. */
-export const COMPANY_ANALYSIS_ROUTE = '/company-analysis'
 export const PROFILES_ROUTE = '/profiles'
 export const AGENTS_ROUTE = '/agents'
 export const STARMAP_ROUTE = '/starmap'

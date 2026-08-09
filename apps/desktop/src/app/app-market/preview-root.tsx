@@ -8,95 +8,26 @@ import { AppMarketView } from './index'
 
 const PREVIEW_APPS = [
   {
-    id: 'ai.stocksense.industry-monitor',
-    name: '行业轮动和资金流向监控',
-    description: 'A 股市场广度、热点题材、行业轮动、资金流与北向成交监控。',
-    version: '1.0.0',
-    enabled: true,
-    source_editable: false,
-    lineage: 'builtin',
-    installed_at: '2026-07-25T00:00:00+08:00',
-    updated_at: '2026-07-25T00:00:00+08:00',
-    trust_state: 'builtin',
-    status: 'ready',
-    requested_permissions: {
-      agent: false,
-      mcp_servers: [],
-      storage: { mode: 'none', quota_mb: 0 }
-    },
-    granted_permissions: {
-      agent: false,
-      mcp_servers: [],
-      storage: { mode: 'none', quota_mb: 0 }
-    }
-  },
-  {
-    id: 'ai.stocksense.company-analysis',
-    name: '上市公司基本面分析',
-    description: '按公司名称或股票代码生成公司画像、财务趋势、估值与研报分析。',
-    version: '1.0.0',
-    enabled: true,
-    source_editable: false,
-    lineage: 'builtin',
-    installed_at: '2026-07-25T00:00:00+08:00',
-    updated_at: '2026-07-25T00:00:00+08:00',
-    trust_state: 'builtin',
-    status: 'ready',
-    requested_permissions: {
-      agent: false,
-      mcp_servers: [],
-      storage: { mode: 'persistent', quota_mb: 1 }
-    },
-    granted_permissions: {
-      agent: false,
-      mcp_servers: [],
-      storage: { mode: 'persistent', quota_mb: 1 }
-    }
-  },
-  {
-    id: 'ai.stocksense.stock-deep-analysis',
-    name: '个股三维深度分析',
-    description: '基于妙想 MCP 的公司质地、舆情摘要与交易活跃度三维个股研究应用。',
-    version: '1.0.0',
-    enabled: true,
-    source_editable: false,
-    lineage: 'builtin',
-    installed_at: '2026-07-25T00:00:00+08:00',
-    updated_at: '2026-07-25T00:00:00+08:00',
-    trust_state: 'builtin',
-    status: 'ready',
-    requested_permissions: {
-      agent: false,
-      mcp_servers: [],
-      storage: { mode: 'persistent', quota_mb: 1 }
-    },
-    granted_permissions: {
-      agent: false,
-      mcp_servers: [],
-      storage: { mode: 'persistent', quota_mb: 1 }
-    }
-  },
-  {
     id: 'ai.stocksense.watchlist',
     name: '自选股盯盘看板',
-    description: 'Profile 隔离的 A 股自选股盯盘、行情详情和公司分析应用。',
-    version: '1.0.0',
+    description: '可导出的 A 股自选股盯盘看板，提供行情、板块脉搏、资金主线和个股详情。',
+    version: '0.0.1',
     enabled: true,
-    source_editable: false,
-    lineage: 'builtin',
+    source_editable: true,
+    lineage: 'user',
     installed_at: '2026-07-25T00:00:00+08:00',
     updated_at: '2026-07-25T00:00:00+08:00',
-    trust_state: 'builtin',
+    trust_state: 'local_untrusted',
     status: 'ready',
     requested_permissions: {
-      agent: true,
+      agent: false,
       mcp_servers: ['mx-ds-mcp'],
-      storage: { mode: 'persistent', quota_mb: 10 }
+      storage: { mode: 'persistent', quota_mb: 5 }
     },
     granted_permissions: {
-      agent: true,
-      mcp_servers: ['mx-ds-mcp'],
-      storage: { mode: 'persistent', quota_mb: 10 }
+      agent: false,
+      mcp_servers: [],
+      storage: { mode: 'none', quota_mb: 0 }
     }
   },
   {

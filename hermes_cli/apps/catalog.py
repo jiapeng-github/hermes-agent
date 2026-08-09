@@ -23,22 +23,13 @@ INDUSTRY_MONITOR_APP_ID = "ai.stocksense.industry-monitor"
 COMPANY_ANALYSIS_APP_ID = "ai.stocksense.company-analysis"
 STOCK_DEEP_ANALYSIS_APP_ID = "ai.stocksense.stock-deep-analysis"
 WATCHLIST_APP_ID = "ai.stocksense.watchlist"
-INDUSTRY_MONITOR_SERVICE_HANDLERS = (
-    "finance.industry.snapshot",
-    "finance.industry.refresh",
-)
-COMPANY_ANALYSIS_SERVICE_HANDLERS = (
-    "finance.company.analysis",
-    "finance.company.refresh",
-)
-STOCK_DEEP_ANALYSIS_SERVICE_HANDLERS = COMPANY_ANALYSIS_SERVICE_HANDLERS
-WATCHLIST_SERVICE_HANDLERS = (
-    "finance.watchlist.snapshot",
-    "finance.watchlist.refresh",
-    "finance.watchlist.add",
-    "finance.watchlist.remove",
-    "finance.watchlist.detail",
-    "finance.company.analysis",
+# Keep retired identities only long enough to remove packages/data from older
+# profiles; they are never returned by the built-in catalog.
+RETIRED_BUILTIN_APP_IDS = (
+    WATCHLIST_APP_ID,
+    INDUSTRY_MONITOR_APP_ID,
+    COMPANY_ANALYSIS_APP_ID,
+    STOCK_DEEP_ANALYSIS_APP_ID,
 )
 LEGACY_BUILTIN_APP_IDS = (
     "ai.hermes.company-analysis",
@@ -64,28 +55,7 @@ class BuiltinApp:
         )
 
 
-_CATALOG = {
-    INDUSTRY_MONITOR_APP_ID: BuiltinApp(
-        app_id=INDUSTRY_MONITOR_APP_ID,
-        root=Path(__file__).parent / "catalog" / "industry-monitor",
-        service_handlers=INDUSTRY_MONITOR_SERVICE_HANDLERS,
-    ),
-    COMPANY_ANALYSIS_APP_ID: BuiltinApp(
-        app_id=COMPANY_ANALYSIS_APP_ID,
-        root=Path(__file__).parent / "catalog" / "company-analysis",
-        service_handlers=COMPANY_ANALYSIS_SERVICE_HANDLERS,
-    ),
-    STOCK_DEEP_ANALYSIS_APP_ID: BuiltinApp(
-        app_id=STOCK_DEEP_ANALYSIS_APP_ID,
-        root=Path(__file__).parent / "catalog" / "stock-deep-analysis",
-        service_handlers=STOCK_DEEP_ANALYSIS_SERVICE_HANDLERS,
-    ),
-    WATCHLIST_APP_ID: BuiltinApp(
-        app_id=WATCHLIST_APP_ID,
-        root=Path(__file__).parent / "catalog" / "watchlist",
-        service_handlers=WATCHLIST_SERVICE_HANDLERS,
-    )
-}
+_CATALOG: dict[str, BuiltinApp] = {}
 
 
 def builtin_app(app_id: str) -> BuiltinApp | None:
@@ -94,7 +64,7 @@ def builtin_app(app_id: str) -> BuiltinApp | None:
 
 def ensure_builtin_apps(paths: AppPaths, registry: AppRegistry) -> list[AppRecord]:
     """Install newer bundled versions without replacing user-owned identities."""
-    for app_id in LEGACY_BUILTIN_APP_IDS:
+    for app_id in (*RETIRED_BUILTIN_APP_IDS, *LEGACY_BUILTIN_APP_IDS):
         existing = registry.get(app_id)
         if existing is not None and existing.lineage != "builtin":
             continue
@@ -197,14 +167,11 @@ def _tree_sha256(root: Path) -> str:
 __all__ = [
     "BuiltinApp",
     "COMPANY_ANALYSIS_APP_ID",
-    "COMPANY_ANALYSIS_SERVICE_HANDLERS",
     "INDUSTRY_MONITOR_APP_ID",
-    "INDUSTRY_MONITOR_SERVICE_HANDLERS",
     "LEGACY_BUILTIN_APP_IDS",
+    "RETIRED_BUILTIN_APP_IDS",
     "STOCK_DEEP_ANALYSIS_APP_ID",
-    "STOCK_DEEP_ANALYSIS_SERVICE_HANDLERS",
     "WATCHLIST_APP_ID",
-    "WATCHLIST_SERVICE_HANDLERS",
     "builtin_app",
     "ensure_builtin_apps",
 ]
