@@ -269,12 +269,45 @@ class AppActivityStore:
         error_json = (
             json.dumps(error, ensure_ascii=False, sort_keys=True) if error else None
         )
+        completed_at = time.time()
+        session_row: sqlite3.Row | None = None
         with self._lock:
-            self._conn.execute(
-                """UPDATE app_runs
-                   SET status = ?, result_summary = ?, error_json = ?, completed_at = ?
-                   WHERE run_id = ?""",
-                (status, summary, error_json, time.time(), run_id),
+            self._conn.execute("BEGIN IMMEDIATE")
+            try:
+                session_row = self._conn.execute(
+                    """SELECT r.session_id, r.app_id, s.app_name
+                       FROM app_runs r
+                       JOIN app_activity_sessions s ON s.app_id = r.app_id
+                       WHERE r.run_id = ?""",
+                    (run_id,),
+                ).fetchone()
+                if session_row is not None:
+                    self._conn.execute(
+                        """UPDATE app_runs
+                           SET status = ?, result_summary = ?, error_json = ?, completed_at = ?
+                           WHERE run_id = ?""",
+                        (status, summary, error_json, completed_at, run_id),
+                    )
+                    # App activity is useful even when an app does not publish
+                    # an HTML snapshot. Make the durable sidebar session visible
+                    # as soon as an accepted run reaches a terminal state; a
+                    # later artifact publication enriches the same session.
+                    self._conn.execute(
+                        """UPDATE app_activity_sessions
+                           SET visible = 1, updated_at = ? WHERE app_id = ?""",
+                        (completed_at, session_row["app_id"]),
+                    )
+                self._conn.execute("COMMIT")
+            except BaseException:
+                self._conn.execute("ROLLBACK")
+                raise
+
+        if session_row is not None:
+            self._publish_session_row(
+                session_row["session_id"],
+                session_row["app_id"],
+                session_row["app_name"],
+                completed_at,
             )
 
     def publish_artifact(

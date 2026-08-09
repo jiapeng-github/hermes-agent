@@ -8,29 +8,25 @@ import pytest
 from fastapi.testclient import TestClient
 
 from hermes_cli.apps.activity import AppActivityError, AppActivityStore
-from hermes_cli.apps.catalog import (
-    WATCHLIST_APP_ID,
-    WATCHLIST_SERVICE_HANDLERS,
-    builtin_app,
-)
 from hermes_cli.apps.paths import AppPaths
 from hermes_cli.apps.runtime.auth import CSRF_HEADER_NAME, RuntimeAuth
 from hermes_cli.apps.runtime.host import create_apphost_app
-from hermes_cli.apps.runtime.service import watchlist_service_registry
+from hermes_cli.apps.runtime.service import ServiceActionRegistry, ServiceContext
 from hermes_state import SessionDB
+
+from .runtime_fixtures import service_runtime_app
 
 
 SAFE_HTML = "<!doctype html><html><head><title>Snapshot</title></head><body><h1>Result</h1></body></html>"
 
 
-def _manifest():
-    definition = builtin_app(WATCHLIST_APP_ID)
-    assert definition is not None
-    return definition, definition.load_manifest()
+def _manifest(tmp_path: Path):
+    root, manifest, _grants = service_runtime_app(tmp_path / "fixture")
+    return root, manifest
 
 
 def test_completed_run_publishes_one_visible_read_only_session(tmp_path: Path) -> None:
-    definition, manifest = _manifest()
+    definition, manifest = _manifest(tmp_path)
     paths = AppPaths(tmp_path / "profile")
     store = AppActivityStore(paths)
     try:
@@ -64,7 +60,7 @@ def test_completed_run_publishes_one_visible_read_only_session(tmp_path: Path) -
         assert "Content-Security-Policy" in artifact.html_path.read_text(
             encoding="utf-8"
         )
-        assert timeline["session"]["app_id"] == WATCHLIST_APP_ID
+        assert timeline["session"]["app_id"] == manifest.id
         assert [item["id"] for item in timeline["artifacts"]] == [artifact.id]
         assert timeline["runs"][0]["status"] == "completed"
 
@@ -81,19 +77,55 @@ def test_completed_run_publishes_one_visible_read_only_session(tmp_path: Path) -
         finally:
             db.close()
 
-        store.delete_app(definition.app_id)
+        store.delete_app(manifest.id)
         db = SessionDB(db_path=paths.hermes_home / "state.db")
         try:
             assert db.session_count(source="app", min_message_count=1) == 0
         finally:
             db.close()
-        assert not paths.app_artifacts(definition.app_id).exists()
+        assert not paths.app_artifacts(manifest.id).exists()
+    finally:
+        store.close()
+
+
+def test_completed_run_without_artifact_still_publishes_activity_session(
+    tmp_path: Path,
+) -> None:
+    _definition, manifest = _manifest(tmp_path)
+    paths = AppPaths(tmp_path / "profile")
+    store = AppActivityStore(paths)
+    try:
+        session_id = store.record_run_started(
+            manifest, "run-without-artifact", "snapshot", {"refresh": True}
+        )
+        store.record_run_finished(
+            "run-without-artifact",
+            "completed",
+            result={"summary": "行情已刷新"},
+        )
+
+        timeline = store.get_session(session_id)
+        assert timeline["artifacts"] == []
+        assert timeline["runs"][0]["status"] == "completed"
+
+        db = SessionDB(db_path=paths.hermes_home / "state.db")
+        try:
+            sessions = db.list_sessions_rich(
+                source="app",
+                min_message_count=1,
+                limit=20,
+            )
+            assert [(row["id"], row["source"]) for row in sessions] == [
+                (session_id, "app")
+            ]
+        finally:
+            db.close()
     finally:
         store.close()
 
 
 def test_artifacts_require_completed_runs_and_static_html(tmp_path: Path) -> None:
-    _definition, manifest = _manifest()
+    _definition, manifest = _manifest(tmp_path)
     store = AppActivityStore(AppPaths(tmp_path / "profile"))
     try:
         store.record_run_started(manifest, "run-1", "snapshot", {})
@@ -143,7 +175,7 @@ def test_artifacts_require_completed_runs_and_static_html(tmp_path: Path) -> Non
 
 
 def test_activity_session_identity_is_stable_and_profile_scoped(tmp_path: Path) -> None:
-    _definition, manifest = _manifest()
+    _definition, manifest = _manifest(tmp_path)
     first = AppActivityStore(AppPaths(tmp_path / "profiles" / "first"))
     second = AppActivityStore(AppPaths(tmp_path / "profiles" / "second"))
     try:
@@ -199,46 +231,19 @@ def test_activity_store_migrates_legacy_artifacts_to_versioned_records(
     assert "app_version" in columns
 
 
-def test_apphost_artifact_publication_is_bound_to_runtime_session(
-    monkeypatch,
-    tmp_path: Path,
-) -> None:
-    definition, manifest = _manifest()
+def test_apphost_artifact_publication_is_bound_to_runtime_session(tmp_path: Path) -> None:
+    definition, manifest = _manifest(tmp_path)
     paths = AppPaths(tmp_path / "profile")
     activity = AppActivityStore(paths)
     auth = RuntimeAuth()
     origin = "http://127.0.0.1:49182"
-    monkeypatch.setattr(
-        "hermes_cli.finance_watchlist.get_watchlist_snapshot_cached",
-        lambda *, auto_refresh=True: {
-            "ok": True,
-            "source": "mx-ds-mcp",
-            "status": "ready",
-            "indices": [],
-            "items": [],
-            "sectors": [],
-            "summary": {
-                "total": 0,
-                "priced": 0,
-                "rising": 0,
-                "falling": 0,
-                "flat": 0,
-                "main_net_flow_yi": 0,
-                "strongest_sector": None,
-                "weakest_sector": None,
-                "headline": "暂无自选股",
-            },
-            "gaps": [],
-        },
-    )
-    services = watchlist_service_registry(
-        app_id=WATCHLIST_APP_ID,
-        app_data=tmp_path / "data",
-        inherited_handlers=WATCHLIST_SERVICE_HANDLERS,
+    services = ServiceActionRegistry(
+        {"test.snapshot": lambda _input, _context: {"ok": True}},
+        context=ServiceContext(app_id=manifest.id, app_data=tmp_path / "data"),
     )
     app = create_apphost_app(
         manifest,
-        definition.root,
+        definition,
         manifest.permissions,
         expected_origin=origin,
         runtime_auth=auth,
