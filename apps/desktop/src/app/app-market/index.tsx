@@ -17,12 +17,13 @@ import type { AppImportPlan } from '@/global'
 import {
   cancelHubAppOperation,
   getHubAppOperation,
-  listHubAppCategories,
-  listHubApps,
-  startHubAppInstall,
+  getHubAppPreviewDataUrl,
   type HubAppCategory,
   type HubAppOperation,
-  type HubAppSummary
+  type HubAppSummary,
+  listHubAppCategories,
+  listHubApps,
+  startHubAppInstall
 } from '@/hermes'
 import { launchAppInBrowser } from '@/lib/app-launch'
 import {
@@ -36,7 +37,8 @@ import {
   RefreshCw,
   Search,
   Trash2,
-  Upload
+  Upload,
+  ZoomIn
 } from '@/lib/icons'
 
 export interface AppSummary {
@@ -125,21 +127,71 @@ function selectedCategoryLabel(category: string, categories: HubAppCategory[]): 
   return category === 'all' ? '全部' : categoryLabel(category, categories)
 }
 
-function HubAppPreview({ app }: { app: HubAppSummary }) {
+interface HubPreviewSelection {
+  dataUrl: string
+  name: string
+}
+
+interface HubAppPreviewProps {
+  app: HubAppSummary
+  onOpen: (preview: HubPreviewSelection) => void
+}
+
+function HubAppPreview({ app, onOpen }: HubAppPreviewProps) {
+  const [dataUrl, setDataUrl] = useState<string | null>(null)
   const [unavailable, setUnavailable] = useState(false)
   const previewUrl = app.preview_image_url
 
-  useEffect(() => setUnavailable(false), [previewUrl])
+  useEffect(() => {
+    let cancelled = false
+
+    setDataUrl(null)
+    setUnavailable(false)
+
+    if (!previewUrl) {
+      return () => {
+        cancelled = true
+      }
+    }
+
+    void getHubAppPreviewDataUrl(app.id, app.version)
+      .then(url => {
+        if (!cancelled) {
+          setDataUrl(url)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setUnavailable(true)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [app.id, app.version, previewUrl])
 
   return (
     <div className="relative aspect-video overflow-hidden border-b border-(--ui-stroke-tertiary) bg-(--ui-bg-secondary)">
-      {previewUrl && !unavailable ? (
-        <img
-          alt={`${app.name} 预览图`}
-          className="size-full object-cover"
-          onError={() => setUnavailable(true)}
-          src={`/api/apps/hub/${encodeURIComponent(app.id)}/preview?version=${encodeURIComponent(app.version)}`}
-        />
+      {dataUrl && !unavailable ? (
+        <button
+          aria-label={`查看 ${app.name} 预览图`}
+          className="group/preview size-full cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
+          onClick={() => onOpen({ name: app.name, dataUrl })}
+          type="button"
+        >
+          <img
+            alt={`${app.name} 预览图`}
+            className="size-full object-cover transition-transform duration-200 group-hover/preview:scale-[1.03]"
+            onError={() => setUnavailable(true)}
+            src={dataUrl}
+          />
+          <span className="pointer-events-none absolute inset-0 grid place-items-center bg-black/40 text-xs font-medium text-white opacity-0 transition-opacity group-hover/preview:opacity-100 group-focus-visible/preview:opacity-100">
+            <span className="flex items-center gap-1.5 rounded-md bg-black/45 px-2.5 py-1.5 backdrop-blur-sm">
+              <ZoomIn className="size-3.5" /> 点击查看全图
+            </span>
+          </span>
+        </button>
       ) : (
         <div className="grid size-full place-items-center text-(--ui-text-tertiary)">
           <div className="grid size-11 place-items-center rounded-md border border-(--ui-stroke-secondary) bg-(--ui-bg-elevated) text-primary">
@@ -172,6 +224,7 @@ export function AppMarketView({ onCreateApp, onEditApp }: AppMarketViewProps) {
   const [hubOperation, setHubOperation] = useState<HubAppOperation | null>(null)
   const [hubRefreshEpoch, setHubRefreshEpoch] = useState(0)
   const [externalInstallNotice, setExternalInstallNotice] = useState<string | null>(null)
+  const [hubPreview, setHubPreview] = useState<HubPreviewSelection | null>(null)
 
   async function loadApps() {
     setLoading(true)
@@ -503,7 +556,7 @@ export function AppMarketView({ onCreateApp, onEditApp }: AppMarketViewProps) {
                     className="group flex min-w-0 flex-col overflow-hidden rounded-md border border-(--ui-stroke-tertiary) bg-(--ui-bg-elevated) shadow-sm transition-colors hover:border-primary/30"
                     key={app.id}
                   >
-                    <HubAppPreview app={app} />
+                    <HubAppPreview app={app} onOpen={setHubPreview} />
                     <div className="flex flex-1 flex-col p-3.5">
                       <div className="flex items-start gap-2.5">
                         <div className="grid size-9 shrink-0 place-items-center overflow-hidden rounded-md bg-primary/10 text-primary">
@@ -688,6 +741,24 @@ export function AppMarketView({ onCreateApp, onEditApp }: AppMarketViewProps) {
           </div>
         )}
       </main>
+
+      <Dialog onOpenChange={open => !open && setHubPreview(null)} open={Boolean(hubPreview)}>
+        <DialogContent className="flex h-[min(80vh,52rem)] max-h-[90vh] max-w-[90vw] flex-col gap-0 overflow-hidden p-0">
+          <DialogHeader className="shrink-0 border-b border-(--ui-stroke-tertiary) px-5 py-4 pr-12">
+            <DialogTitle>{hubPreview?.name} · 应用预览</DialogTitle>
+            <DialogDescription>滚动查看完整预览图</DialogDescription>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 touch-pan-y overflow-auto overscroll-contain bg-(--ui-bg-secondary) p-4">
+            {hubPreview && (
+              <img
+                alt={`${hubPreview.name} 完整预览图`}
+                className="mx-auto block h-auto max-w-full rounded-md border border-(--ui-stroke-tertiary) bg-(--ui-bg-elevated) shadow-sm"
+                src={hubPreview.dataUrl}
+              />
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog onOpenChange={open => !open && void discardImport()} open={Boolean(importPlan)}>
         <DialogContent className="max-w-md">

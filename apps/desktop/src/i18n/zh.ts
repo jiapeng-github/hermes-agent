@@ -47,9 +47,9 @@ export const zh: Translations = {
 
   account: {
     brand: 'StockSense',
-    subtitle: '专业股票分析智能体',
+    subtitle: '您的金融决策辅助助手',
     loginTitle: '登录 StockSense',
-    loginSubtitle: '使用手机号登录或注册账号',
+    loginSubtitle: '登录后使用数据与工具辅助研究和决策',
     initializing: '正在检查登录状态…',
     mobileLabel: '手机号码',
     mobilePlaceholder: '请输入 11 位手机号码',

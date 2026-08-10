@@ -1509,6 +1509,12 @@ export function listHubAppCategories(): Promise<HubAppCategoriesResponse> {
   })
 }
 
+// Packaged Electron renders from file://, so Hub preview images travel through
+// the narrow main-process media bridge rather than a renderer-relative /api URL.
+export function getHubAppPreviewDataUrl(appId: string, version: string): Promise<string> {
+  return window.hermesDesktop.apps.getHubPreviewDataUrl(appId, version, profileScoped().profile)
+}
+
 export function startHubAppInstall(appId: string, version?: string): Promise<HubAppOperation> {
   return window.hermesDesktop.api<HubAppOperation>({
     ...profileScoped(),

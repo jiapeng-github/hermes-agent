@@ -148,6 +148,36 @@ def _safe_remote_url(
     raise HubError("HUB_ARTIFACT_REJECTED", "中心制品下载地址不安全")
 
 
+def _resolve_artifact_download_url(value: str, base_url: str) -> str:
+    """Resolve a descriptor URL without permitting an insecure origin downgrade."""
+    parsed = urlparse(value)
+    base = urlparse(base_url)
+
+    # Hub implementations may return an origin- or path-relative descriptor URL.
+    # Only resolve truly relative values; a network-path reference (//host/path)
+    # remains subject to the normal remote URL safety check below.
+    if not parsed.scheme and not parsed.netloc:
+        return urljoin(f"{base_url}/", value)
+
+    # Older Hub deployments behind a TLS-terminating proxy can accidentally
+    # advertise their internal http scheme.  When the descriptor refers to the
+    # configured HTTPS Hub host, retain the configured HTTPS origin and only
+    # consume the signed descriptor's path and query.
+    if (
+        parsed.scheme == "http"
+        and base.scheme == "https"
+        and parsed.hostname == base.hostname
+    ):
+        return base._replace(
+            path=parsed.path,
+            params=parsed.params,
+            query=parsed.query,
+            fragment="",
+        ).geturl()
+
+    return value
+
+
 def _parse_timestamp(value: object) -> datetime | None:
     if not isinstance(value, str):
         return None
@@ -310,7 +340,9 @@ class HubClient:
                 "HUB_ARTIFACT_EXPIRED", "中心制品下载票据已过期", retryable=True
             )
         url = _safe_remote_url(
-            str(descriptor.get("download_url") or ""),
+            _resolve_artifact_download_url(
+                str(descriptor.get("download_url") or ""), self.config.base_url
+            ),
             allow_insecure_http=self.config.allow_insecure_http,
             allowed_http_host=urlparse(self.config.base_url).hostname,
         )

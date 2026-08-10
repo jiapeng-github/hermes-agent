@@ -92,6 +92,7 @@ declare global {
       api: <T>(request: HermesApiRequest) => Promise<T>
       apps: {
         openLaunchUrl: (url: string) => Promise<boolean>
+        getHubPreviewDataUrl: (appId: string, version: string, profile?: null | string) => Promise<string>
         selectAndAnalyzePackage: (profile?: null | string) => Promise<AppImportPlan | null>
         exportPackage: (
           appId: string,
