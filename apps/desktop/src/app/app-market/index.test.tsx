@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const launchHermesApp = vi.fn()
@@ -9,6 +9,7 @@ const listHubApps = vi.fn()
 const startHubAppInstall = vi.fn()
 const getHubAppOperation = vi.fn()
 const cancelHubAppOperation = vi.fn()
+const getHubAppPreviewDataUrl = vi.fn()
 
 vi.mock('@/hermes', () => ({
   launchHermesApp: (...args: unknown[]) => launchHermesApp(...args),
@@ -16,7 +17,8 @@ vi.mock('@/hermes', () => ({
   listHubApps: (...args: unknown[]) => listHubApps(...args),
   startHubAppInstall: (...args: unknown[]) => startHubAppInstall(...args),
   getHubAppOperation: (...args: unknown[]) => getHubAppOperation(...args),
-  cancelHubAppOperation: (...args: unknown[]) => cancelHubAppOperation(...args)
+  cancelHubAppOperation: (...args: unknown[]) => cancelHubAppOperation(...args),
+  getHubAppPreviewDataUrl: (...args: unknown[]) => getHubAppPreviewDataUrl(...args)
 }))
 
 import { AppMarketView } from './index'
@@ -64,12 +66,14 @@ describe('AppMarketView', () => {
     startHubAppInstall.mockReset()
     getHubAppOperation.mockReset()
     cancelHubAppOperation.mockReset()
+    getHubAppPreviewDataUrl.mockReset()
     api.mockResolvedValue({ items: installedApps, next_cursor: null })
     listHubAppCategories.mockResolvedValue({
       items: [{ id: 'finance', name: '金融' }],
       cache_state: 'fresh'
     })
     listHubApps.mockResolvedValue({ items: [], installed: {}, cache_state: 'fresh' })
+    getHubAppPreviewDataUrl.mockResolvedValue('data:image/webp;base64,cHJldmlldw==')
     window.hermesDesktop = {
       api,
       apps: { exportPackage, openLaunchUrl, selectAndAnalyzePackage }
@@ -175,12 +179,44 @@ describe('AppMarketView', () => {
     fireEvent.click(screen.getByRole('button', { name: '应用中心' }))
 
     expect(await screen.findByRole('button', { name: '更新' })).toBeTruthy()
-    expect(screen.getByRole('img', { name: '自选股盯盘看板 预览图' })).toBeTruthy()
+    expect((await screen.findByRole('img', { name: '自选股盯盘看板 预览图' })).getAttribute('src')).toBe(
+      'data:image/webp;base64,cHJldmlldw=='
+    )
+    expect(getHubAppPreviewDataUrl).toHaveBeenCalledWith('ai.stocksense.watchlist', '1.1.0')
     fireEvent.click(screen.getByRole('button', { name: '更新' }))
 
     await waitFor(() => expect(startHubAppInstall).toHaveBeenCalledWith('ai.stocksense.watchlist', '1.1.0'))
     expect(await screen.findByText('正在准备应用安装')).toBeTruthy()
     expect(screen.getByLabelText('安装进度')).toBeTruthy()
+  })
+
+  it('opens a scrollable full-size preview when a hub preview image is clicked', async () => {
+    listHubApps.mockResolvedValue({
+      items: [
+        {
+          id: 'ai.stocksense.watchlist',
+          name: '自选股盯盘看板',
+          summary: 'A 股自选股盯盘应用',
+          version: '1.1.0',
+          category: 'finance',
+          preview_image_url: 'https://www.stocksense.work/previews/watchlist.webp'
+        }
+      ],
+      installed: {},
+      cache_state: 'fresh'
+    })
+    render(<AppMarketView onCreateApp={vi.fn()} onEditApp={vi.fn()} />)
+
+    await screen.findByText('自选股盯盘看板')
+    fireEvent.click(screen.getByRole('button', { name: '应用中心' }))
+    fireEvent.click(await screen.findByRole('button', { name: '查看 自选股盯盘看板 预览图' }))
+
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('自选股盯盘看板 · 应用预览')).toBeTruthy()
+    expect(within(dialog).getByText('滚动查看完整预览图')).toBeTruthy()
+    expect(within(dialog).getByRole('img', { name: '自选股盯盘看板 完整预览图' }).getAttribute('src')).toBe(
+      'data:image/webp;base64,cHJldmlldw=='
+    )
   })
 
   it('loads hub categories and passes the selected category code to the hub list', async () => {

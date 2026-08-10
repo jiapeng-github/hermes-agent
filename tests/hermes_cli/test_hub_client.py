@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+from dataclasses import replace
 from pathlib import Path
 
 import httpx
@@ -114,6 +115,73 @@ def test_artifact_download_requires_valid_signature_and_digest(tmp_path: Path):
     }
     with pytest.raises(HubError, match="签名"):
         client.download_artifact(descriptor, tmp_path / "other.zip")
+
+
+def test_artifact_download_resolves_relative_url_against_configured_hub(tmp_path: Path):
+    private_key = Ed25519PrivateKey.generate()
+    content = b"hub bundle"
+    descriptor = _descriptor(private_key, content)
+    descriptor["download_url"] = "/app-api/hub/v1/artifacts/example.zip"
+    requests: list[httpx.Request] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, content=content, request=request)
+
+    client = HubClient(
+        replace(_config(private_key), base_url="https://hub.example/app-api/hub/v1"),
+        cache=HubCache(tmp_path / "cache"),
+        client=httpx.Client(transport=httpx.MockTransport(handle)),
+    )
+
+    client.download_artifact(descriptor, tmp_path / "artifact.zip")
+
+    assert str(requests[0].url) == "https://hub.example/app-api/hub/v1/artifacts/example.zip"
+
+
+def test_artifact_download_repairs_legacy_same_origin_http_url(tmp_path: Path):
+    private_key = Ed25519PrivateKey.generate()
+    content = b"hub bundle"
+    descriptor = _descriptor(private_key, content)
+    descriptor["download_url"] = (
+        "http://hub.example:48080/app-api/hub/v1/artifacts/example.zip?token=legacy"
+    )
+    requests: list[httpx.Request] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, content=content, request=request)
+
+    client = HubClient(
+        replace(_config(private_key), base_url="https://hub.example/app-api/hub/v1"),
+        cache=HubCache(tmp_path / "cache"),
+        client=httpx.Client(transport=httpx.MockTransport(handle)),
+    )
+
+    client.download_artifact(descriptor, tmp_path / "artifact.zip")
+
+    assert str(requests[0].url) == (
+        "https://hub.example/app-api/hub/v1/artifacts/example.zip?token=legacy"
+    )
+
+
+def test_artifact_download_rejects_network_path_url(tmp_path: Path):
+    private_key = Ed25519PrivateKey.generate()
+    descriptor = _descriptor(private_key, b"hub bundle")
+    descriptor["download_url"] = "//untrusted.example/artifacts/example.zip"
+
+    client = HubClient(
+        replace(_config(private_key), base_url="https://hub.example/app-api/hub/v1"),
+        cache=HubCache(tmp_path / "cache"),
+        client=httpx.Client(
+            transport=httpx.MockTransport(
+                lambda request: pytest.fail("unexpected artifact request")
+            )
+        ),
+    )
+
+    with pytest.raises(HubError, match="地址不安全"):
+        client.download_artifact(descriptor, tmp_path / "artifact.zip")
 
 
 def test_hub_config_ignores_invalid_numeric_values():

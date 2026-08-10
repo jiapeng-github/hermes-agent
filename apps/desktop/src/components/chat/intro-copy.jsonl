@@ -68,8 +68,8 @@
 {"personality":"hype","headline":"New session, infinite W's","body":"Bring the gnarliest bug you've got. I'll read, patch, test, commit like my life depends on it. LET'S GO."}
 {"personality":"hype","headline":"ABSOLUTELY DIALED IN","body":"Describe the task. I'll blitz through files, crush failing tests, and leave a commit that SLAPS. Go go go."}
 {"personality":"hype","headline":"Ready. So ready. Too ready.","body":"Tiny typo or huge refactor - doesn't matter. I'm shipping clean code today. Name the task and let's WORK."}
-{"personality":"none","headline":"股票智能体已就绪。","body":"输入股票代码、公司名称或投资问题，我会帮你梳理行情、财务、估值、消息面和风险线索。"}
-{"personality":"none","headline":"今天关注哪只股票？","body":"告诉我标的、行业或持仓，我会从基本面、技术面、资金情绪和催化因素拆解分析。"}
-{"personality":"none","headline":"从一个投资问题开始。","body":"贴入新闻、公告、财报片段或你的判断，我会提炼关键变量、验证逻辑并提示不确定性。"}
-{"personality":"none","headline":"准备开始市场研究。","body":"输入 AAPL、TSLA、贵州茅台，或直接问“这家公司值不值得看”，我会给出结构化分析路径。"}
-{"personality":"none","headline":"你的股票研究工作台。","body":"给我一个标的或组合目标，我会协助比较估值、跟踪风险、整理结论，并说明需要继续核实的数据。"}
+{"personality":"none","headline":"金融决策辅助已就绪。","body":"输入股票代码、公司名称或投资问题，我会协助整理可获取的行情、财务、估值、消息和风险信息，供你自行判断。"}
+{"personality":"none","headline":"今天关注哪只股票？","body":"告诉我标的、行业或持仓，我会协助梳理可获取的数据、关注要点和待核实的问题。"}
+{"personality":"none","headline":"从一个研究问题开始。","body":"贴入新闻、公告、财报片段或你的判断，我会协助提炼关键信息、可能影响因素和不确定性。"}
+{"personality":"none","headline":"准备开始市场研究。","body":"输入股票代码或公司名称，我会建议可继续查阅的数据与问题，不替代你的独立判断。"}
+{"personality":"none","headline":"你的金融决策辅助助手。","body":"给我一个标的或组合目标，我会协助整理信息与风险线索；相关内容仅供参考，不构成投资建议。"}

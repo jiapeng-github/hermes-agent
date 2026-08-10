@@ -75,6 +75,8 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
   api: request => ipcRenderer.invoke('hermes:api', request),
   apps: {
     openLaunchUrl: url => ipcRenderer.invoke('hermes:apps:open', url),
+    getHubPreviewDataUrl: (appId, version, profile) =>
+      ipcRenderer.invoke('hermes:apps:hub-preview', appId, version, profile),
     selectAndAnalyzePackage: profile => ipcRenderer.invoke('hermes:apps:import:select', profile),
     exportPackage: (appId, options, profile) => ipcRenderer.invoke('hermes:apps:export', appId, options, profile)
   },

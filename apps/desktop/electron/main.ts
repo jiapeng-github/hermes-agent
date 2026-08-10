@@ -126,6 +126,7 @@ import {
   resolveTimeoutMs,
   TEXT_PREVIEW_SOURCE_MAX_BYTES
 } from './hardening'
+import { hubAppPreviewDataUrl, hubAppPreviewPath, MAX_HUB_APP_PREVIEW_BYTES } from './hub-app-preview'
 import { createLinkTitleWindow, guardLinkTitleSession, readLinkTitleWindowTitle } from './link-title-window'
 import { ensureMainWindow } from './main-window-lifecycle'
 import {
@@ -4877,6 +4878,100 @@ function fetchJson(url, token, options: any = {}) {
   })
 }
 
+const HUB_APP_PREVIEW_TIMEOUT_MS = 45_000
+
+// Hub previews are image bytes rather than JSON. Keep this as a dedicated
+// fetcher instead of widening the renderer's API capability into an arbitrary
+// authenticated request proxy.
+function fetchBinary(url, token, options: any = {}) {
+  return new Promise<{ contentType: string; bytes: Buffer }>((resolve, reject) => {
+    let parsed
+
+    try {
+      parsed = new URL(url)
+    } catch (error) {
+      reject(new Error(`Invalid URL: ${error.message}`))
+
+      return
+    }
+
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      reject(new Error(`Unsupported Hermes backend URL protocol: ${parsed.protocol}`))
+
+      return
+    }
+
+    const client = parsed.protocol === 'https:' ? https : http
+    const timeoutMs = resolveTimeoutMs(options.timeoutMs, DEFAULT_FETCH_TIMEOUT_MS)
+    let settled = false
+    const finish = (error?: Error, response?: { contentType: string; bytes: Buffer }) => {
+      if (settled) {
+        return
+      }
+      settled = true
+      if (error) {
+        reject(error)
+      } else if (response) {
+        resolve(response)
+      }
+    }
+
+    const req = client.request(
+      parsed,
+      {
+        method: 'GET',
+        headers: {
+          Accept: 'image/avif,image/gif,image/jpeg,image/png,image/svg+xml,image/webp',
+          'X-Hermes-Session-Token': token
+        }
+      },
+      res => {
+        const chunks: Buffer[] = []
+        let length = 0
+        const statusCode = res.statusCode || 500
+
+        res.on('error', error => finish(error instanceof Error ? error : new Error(String(error))))
+        res.on('data', chunk => {
+          if (settled) {
+            return
+          }
+          const buffer = Buffer.from(chunk)
+          length += buffer.length
+          if (length > MAX_HUB_APP_PREVIEW_BYTES) {
+            req.destroy()
+            finish(new Error(`Hub preview exceeds the ${MAX_HUB_APP_PREVIEW_BYTES} byte limit.`))
+
+            return
+          }
+          chunks.push(buffer)
+        })
+        res.on('end', () => {
+          if (settled) {
+            return
+          }
+          const bytes = Buffer.concat(chunks)
+          if (statusCode >= 400) {
+            finish(new Error(`${statusCode}: ${bytes.toString('utf8') || res.statusMessage || ''}`))
+
+            return
+          }
+          finish(undefined, {
+            contentType: String(res.headers['content-type'] || ''),
+            bytes
+          })
+        })
+      }
+    )
+
+    req.on('error', error => finish(error instanceof Error ? error : new Error(String(error))))
+    req.setTimeout(timeoutMs, () => {
+      req.destroy()
+      finish(new Error(`Timed out connecting to Hermes backend after ${timeoutMs}ms`))
+    })
+    req.end()
+  })
+}
+
 function fetchPublicJson(url, options: any = {}) {
   // Credential-free JSON GET/POST for public gateway endpoints
   // (``/api/status``, ``/api/auth/providers``). Unlike ``fetchJson`` it sends
@@ -6664,6 +6759,111 @@ function fetchJsonViaOauthSession(url, options: any = {}) {
       request.write(body)
     }
 
+    request.end()
+  })
+}
+
+// OAuth-gated Gateways keep their credential in Electron's cookie partition,
+// so binary preview requests must use the same transport as JSON requests.
+function fetchBinaryViaOauthSession(url, options: any = {}) {
+  return new Promise<{ contentType: string; bytes: Buffer }>((resolve, reject) => {
+    const sess = getOauthSession()
+
+    if (!sess) {
+      reject(new Error('OAuth session partition is unavailable.'))
+
+      return
+    }
+
+    let parsed
+
+    try {
+      parsed = new URL(url)
+    } catch (error) {
+      reject(new Error(`Invalid URL: ${error.message}`))
+
+      return
+    }
+
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      reject(new Error(`Unsupported Hermes backend URL protocol: ${parsed.protocol}`))
+
+      return
+    }
+
+    const timeoutMs = resolveTimeoutMs(options.timeoutMs, DEFAULT_FETCH_TIMEOUT_MS)
+    const request = electronNet.request({
+      method: 'GET',
+      url,
+      session: sess,
+      useSessionCookies: true,
+      redirect: 'follow'
+    } as any)
+    request.setHeader('Accept', 'image/avif,image/gif,image/jpeg,image/png,image/svg+xml,image/webp')
+
+    let settled = false
+    const finish = (error?: Error, response?: { contentType: string; bytes: Buffer }) => {
+      if (settled) {
+        return
+      }
+      settled = true
+      clearTimeout(timer)
+      if (error) {
+        reject(error)
+      } else if (response) {
+        resolve(response)
+      }
+    }
+    const timer = setTimeout(() => {
+      try {
+        request.abort()
+      } catch {
+        // already finished
+      }
+      finish(new Error(`Timed out connecting to Hermes backend after ${timeoutMs}ms`))
+    }, timeoutMs)
+
+    request.on('response', res => {
+      const chunks: Buffer[] = []
+      let length = 0
+      const statusCode = res.statusCode || 500
+
+      res.on('data', chunk => {
+        if (settled) {
+          return
+        }
+        const buffer = Buffer.from(chunk)
+        length += buffer.length
+        if (length > MAX_HUB_APP_PREVIEW_BYTES) {
+          try {
+            request.abort()
+          } catch {
+            // already finished
+          }
+          finish(new Error(`Hub preview exceeds the ${MAX_HUB_APP_PREVIEW_BYTES} byte limit.`))
+
+          return
+        }
+        chunks.push(buffer)
+      })
+      res.on('error', error => finish(error instanceof Error ? error : new Error(String(error))))
+      res.on('end', () => {
+        if (settled) {
+          return
+        }
+        const bytes = Buffer.concat(chunks)
+        if (statusCode >= 400) {
+          finish(new Error(`${statusCode}: ${bytes.toString('utf8') || ''}`))
+
+          return
+        }
+        finish(undefined, {
+          contentType: String(res.headers['content-type'] || res.headers['Content-Type'] || ''),
+          bytes
+        })
+      })
+    })
+    request.on('error', error => finish(error instanceof Error ? error : new Error(String(error))))
     request.end()
   })
 }
@@ -10227,6 +10427,32 @@ ipcMain.handle('hermes:api', async (_event, rawRequest) => {
   })
 
   return scopeApiResponseToAccountProfile(request, response, allowedProfile)
+})
+
+// The renderer is served from file:// in packaged builds, so a relative
+// `/api/...` preview URL cannot reach the local Gateway. Keep the fix narrow:
+// it can fetch only a validated Hub preview route and returns inert image data.
+ipcMain.handle('hermes:apps:hub-preview', async (_event, appId, version, profile) => {
+  stockSenseAccountManager.assertBackendAccess()
+  const allowedProfile = stockSenseAccountManager.allowedProfile()
+  const request = scopeApiRequestToAccountProfile(
+    {
+      path: hubAppPreviewPath(appId, version),
+      profile: typeof profile === 'string' && profile.trim() ? profile : undefined
+    },
+    allowedProfile
+  ) as { path: string; profile?: string }
+  const connection = await ensureBackend(request.profile)
+  const requestPath = pathWithGlobalRemoteProfile(request.path, request.profile, {
+    globalRemote: globalRemoteActive(),
+    profileRemoteOverride: profileHasRemoteOverride(request.profile)
+  })
+  const url = `${connection.baseUrl}${requestPath}`
+  const preview = await (connection.authMode === 'oauth'
+    ? fetchBinaryViaOauthSession(url, { timeoutMs: HUB_APP_PREVIEW_TIMEOUT_MS })
+    : fetchBinary(url, connection.token, { timeoutMs: HUB_APP_PREVIEW_TIMEOUT_MS }))
+
+  return hubAppPreviewDataUrl(preview.contentType, preview.bytes)
 })
 
 ipcMain.handle('hermes:apps:import:select', async (_event, profile) => {
