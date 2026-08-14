@@ -66,7 +66,7 @@ function renderGate() {
   )
 }
 
-describe('StockSense account gate', () => {
+describe('Finance Mate account gate', () => {
   beforeEach(() => {
     resetAccountStoreForTest()
   })
@@ -83,8 +83,8 @@ describe('StockSense account gate', () => {
     renderGate()
 
     expect(await screen.findByText('登录 / 注册')).toBeTruthy()
-    expect(screen.getByRole('heading', { name: '登录 StockSense' })).toBeTruthy()
-    expect(screen.getByRole('img', { name: 'StockSense Logo' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: '登录 Finance Mate' })).toBeTruthy()
+    expect(screen.getByRole('img', { name: 'Finance Mate Logo' })).toBeTruthy()
     expect(screen.getByLabelText('手机号码').parentElement?.className).toContain('bg-white')
     expect(screen.getByLabelText('短信验证码').parentElement?.className).toContain('bg-white')
     expect(screen.queryByText('股票工作区')).toBeNull()

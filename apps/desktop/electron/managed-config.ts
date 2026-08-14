@@ -251,7 +251,7 @@ export function materializeStockSenseRuntimeManagedConfig(
         api: String(inferenceBaseUrl || service.inferenceBaseUrl).replace(/\/+$/, ''),
         discover_models: true,
         key_env: 'STOCKSENSE_MODEL_API_KEY',
-        name: 'StockSense 积分模型',
+        name: 'Finance Mate 积分模型',
         transport: 'openai_chat'
       }
     }

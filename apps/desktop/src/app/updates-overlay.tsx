@@ -252,7 +252,7 @@ function IdleView({
         <DialogTitle className="text-center text-xl">{title}</DialogTitle>
         <DialogDescription className="text-center text-sm">{body}</DialogDescription>
         {target === 'client' && status.releaseVersion ? (
-          <p className="text-xs font-medium text-muted-foreground">StockSense {status.releaseVersion}</p>
+          <p className="text-xs font-medium text-muted-foreground">Finance Mate {status.releaseVersion}</p>
         ) : null}
       </div>
 

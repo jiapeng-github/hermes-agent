@@ -166,7 +166,7 @@ function AccountLoginView() {
               src={stockSenseLogo}
             />
             <div className="mt-5 text-[2rem] font-semibold leading-tight text-[#111a2d] md:mt-7 md:text-[2.25rem]">
-              {copy.brand.toUpperCase()}
+              {copy.brand}
             </div>
             <p className="mt-3 text-sm leading-6 text-[#7b8495] md:text-base">{copy.subtitle}</p>
           </div>

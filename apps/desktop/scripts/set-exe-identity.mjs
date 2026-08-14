@@ -62,8 +62,8 @@ async function stampExeIdentity(exe, desktopRoot = resolve(import.meta.dirname, 
   await rcedit(exe, {
     icon,
     'version-string': {
-      ProductName: 'StockSense',
-      FileDescription: 'StockSense',
+      ProductName: 'Finance Mate',
+      FileDescription: 'Finance Mate',
       CompanyName: 'Nous Research',
       LegalCopyright: 'Copyright (c) 2026 Nous Research'
     }

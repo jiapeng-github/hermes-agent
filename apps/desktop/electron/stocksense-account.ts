@@ -265,7 +265,7 @@ function normalizeError(error: unknown): StockSenseAccountError {
 
   return new StockSenseAccountError(
     'ACCOUNT_NETWORK_ERROR',
-    error instanceof Error && error.message ? error.message : '无法连接 StockSense 账号服务。',
+    error instanceof Error && error.message ? error.message : '无法连接 Finance Mate 账号服务。',
     { retryable: true }
   )
 }
@@ -339,7 +339,7 @@ export function createStockSenseAccountManager(options: AccountManagerOptions) {
     if (!encryptionAvailable()) {
       throw new StockSenseAccountError(
         'SECURE_STORAGE_UNAVAILABLE',
-        '系统安全存储不可用，StockSense 无法保存登录凭据。请启用系统钥匙串或凭据管理器后重试。'
+        '系统安全存储不可用，Finance Mate 无法保存登录凭据。请启用系统钥匙串或凭据管理器后重试。'
       )
     }
 
@@ -561,7 +561,7 @@ export function createStockSenseAccountManager(options: AccountManagerOptions) {
     if (!encryptionAvailable()) {
       return statusFromSession(null, {
         code: 'SECURE_STORAGE_UNAVAILABLE',
-        message: '系统安全存储不可用，无法安全登录 StockSense。',
+        message: '系统安全存储不可用，无法安全登录 Finance Mate。',
         retryAfterSeconds: null,
         retryable: false
       })
@@ -640,7 +640,7 @@ export function createStockSenseAccountManager(options: AccountManagerOptions) {
       const session = readSession()
 
       if (!session || session.accessTokenExpiresAt <= Date.now() + TOKEN_EXPIRY_SKEW_MS) {
-        throw new StockSenseAccountError('ACCOUNT_SIGN_IN_REQUIRED', '请先登录 StockSense 账号。')
+        throw new StockSenseAccountError('ACCOUNT_SIGN_IN_REQUIRED', '请先登录 Finance Mate 账号。')
       }
 
       const requested = String(profile || session.profile).trim() || session.profile

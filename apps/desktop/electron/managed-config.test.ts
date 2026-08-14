@@ -82,7 +82,7 @@ test('materializes the StockSense model provider without writing its API key', (
       api: 'https://inference.example/v1',
       discover_models: true,
       key_env: 'STOCKSENSE_MODEL_API_KEY',
-      name: 'StockSense 积分模型',
+      name: 'Finance Mate 积分模型',
       transport: 'openai_chat'
     })
     assert.equal(JSON.stringify(materialized).includes('apiKey'), false)

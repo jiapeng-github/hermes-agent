@@ -29,7 +29,7 @@ function accountBridge() {
   const bridge = window.hermesDesktop?.account
 
   if (!bridge) {
-    throw new Error('StockSense account bridge is unavailable.')
+    throw new Error('Finance Mate account bridge is unavailable.')
   }
 
   return bridge

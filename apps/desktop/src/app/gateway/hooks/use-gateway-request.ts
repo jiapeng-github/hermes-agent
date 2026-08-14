@@ -99,7 +99,7 @@ export function useGatewayRequest() {
       const gateway = gatewayRef.current
 
       if (!gateway) {
-        throw new Error('StockSense gateway unavailable')
+        throw new Error('Finance Mate gateway unavailable')
       }
 
       try {
