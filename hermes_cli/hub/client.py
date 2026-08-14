@@ -301,14 +301,28 @@ class HubClient:
         return self._catalog_get("/categories", {"type": kind})
 
     def get_app(
-        self, hub_app_id: str, *, version: str | None = None
+        self,
+        hub_app_id: str,
+        *,
+        version: str | None = None,
+        force_refresh: bool = False,
     ) -> HubResponse:
         self._require_enabled()
         params: dict[str, str | int | bool | None] = {
             "channel": self.config.channel,
             "version": version,
         }
-        return self._catalog_get(f"/apps/{quote(hub_app_id, safe='')}", params)
+        return self._catalog_get(
+            f"/apps/{quote(hub_app_id, safe='')}",
+            params,
+            force_refresh=force_refresh,
+        )
+
+    def refresh_app(
+        self, hub_app_id: str, *, version: str | None = None
+    ) -> HubResponse:
+        """Fetch fresh app metadata, bypassing the local catalog cache."""
+        return self.get_app(hub_app_id, version=version, force_refresh=True)
 
     def resolve_app(
         self, hub_app_id: str, *, version: str | None = None
@@ -472,6 +486,8 @@ class HubClient:
         self,
         path: str,
         params: Mapping[str, str | int | bool | None],
+        *,
+        force_refresh: bool = False,
     ) -> HubResponse:
         filtered = {
             key: str(value).lower() if isinstance(value, bool) else str(value)
@@ -483,12 +499,12 @@ class HubClient:
             f"{key}={filtered[key]}" for key in sorted(filtered)
         )
         cached = self.cache.read(cache_key)
-        if cached and self._fresh_cache(cached):
+        if cached and not force_refresh and self._fresh_cache(cached):
             return HubResponse(
                 cached["payload"], "fresh", cached.get("stored_at")
             )
         headers = self._headers()
-        if cached and isinstance(cached.get("etag"), str):
+        if cached and not force_refresh and isinstance(cached.get("etag"), str):
             headers["If-None-Match"] = cached["etag"]
         try:
             response = self._client.get(

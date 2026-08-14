@@ -59,3 +59,38 @@ def test_hub_preview_image_is_resolved_through_the_local_hub_client() -> None:
 
     assert content == b"preview"
     assert content_type == "image/webp"
+
+
+def test_hub_preview_refreshes_metadata_before_fetching_a_signed_image() -> None:
+    from hermes_cli.apps.hub import AppHubOperations
+
+    calls: list[str] = []
+
+    class PreviewAppClient:
+        def get_app(self, app_id: str, *, version: str | None = None):
+            raise AssertionError("preview loading should use refresh_app")
+
+        def refresh_app(self, app_id: str, *, version: str | None = None):
+            calls.append(f"refresh:{app_id}:{version}")
+            return SimpleNamespace(
+                data={
+                    "item": {
+                        "preview_image_url": "https://cdn.stocksense.work/previews/fresh.webp"
+                    }
+                }
+            )
+
+        def fetch_preview_image(self, value: str):
+            calls.append(f"fetch:{value}")
+            return b"fresh-preview", "image/webp"
+
+    content, content_type = AppHubOperations(client=PreviewAppClient()).get_preview_image(
+        "ai.stocksense.watchlist", version="1.0.0"
+    )
+
+    assert calls == [
+        "refresh:ai.stocksense.watchlist:1.0.0",
+        "fetch:https://cdn.stocksense.work/previews/fresh.webp",
+    ]
+    assert content == b"fresh-preview"
+    assert content_type == "image/webp"
