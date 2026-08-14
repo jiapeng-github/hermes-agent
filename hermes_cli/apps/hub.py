@@ -143,7 +143,18 @@ class AppHubOperations:
     def get_preview_image(
         self, hub_app_id: str, *, version: str | None = None
     ) -> tuple[bytes, str]:
-        detail = self.get_app(hub_app_id, version=version)
+        # Preview URLs are usually short-lived object-storage signatures. Always
+        # refresh app metadata before proxying the image so a local catalog cache
+        # cannot turn an otherwise healthy preview into a 503 after expiry.
+        refresh_app = getattr(self.client, "refresh_app", None)
+        try:
+            detail = (
+                self._app_response(refresh_app(hub_app_id, version=version))
+                if callable(refresh_app)
+                else self.get_app(hub_app_id, version=version)
+            )
+        except HubError as exc:
+            raise _hub_error(exc) from exc
         item = detail.get("item") if isinstance(detail.get("item"), dict) else detail
         preview_url = item.get("preview_image_url") if isinstance(item, dict) else None
         if not isinstance(preview_url, str) or not preview_url:
@@ -154,6 +165,11 @@ class AppHubOperations:
             return self.client.fetch_preview_image(preview_url)
         except HubError as exc:
             raise _hub_error(exc) from exc
+
+    def _app_response(self, response: Any) -> dict[str, Any]:
+        """Normalize a HubResponse-like value for preview metadata access."""
+        data = getattr(response, "data", response)
+        return data if isinstance(data, dict) else {}
 
     def start_install(
         self, hub_app_id: str, *, version: str | None = None
