@@ -21,7 +21,7 @@ export function scopeApiRequestToAccountProfile<T>(input: T, allowedProfile: str
     (requestPath === '/api/profiles/active' && method !== 'GET') ||
     (/^\/api\/profiles\/[^/]+$/.test(requestPath) && ['DELETE', 'PATCH', 'POST'].includes(method))
   ) {
-    throw new Error('账号模式下由 StockSense 管理 Profile，不能在桌面端创建、切换、重命名或删除。')
+    throw new Error('账号模式下由 Finance Mate 管理 Profile，不能在桌面端创建、切换、重命名或删除。')
   }
 
   const profilePathMatch = requestPath.match(/^\/api\/profiles\/([^/]+)(?:\/|$)/)

@@ -745,7 +745,7 @@ const BOOT_FAKE_STEP_MS = (() => {
   return Math.max(120, raw)
 })()
 
-const APP_NAME = process.env.HERMES_DESKTOP_APP_NAME || 'StockSense'
+const APP_NAME = process.env.HERMES_DESKTOP_APP_NAME || 'Finance Mate'
 const TITLEBAR_HEIGHT = 34
 const MACOS_TRAFFIC_LIGHTS_HEIGHT = 14
 
@@ -2968,7 +2968,7 @@ function configureDesktopAutoUpdater(release: ValidatedDesktopRelease) {
     autoUpdater.on('download-progress', progress => {
       emitUpdateProgress({
         stage: 'fetch',
-        message: `正在下载 StockSense 更新（${Math.round(progress.percent)}%）…`,
+        message: `正在下载 Finance Mate 更新（${Math.round(progress.percent)}%）…`,
         percent: progress.percent
       })
     })
@@ -2984,7 +2984,7 @@ function configureDesktopAutoUpdater(release: ValidatedDesktopRelease) {
       downloadedDesktopRelease = activeDesktopRelease
       emitUpdateProgress({
         stage: 'ready',
-        message: `StockSense ${event.version} 已下载，等待重启安装。`,
+        message: `Finance Mate ${event.version} 已下载，等待重启安装。`,
         percent: 100
       })
     })
@@ -3007,14 +3007,14 @@ async function downloadDesktopRelease(release: ValidatedDesktopRelease) {
 
   if (desktopReleaseDownload) {
     if (desktopReleaseDownload.version !== release.version) {
-      throw new Error(`StockSense ${desktopReleaseDownload.version} is already downloading.`)
+      throw new Error(`Finance Mate ${desktopReleaseDownload.version} is already downloading.`)
     }
 
     return desktopReleaseDownload.promise
   }
 
   const promise = (async () => {
-    emitUpdateProgress({ stage: 'fetch', message: '正在后台下载 StockSense 更新…', percent: 0 })
+    emitUpdateProgress({ stage: 'fetch', message: '正在后台下载 Finance Mate 更新…', percent: 0 })
 
     try {
       await autoUpdater.downloadUpdate()
@@ -3641,7 +3641,7 @@ async function applyDesktopReleaseUpdate(opts: { install?: boolean } = {}) {
     return {
       ok: true,
       openedExternal: true,
-      message: `已在浏览器中打开 StockSense ${activeDesktopRelease.version} 安装包。下载完成后运行安装包即可更新。`,
+      message: `已在浏览器中打开 Finance Mate ${activeDesktopRelease.version} 安装包。下载完成后运行安装包即可更新。`,
       releaseVersion: activeDesktopRelease.version
     }
   }
@@ -3678,13 +3678,13 @@ async function applyDesktopReleaseUpdate(opts: { install?: boolean } = {}) {
     }
 
     if (activeDesktopRelease) {
-      emitUpdateProgress({ stage: 'restart', message: '正在重启并安装 StockSense 更新…', percent: 100 })
+      emitUpdateProgress({ stage: 'restart', message: '正在重启并安装 Finance Mate 更新…', percent: 100 })
       autoUpdater.quitAndInstall(false, true)
 
       return { ok: true, handedOff: true }
     }
 
-    emitUpdateProgress({ stage: 'restart', message: 'Runtime 更新完成，正在重启 StockSense…', percent: 100 })
+    emitUpdateProgress({ stage: 'restart', message: 'Runtime 更新完成，正在重启 Finance Mate…', percent: 100 })
     isQuittingForHandoff = true
     app.relaunch()
     setTimeout(() => app.quit(), 250)
@@ -3702,7 +3702,7 @@ async function applyDesktopReleaseUpdate(opts: { install?: boolean } = {}) {
   return {
     ok: true,
     readyToInstall: true,
-    message: `StockSense ${version} 更新载荷已下载，重启后即可完成更新。`,
+    message: `Finance Mate ${version} 更新载荷已下载，重启后即可完成更新。`,
     releaseVersion: version
   }
 }
@@ -10094,7 +10094,7 @@ ipcMain.handle('hermes:profile:set', async (_event, name) => {
   const allowedProfile = stockSenseAccountManager.allowedProfile()
 
   if (allowedProfile && name !== allowedProfile) {
-    throw new Error('账号模式下由 StockSense 管理当前 Profile，不能切换到其他 Profile。')
+    throw new Error('账号模式下由 Finance Mate 管理当前 Profile，不能切换到其他 Profile。')
   }
 
   stockSenseAccountManager.assertBackendAccess(name)
@@ -10459,7 +10459,7 @@ ipcMain.handle('hermes:apps:import:select', async (_event, profile) => {
   const result = await dialog.showOpenDialog(mainWindow, {
     title: '导入应用',
     properties: ['openFile'],
-    filters: [{ name: 'StockSense 应用', extensions: ['happ'] }]
+    filters: [{ name: 'Finance Mate 应用', extensions: ['happ'] }]
   })
 
   if (result.canceled || result.filePaths.length !== 1) {
@@ -10479,7 +10479,7 @@ ipcMain.handle('hermes:apps:export', async (_event, appId, options = {}, profile
   const result = await dialog.showSaveDialog(mainWindow, {
     title: '导出应用',
     defaultPath: `${safeName}.happ`,
-    filters: [{ name: 'StockSense 应用', extensions: ['happ'] }]
+    filters: [{ name: 'Finance Mate 应用', extensions: ['happ'] }]
   })
 
   if (result.canceled || !result.filePath) {

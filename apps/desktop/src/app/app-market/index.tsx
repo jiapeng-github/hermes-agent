@@ -573,7 +573,7 @@ export function AppMarketView({ onCreateApp, onEditApp }: AppMarketViewProps) {
                         <div className="min-w-0 flex-1">
                           <h2 className="line-clamp-1 text-sm font-semibold text-foreground break-words">{app.name}</h2>
                           <p className="mt-0.5 truncate text-[0.6875rem] text-(--ui-text-tertiary)">
-                            {app.publisher || 'StockSense'}
+                            {app.publisher || 'Finance Mate'}
                           </p>
                         </div>
                       </div>

@@ -370,7 +370,7 @@ export function ChatView({
       }
 
       if (!gateway) {
-        throw new Error('StockSense gateway unavailable')
+        throw new Error('Finance Mate gateway unavailable')
       }
 
       return gateway.request<ModelOptionsResponse>('model.options', {
