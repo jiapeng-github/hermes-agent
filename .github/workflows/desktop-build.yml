@@ -42,6 +42,10 @@ jobs:
 
       - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
         with:
+          # Pin the lockfile-compatible version. Using "latest" picked uv
+          # 0.12.5 and rejected this lockfile's relative exclude-newer metadata
+          # under --locked; 0.11.21 validates the committed lockfile.
+          version: "0.11.21"
           enable-cache: true
           cache-dependency-glob: uv.lock
 
@@ -121,6 +125,8 @@ jobs:
 
       - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # v8.2.0
         with:
+          # Match the lockfile-compatible Windows lane above.
+          version: "0.11.21"
           enable-cache: true
           cache-dependency-glob: uv.lock
 
