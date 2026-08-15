@@ -190,7 +190,8 @@ const SIDEBAR_NAV: SidebarNavItem[] = [
     id: 'cron',
     label: '',
     icon: props => <Codicon name="clock" {...props} />,
-    route: CRON_ROUTE
+    route: CRON_ROUTE,
+    keybindActionId: 'nav.cron'
   },
   {
     id: 'skills',
@@ -211,13 +212,6 @@ const SIDEBAR_NAV: SidebarNavItem[] = [
     icon: props => <Codicon name="files" {...props} />,
     route: ARTIFACTS_ROUTE,
     keybindActionId: 'nav.artifacts'
-  },
-  {
-    id: 'cron',
-    label: '',
-    icon: props => <Codicon name="watch" {...props} />,
-    route: CRON_ROUTE,
-    keybindActionId: 'nav.cron'
   }
 ]
 
