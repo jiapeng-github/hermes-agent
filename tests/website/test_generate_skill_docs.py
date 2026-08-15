@@ -108,6 +108,14 @@ def test_box_drawing_detection_covers_common_chars(gen_module):
         assert ch in gen_module._BOX_DRAWING_CHARS, f"missing: {ch!r}"
 
 
+def test_void_html_tags_are_self_closed_for_mdx(gen_module):
+    body = "first<br>second<hr><img src=\"chart.png\"><br />"
+
+    result = gen_module.mdx_escape_body(body)
+
+    assert result == 'first<br />second<hr /><img src="chart.png" /><br />'
+
+
 def test_bundled_catalog_explains_missing_local_skills(gen_module):
     """The bundled catalog should explain how to restore a listed skill that
     was removed from the local profile's skills tree."""

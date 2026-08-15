@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router'
 
 import { type CommandCenterSection } from '@/app/command-center'
 import {
@@ -21,8 +21,10 @@ export function useOverlayRouting() {
   const settingsOpen = currentView === 'settings'
   const commandCenterOpen = currentView === 'command-center'
   const agentsOpen = currentView === 'agents'
+  const cronOpen = currentView === 'cron'
   const starmapOpen = currentView === 'starmap'
   const profilesOpen = currentView === 'profiles'
+  const webhooksOpen = currentView === 'webhooks'
   const chatOpen = currentView === 'chat'
   const overlayOpen = isOverlayView(currentView)
 
@@ -30,6 +32,7 @@ export function useOverlayRouting() {
   // so closing them returns there instead of bouncing to /.
   const returnPathRef = useRef(NEW_CHAT_ROUTE)
 
+  // eslint-disable-next-line no-restricted-syntax -- legitimate non-atom ref write (see eslint rule comment)
   useEffect(() => {
     if (!overlayOpen) {
       returnPathRef.current = `${location.pathname}${location.search}${location.hash}`
@@ -72,6 +75,7 @@ export function useOverlayRouting() {
     closeOverlayToPreviousRoute,
     commandCenterInitialSection,
     commandCenterOpen,
+    cronOpen,
     currentView,
     openAgents,
     openCommandCenterSection,
@@ -80,6 +84,7 @@ export function useOverlayRouting() {
     resetOverlayReturnRoute,
     settingsOpen,
     starmapOpen,
-    toggleCommandCenter
+    toggleCommandCenter,
+    webhooksOpen
   }
 }

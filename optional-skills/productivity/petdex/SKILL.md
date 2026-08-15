@@ -12,7 +12,7 @@ metadata:
     homepage: https://petdex.dev
 ---
 
-# Petdex Skill
+# Petdex — Animated Pet Mascots
 
 Browse, install, and select animated "pet" mascots from the public
 [petdex](https://github.com/crafter-station/petdex) gallery. An installed pet

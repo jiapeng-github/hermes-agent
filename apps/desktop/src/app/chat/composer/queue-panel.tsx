@@ -4,9 +4,9 @@ import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
 import { Tip } from '@/components/ui/tooltip'
 import { type Translations, useI18n } from '@/i18n'
-import { ArrowUp, iconSize, Pencil, Trash2 } from '@/lib/icons'
+import { CornerDownLeft, iconSize, Pencil, SteeringWheel, Trash2 } from '@/lib/icons'
 import { cn } from '@/lib/utils'
-import type { QueuedPromptEntry } from '@/store/composer-queue'
+import { isSteerableEntry, type QueuedPromptEntry } from '@/store/composer-queue'
 
 interface QueuePanelProps {
   busy: boolean
@@ -17,14 +17,27 @@ interface QueuePanelProps {
   /** Lift a park (explicit Stop/Esc halt) and let the queue flow again. */
   onResume: () => void
   onSendNow: (id: string) => void
+  /** Deliver an entry as a mid-turn redirect (no interrupt). Absent when the
+   *  host has no steer path — the affordance hides rather than dead-clicks. */
+  onSteerNow?: (id: string) => void
   /** True after an explicit halt: entries wait until resumed / sent / edited. */
   parked: boolean
 }
 
 const entryPreview = (entry: QueuedPromptEntry, c: Translations['composer']) =>
-  entry.text.trim() || (entry.attachments.length > 0 ? c.attachmentOnly : c.emptyTurn)
+  (entry.displayText ?? entry.text).trim() || (entry.attachments.length > 0 ? c.attachmentOnly : c.emptyTurn)
 
-export function QueuePanel({ busy, editingId, entries, onDelete, onEdit, onResume, onSendNow, parked }: QueuePanelProps) {
+export function QueuePanel({
+  busy,
+  editingId,
+  entries,
+  onDelete,
+  onEdit,
+  onResume,
+  onSendNow,
+  onSteerNow,
+  parked
+}: QueuePanelProps) {
   const { t } = useI18n()
   const c = t.composer
 
@@ -54,19 +67,16 @@ export function QueuePanel({ busy, editingId, entries, onDelete, onEdit, onResum
         ) : undefined
       }
       defaultCollapsed={!parked}
-      icon={
-        <Codicon
-          className="text-muted-foreground/70"
-          name={parked ? 'debug-pause' : 'layers'}
-          size="0.8rem"
-        />
-      }
+      icon={<Codicon className="text-muted-foreground/70" name={parked ? 'debug-pause' : 'layers'} size="0.8rem" />}
       key={parked ? 'parked' : 'flowing'}
       label={parked ? c.queuedPaused(entries.length) : c.queued(entries.length)}
     >
       {entries.map(entry => {
         const isEditing = editingId === entry.id
         const attachmentsCount = entry.attachments.length
+        // Steer only surfaces where it can actually deliver: a live turn to
+        // redirect and an entry the redirect can carry (text-only, no slash).
+        const canSteer = busy && Boolean(onSteerNow) && isSteerableEntry(entry)
 
         return (
           <StatusRow
@@ -90,6 +100,21 @@ export function QueuePanel({ busy, editingId, entries, onDelete, onEdit, onResum
                     <Pencil className={iconSize.xs} />
                   </Button>
                 </Tip>
+                {canSteer && (
+                  <Tip label={c.queueSteer}>
+                    <Button
+                      aria-label={c.queueSteer}
+                      className="size-5 rounded-md"
+                      disabled={isEditing}
+                      onClick={() => onSteerNow?.(entry.id)}
+                      size="icon-xs"
+                      type="button"
+                      variant="ghost"
+                    >
+                      <SteeringWheel className={iconSize.xs} />
+                    </Button>
+                  </Tip>
+                )}
                 <Tip label={busy ? c.queueSendNext : c.queueSend}>
                   <Button
                     aria-label={busy ? c.queueSendNext : c.queueSend}
@@ -100,7 +125,7 @@ export function QueuePanel({ busy, editingId, entries, onDelete, onEdit, onResum
                     type="button"
                     variant="ghost"
                   >
-                    <ArrowUp className={iconSize.xs} />
+                    <CornerDownLeft className={iconSize.xs} />
                   </Button>
                 </Tip>
                 <Tip label={c.queueDelete}>

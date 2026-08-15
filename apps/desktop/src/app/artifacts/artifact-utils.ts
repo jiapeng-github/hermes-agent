@@ -19,6 +19,16 @@ export interface ArtifactRecord {
   appActivityArtifactId?: string
 }
 
+export interface ArtifactLoadFailure {
+  error: unknown
+  session: SessionInfo
+}
+
+export interface ArtifactLoadResult {
+  artifacts: ArtifactRecord[]
+  failures: ArtifactLoadFailure[]
+}
+
 const MARKDOWN_IMAGE_RE = /!\[([^\]]*)\]\(([^)\s]+)\)/g
 const MARKDOWN_LINK_RE = /\[([^\]]+)\]\(([^)\s]+)\)/g
 const URL_RE = /https?:\/\/[^\s<>"')]+/g
@@ -298,4 +308,26 @@ export function mergeArtifacts(records: readonly ArtifactRecord[]): ArtifactReco
   }
 
   return Array.from(found.values()).sort((left, right) => right.timestamp - left.timestamp)
+}
+
+export async function loadArtifactsForSessions(
+  sessions: SessionInfo[],
+  loadMessages: (session: SessionInfo) => Promise<SessionMessage[]>
+): Promise<ArtifactLoadResult> {
+  const artifacts: ArtifactRecord[] = []
+  const failures: ArtifactLoadFailure[] = []
+
+  // Keep only one transcript resident at a time. Recent sessions can each be
+  // tens of megabytes, so loading the whole page concurrently can exhaust both
+  // the Desktop renderer and a remote dashboard backend.
+  for (const session of sessions) {
+    try {
+      const messages = await loadMessages(session)
+      artifacts.push(...collectArtifactsForSession(session, messages))
+    } catch (error) {
+      failures.push({ error, session })
+    }
+  }
+
+  return { artifacts, failures }
 }
