@@ -113,6 +113,21 @@ function removeCachedWindowsMinorPythonLink(pythonRoot) {
   return false
 }
 
+function createRuntimeEnv({ prepUvCache, prepPython, tempRoot, baseEnv = process.env }) {
+  const runtimeEnv = {
+    ...baseEnv,
+    UV_CACHE_DIR: prepUvCache,
+    UV_HTTP_TIMEOUT: baseEnv.UV_HTTP_TIMEOUT || '300',
+    UV_PYTHON_INSTALL_DIR: prepPython,
+    UV_PYTHON_INSTALL_BIN: '0',
+    UV_PROJECT_ENVIRONMENT: path.join(tempRoot, 'venv')
+  }
+  // The lockfile includes [tool.uv] resolution settings from pyproject.toml.
+  // Disabling project config makes `uv sync --locked` reject that lockfile.
+  delete runtimeEnv.UV_NO_CONFIG
+  return runtimeEnv
+}
+
 function writeManifest(target, bundled, { outputRoot = OUTPUT_ROOT, sourceBundled = bundled } = {}) {
   const files = bundled || sourceBundled
     ? Object.fromEntries(
@@ -178,15 +193,7 @@ function prepareBundle(targetName) {
     removeCachedWindowsMinorPythonLink(prepPython)
   }
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'stocksense-runtime-'))
-  const runtimeEnv = {
-    ...process.env,
-    UV_CACHE_DIR: prepUvCache,
-    UV_HTTP_TIMEOUT: process.env.UV_HTTP_TIMEOUT || '300',
-    UV_NO_CONFIG: '1',
-    UV_PYTHON_INSTALL_DIR: prepPython,
-    UV_PYTHON_INSTALL_BIN: '0',
-    UV_PROJECT_ENVIRONMENT: path.join(tempRoot, 'venv')
-  }
+  const runtimeEnv = createRuntimeEnv({ prepUvCache, prepPython, tempRoot })
   try {
     run(uvSource, ['python', 'install', PYTHON_VERSION], { env: runtimeEnv })
     runWithRetries(uvSource, ['sync', '--extra', 'all', '--locked', '--python', PYTHON_VERSION], { env: runtimeEnv })
@@ -224,6 +231,7 @@ if (require.main === module) {
 
 module.exports = {
   TARGETS,
+  createRuntimeEnv,
   defaultTarget,
   main,
   removeCachedWindowsMinorPythonLink,

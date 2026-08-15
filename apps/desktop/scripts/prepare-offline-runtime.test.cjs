@@ -8,6 +8,7 @@ const test = require('node:test')
 
 const {
   TARGETS,
+  createRuntimeEnv,
   removeCachedWindowsMinorPythonLink,
   rebaseCopiedSymlinks
 } = require('./prepare-offline-runtime.cjs')
@@ -26,6 +27,19 @@ test('offline desktop release matrix is limited to the two supported native targ
     script: 'install.ps1',
     uv: 'uv.exe'
   })
+})
+
+test('offline runtime keeps project uv configuration enabled for locked sync', () => {
+  const runtimeEnv = createRuntimeEnv({
+    prepUvCache: '/tmp/uv-cache',
+    prepPython: '/tmp/python',
+    tempRoot: '/tmp/runtime',
+    baseEnv: { UV_NO_CONFIG: '1', UV_HTTP_TIMEOUT: '45' }
+  })
+
+  assert.equal(Object.hasOwn(runtimeEnv, 'UV_NO_CONFIG'), false)
+  assert.equal(runtimeEnv.UV_HTTP_TIMEOUT, '45')
+  assert.equal(runtimeEnv.UV_PROJECT_ENVIRONMENT, path.join('/tmp/runtime', 'venv'))
 })
 
 test('cached Windows Python minor link is removed before uv recreates it', () => {
