@@ -9527,7 +9527,12 @@ async function spawnPoolBackend(profile, entry) {
   entry.port = port
 
   const baseUrl = `http://127.0.0.1:${port}`
-  await Promise.race([waitForHermes(baseUrl, token), startFailed])
+  // Local children receive this exact token through
+  // HERMES_DASHBOARD_SESSION_TOKEN. Current backends leave /api/health public,
+  // but older installed runtimes guarded it behind the dashboard token. Probe
+  // with the token so a newly updated desktop can still start an existing
+  // runtime instead of treating its 401 as a failed backend boot.
+  await Promise.race([waitForHermes(baseUrl, token, undefined, 'local'), startFailed])
   ready = true
 
   const authToken = await adoptServedDashboardToken(baseUrl, token, {
@@ -9874,7 +9879,10 @@ async function startHermes() {
 
     const baseUrl = `http://127.0.0.1:${port}`
     await advanceBootProgress('backend.wait', 'Waiting for Hermes backend to become ready', 90)
-    await Promise.race([waitForHermes(baseUrl, token), backendStartFailed])
+    // The spawned local runtime already has this session token. Presenting it
+    // keeps the readiness probe compatible with older runtimes that
+    // authenticated /api/health.
+    await Promise.race([waitForHermes(baseUrl, token, undefined, 'local'), backendStartFailed])
     backendReady = true
     backendStartFailure = null
 

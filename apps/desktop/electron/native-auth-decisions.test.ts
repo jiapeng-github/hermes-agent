@@ -89,10 +89,18 @@ test('resolveReadinessProbeAuth sends the session token for a token gateway', ()
   assert.deepEqual(resolveReadinessProbeAuth('token', null, null), { kind: 'token', token: null })
 })
 
-test('resolveReadinessProbeAuth stays public for local and unknown modes', () => {
-  // A loopback backend has no gate; sending credentials it never issued is
-  // meaningless, and an unknown mode must not invent a credential.
-  assert.deepEqual(resolveReadinessProbeAuth('local', 'native-at', 'session-token'), { kind: 'public' })
+test('desktop-spawned local backends use their session token for legacy health-route compatibility', () => {
+  // Local children receive this same token in HERMES_DASHBOARD_SESSION_TOKEN.
+  // Older runtimes authenticated /api/health, so local readiness must not
+  // silently become an anonymous probe.
+  assert.deepEqual(resolveReadinessProbeAuth('local', null, 'desktop-child-token'), {
+    kind: 'token',
+    token: 'desktop-child-token'
+  })
+  assert.deepEqual(resolveReadinessProbeAuth('local', null, null), { kind: 'token', token: null })
+})
+
+test('unknown readiness modes stay public', () => {
   assert.deepEqual(resolveReadinessProbeAuth(undefined, 'native-at', 'session-token'), { kind: 'public' })
   assert.deepEqual(resolveReadinessProbeAuth('something-new', null, null), { kind: 'public' })
 })
