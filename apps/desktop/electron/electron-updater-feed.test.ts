@@ -34,7 +34,7 @@ function close(server: http.Server): Promise<void> {
 
 test('directory feed preserves its query for YAML, updater and blockmap requests', async () => {
   const requests: string[] = []
-  const updateFileName = 'StockSense-0.20.0-mac-arm64-update.zip'
+  const updateFileName = 'FinanceMate-0.20.0-mac-arm64-update.zip'
   const sha512 = Buffer.alloc(64, 7).toString('base64')
 
   const channelYaml = [

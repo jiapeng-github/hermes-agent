@@ -89,8 +89,8 @@ function main() {
   const assets = []
 
   try {
-    const windowsInstallerBase = `StockSense-${version}-win-x64-${installerFlavor}`
-    const windowsUpdaterBase = `StockSense-${version}-win-x64-${updaterFlavor}`
+    const windowsInstallerBase = `FinanceMate-${version}-win-x64-${installerFlavor}`
+    const windowsUpdaterBase = `FinanceMate-${version}-win-x64-${updaterFlavor}`
     const windowsInstaller = fileByBasenameUnder(files, `${windowsInstallerBase}.exe`, 'offline')
     const windowsUpdater = fileByBasenameUnder(files, `${windowsUpdaterBase}.exe`, 'update')
     const windowsBlockmap = fileByBasenameUnder(files, `${windowsUpdaterBase}.exe.blockmap`, 'update')
@@ -137,8 +137,8 @@ function main() {
       target: `StockSense-Runtime-${version}-win-x64.zip`
     })
 
-    const macInstallerBase = `StockSense-${version}-mac-arm64-${installerFlavor}`
-    const macUpdaterBase = `StockSense-${version}-mac-arm64-${updaterFlavor}`
+    const macInstallerBase = `FinanceMate-${version}-mac-arm64-${installerFlavor}`
+    const macUpdaterBase = `FinanceMate-${version}-mac-arm64-${updaterFlavor}`
     const macInstaller = fileByBasenameUnder(files, `${macInstallerBase}.dmg`, 'offline')
     const macUpdater = fileByBasenameUnder(files, `${macUpdaterBase}.zip`, 'update')
     const macBlockmap = fileByBasenameUnder(files, `${macUpdaterBase}.zip.blockmap`, 'update')

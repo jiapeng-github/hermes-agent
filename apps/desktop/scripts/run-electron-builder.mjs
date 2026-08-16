@@ -96,7 +96,7 @@ const dist = electronDistDir()
 const builderArgs = []
 if (!args.some(arg => arg.includes("artifactName"))) {
   const flavor = runtimeFlavor(expectedOfflineTarget)
-  builderArgs.push(`-c.artifactName=StockSense-\${version}-\${os}-\${arch}-${flavor}.\${ext}`)
+  builderArgs.push(`-c.artifactName=FinanceMate-\${version}-\${os}-\${arch}-${flavor}.\${ext}`)
   console.log(`[run-electron-builder] packaging ${flavor} runtime flavor`)
 }
 if (dist && fs.existsSync(distBinary(dist)) && (noCross || !crossTarget)) {
