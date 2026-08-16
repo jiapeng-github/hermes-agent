@@ -86,9 +86,10 @@ export type ReadinessProbeAuth = OauthRestAuth | { kind: 'token'; token: string 
  *
  * `oauth` reuses `resolveOauthRestAuth` so the probe and every other oauth
  * REST call make the identical bearer-vs-cookie choice. `token` presents the
- * connection's session token. `local` (and anything unrecognized) stays
- * public: a loopback backend has no gate, and sending credentials it never
- * issued would be meaningless.
+ * connection's session token. Desktop-spawned local children receive
+ * `HERMES_DASHBOARD_SESSION_TOKEN`, so `local` also presents that token when
+ * it is available; this keeps a new desktop compatible with older runtimes
+ * that guarded `/api/health` behind it. Unknown modes stay public.
  */
 export function resolveReadinessProbeAuth(
   authMode: string | null | undefined,
@@ -99,7 +100,7 @@ export function resolveReadinessProbeAuth(
     return resolveOauthRestAuth(nativeAccessToken)
   }
 
-  if (authMode === 'token') {
+  if (authMode === 'token' || authMode === 'local') {
     return { kind: 'token', token: connectionToken ?? null }
   }
 
