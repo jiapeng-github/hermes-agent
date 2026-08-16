@@ -40,7 +40,7 @@ function signedPayload(privateKey: crypto.KeyObject) {
       installer: {
         sha256: 'a'.repeat(64),
         size_bytes: 1024,
-        url: 'https://cdn.stocksense.work/desktop/StockSense-0.20.0-win-x64.exe'
+        url: 'https://cdn.stocksense.work/desktop/FinanceMate-0.20.0-win-x64.exe'
       },
       mandatory: false,
       notes: '修复 Hub 连接。',

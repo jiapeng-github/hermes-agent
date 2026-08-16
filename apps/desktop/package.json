@@ -2,7 +2,7 @@
   "name": "stocksense",
   "productName": "Finance Mate",
   "private": true,
-  "version": "0.19.0",
+  "version": "0.20.0",
   "description": "Native desktop shell for Finance Mate.",
   "author": "Nous Research",
   "type": "module",
@@ -196,7 +196,7 @@
         ]
       }
     ],
-    "artifactName": "StockSense-${version}-${os}-${arch}.${ext}",
+    "artifactName": "FinanceMate-${version}-${os}-${arch}.${ext}",
     "publish": [
       {
         "provider": "generic",
