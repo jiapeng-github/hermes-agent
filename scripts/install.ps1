@@ -1895,7 +1895,35 @@ function Install-Repository {
     if (Test-BundledSource) {
         $bundledManifest = Join-Path $OfflineRuntimePath "manifest.json"
         $bundledSourceMarker = Join-Path $InstallDir ".stocksense-offline-runtime-manifest.json"
-        if (Test-Path (Join-Path $InstallDir "pyproject.toml")) {
+        # A managed checkout with locally modified or deleted TRACKED files is
+        # torn (half-applied sync, manual experiments): imports may reference
+        # siblings that no longer match (observed: catalog.py from a newer
+        # tree importing hermes_cli.apps.activity which was never written).
+        # The early-return below would keep serving that broken tree on every
+        # bootstrap, so detect the tear and fall through to re-extract.
+        # Untracked files are ignored: only modified/deleted tracked files
+        # break the managed-tree contract. git absent (desktop runtime
+        # skippers) or the probe failing leaves $sourceTorn false, preserving
+        # the previous behavior.
+        $sourceTorn = $false
+        if (Test-Path (Join-Path $InstallDir ".git")) {
+            $prevEAP = $ErrorActionPreference
+            Push-Location $InstallDir
+            try {
+                $ErrorActionPreference = "Continue"
+                $global:LASTEXITCODE = 0
+                $dirtyTracked = & git -c windows.appendAtomically=false status --porcelain --untracked-files=no 2>$null
+                $ErrorActionPreference = $prevEAP
+                if (($LASTEXITCODE -eq 0) -and $dirtyTracked) {
+                    $sourceTorn = $true
+                    Write-Warn "Managed checkout has locally modified tracked files; treating source as torn and re-extracting."
+                }
+            } catch {
+                $ErrorActionPreference = $prevEAP
+            }
+            Pop-Location
+        }
+        if (-not $sourceTorn -and (Test-Path (Join-Path $InstallDir "pyproject.toml"))) {
             $sourceMatches = (Test-Path $bundledSourceMarker) -and (
                 (Get-FileHash -LiteralPath $bundledManifest -Algorithm SHA256).Hash -eq
                 (Get-FileHash -LiteralPath $bundledSourceMarker -Algorithm SHA256).Hash
@@ -2424,17 +2452,37 @@ function Install-Venv {
             # the window between one kill pass and the delete. Each pass re-
             # enumerates; three consecutive clean passes (or the attempt cap)
             # ends the loop.
+            #
+            # TWO matchers, because two gateway generations hold the venv's
+            # .pyd files open:
+            #   1. ExecutablePath under this venv -- current installs run the
+            #      venv's own console python.exe (post-aa2ae36c3f design).
+            #   2. CommandLine carrying hermes_cli + "gateway run" -- LEGACY
+            #      installs (pre-aa2ae36c3f) launch the detached gateway on the
+            #      shared uv-managed pythonw.exe with the venv's site-packages
+            #      overlaid via PYTHONPATH. That process's ExecutablePath is
+            #      outside the venv, so the prefix check cannot see it, yet it
+            #      keeps aiohttp/_websocket/mask.cp311-win_amd64.pyd (and any
+            #      other loaded extension) undeletable and fails the venv
+            #      rebuild with access denied. The command line is the only
+            #      signal that still identifies it.
             $venvPrefix = [System.IO.Path]::GetFullPath((Join-Path $InstallDir "venv")).TrimEnd('\') + '\'
             $cleanPasses = 0
             for ($sweep = 0; $sweep -lt 10 -and $cleanPasses -lt 3; $sweep++) {
                 $found = 0
                 try {
                     Get-CimInstance Win32_Process -ErrorAction Stop |
-                        Where-Object { $_.ProcessId -ne $myPid -and $_.ExecutablePath -and $_.ExecutablePath.StartsWith($venvPrefix, [System.StringComparison]::OrdinalIgnoreCase) } |
+                        Where-Object {
+                            $_.ProcessId -ne $myPid -and (
+                                ($_.ExecutablePath -and $_.ExecutablePath.StartsWith($venvPrefix, [System.StringComparison]::OrdinalIgnoreCase)) -or
+                                ($_.CommandLine -and $_.CommandLine -match 'hermes_cli' -and $_.CommandLine -match 'gateway\s+run')
+                            )
+                        } |
                         ForEach-Object {
                             $found++
                             $treePid = [string]$_.ProcessId
-                            Write-Info "  stopping process tree at PID $treePid ($($_.Name)) running from venv"
+                            $why = if ($_.ExecutablePath -and $_.ExecutablePath.StartsWith($venvPrefix, [System.StringComparison]::OrdinalIgnoreCase)) { "running from venv" } else { "legacy shared-interpreter hermes_cli gateway" }
+                            Write-Info "  stopping process tree at PID $treePid ($($_.Name), $why)"
                             & taskkill /F /T /PID $treePid 2>$null | Out-Null
                         }
                 } catch {
@@ -2982,7 +3030,9 @@ function Copy-ConfigTemplates {
         Write-Info "$configPath already exists, keeping it"
     }
 
-    # StockSense desktop packages carry a release-generated 妙想 MCP resource.
+    # StockSense desktop packages carry a release-generated mx-ds-mcp MCP
+    # resource (MiaoXiang data; the product name itself is non-ASCII and this
+    # file must stay pure ASCII -- see tests/test_install_ps1_ascii_only.py).
     # The helper only adds a missing server/key, so user MCP configuration wins.
     $stockMcpDefaults = $env:STOCKSENSE_MCP_DEFAULTS_PATH
     $pythonExe = "$InstallDir\venv\Scripts\python.exe"
@@ -2990,12 +3040,12 @@ function Copy-ConfigTemplates {
         try {
             & $pythonExe -m hermes_cli.stock_mcp --defaults $stockMcpDefaults
             if ($LASTEXITCODE -eq 0) {
-                Write-Success "Configured bundled 妙想 MCP Server"
+                Write-Success "Configured bundled mx-ds-mcp MCP Server"
             } else {
-                Write-Warn "Could not configure bundled 妙想 MCP Server"
+                Write-Warn "Could not configure bundled mx-ds-mcp MCP Server"
             }
         } catch {
-            Write-Warn "Could not configure bundled 妙想 MCP Server: $_"
+            Write-Warn "Could not configure bundled mx-ds-mcp MCP Server: $_"
         }
     }
     
