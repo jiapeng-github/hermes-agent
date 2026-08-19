@@ -75,12 +75,29 @@ export type RepairDecisionInput = {
    * stall is exactly the case the soft-restart path is for.
    */
   primaryBackendAlive: boolean
+  /**
+   * Whether the most recent failure episode saw the backend child EXIT
+   * before it ever announced ready (latched by main.ts at the
+   * exit-before-ready handler and cleared on a successful boot / reset /
+   * repair). That is the fingerprint of a DETERMINISTIC startup death —
+   * e.g. a torn install whose catalog.py imports a sibling module that was
+   * never written (`ModuleNotFoundError: hermes_cli.apps.activity`) — which
+   * no amount of soft restarting can fix. When true, escalate straight to
+   * a hard reinstall instead of burning the soft-restart budget respawning
+   * the same crashing runtime.
+   */
+  backendExitedBeforeReady?: boolean
 }
 
 /**
  * Decide the next repair action.
  *
  * Decision matrix:
+ *   backendExitedBeforeReady             → hard reinstall (the child died
+ *                                            before EVER announcing ready —
+ *                                            a deterministic startup death
+ *                                            like a torn install; restart
+ *                                            cannot fix it)
  *   attempt ≤ maxSoftAttempts AND alive   → soft restart (don't reinstall)
  *   attempt ≤ maxSoftAttempts AND dead    → soft restart (process exited,
  *                                            but we don't yet trust that
@@ -98,6 +115,17 @@ export function decideBootstrapRepair(input: RepairDecisionInput): RepairDecisio
   const maxSoftAttempts = input.maxSoftAttempts ?? 3
   const attempt = Math.max(1, Math.floor(input.attempt))
   const alive = Boolean(input.primaryBackendAlive)
+
+  if (input.backendExitedBeforeReady) {
+    return {
+      hardReinstall: true,
+      attempt,
+      reason:
+        `backend exited before it ever announced ready ` +
+        `(deterministic startup failure, e.g. a torn install); ` +
+        `restarting cannot fix it, escalating to hard reinstall`
+    }
+  }
 
   if (attempt > maxSoftAttempts) {
     return {

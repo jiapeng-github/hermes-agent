@@ -107,3 +107,48 @@ test('alive=false on a high attempt number still escalates (defense in depth)', 
 
   assert.equal(decision.hardReinstall, true)
 })
+
+test('backendExitedBeforeReady escalates to hard reinstall on the FIRST attempt', () => {
+  // The torn-install fingerprint: the child died before EVER announcing
+  // ready (deterministic startup death, e.g. "ModuleNotFoundError:
+  // hermes_cli.apps.activity"). Soft-restarting would respawn the same
+  // crashing runtime, so the guard must not burn the soft budget first.
+  const decision = decideBootstrapRepair({
+    attempt: 1,
+    maxSoftAttempts: 3,
+    primaryBackendAlive: false,
+    backendExitedBeforeReady: true
+  })
+
+  assert.equal(decision.hardReinstall, true)
+  assert.equal(decision.attempt, 1)
+  assert.match(decision.reason, /exited before it ever announced ready/)
+  assert.match(decision.reason, /torn install/)
+})
+
+test('backendExitedBeforeReady wins even when the process handle looks alive', () => {
+  // A zombie/stale handle can report alive while the episode evidence says
+  // the child exited pre-ready. The latch is the stronger signal.
+  const decision = decideBootstrapRepair({
+    attempt: 1,
+    maxSoftAttempts: 3,
+    primaryBackendAlive: true,
+    backendExitedBeforeReady: true
+  })
+
+  assert.equal(decision.hardReinstall, true)
+})
+
+test('backendExitedBeforeReady absent keeps the stall semantics (#74874)', () => {
+  // The GIL-stall case: process alive, never exited pre-ready. First
+  // attempts must stay soft — the anti-reinstall-loop behavior is intact.
+  const decision = decideBootstrapRepair({
+    attempt: 1,
+    maxSoftAttempts: 3,
+    primaryBackendAlive: true,
+    backendExitedBeforeReady: false
+  })
+
+  assert.equal(decision.hardReinstall, false)
+  assert.match(decision.reason, /still alive/)
+})

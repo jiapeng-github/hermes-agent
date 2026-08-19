@@ -59,6 +59,28 @@ test('hermes runtime import probe checks config dependencies', () => {
   assert.match(probe, /\bimport hermes_cli\.config\b/)
 })
 
+test('hermes runtime import probe deep-imports the apps catalog chain', () => {
+  // The torn-install regression: a checkout whose catalog.py comes from a
+  // newer tree (importing a sibling module that was never written, e.g.
+  // "ModuleNotFoundError: hermes_cli.apps.activity") passed the shallow
+  // probe and only died at backend lifespan. The probe must exercise the
+  // deepest eagerly-imported apps-module chain.
+  const probe = hermesRuntimeImportProbe()
+  assert.match(probe, /\bimport hermes_cli\.apps\.catalog\b/)
+})
+
+test('hermes runtime import probe tolerates installs predating the apps subsystem', () => {
+  // Older, self-consistent installs have no hermes_cli/apps/catalog.py at
+  // all; the probe must swallow that absence (only a catalog.py that EXISTS
+  // but cannot be imported counts as torn) so healthy legacy installs are
+  // not forced into first-run bootstrap.
+  const probe = hermesRuntimeImportProbe()
+  assert.match(probe, /os\.path\.exists/)
+  assert.match(probe, /apps.*, *catalog\.py|catalog\.py/)
+  // The existence guard re-raises only when catalog.py is present.
+  assert.match(probe, /raise/)
+})
+
 test('explicit Hermes override is authoritative', () => {
   assert.equal(shouldTrustHermesOverride('/nix/store/abc/bin/hermes'), true)
 })

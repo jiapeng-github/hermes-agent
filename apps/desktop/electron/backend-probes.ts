@@ -117,10 +117,42 @@ function execProbeSync(
  * launch the CLI. Kept exported for tests so dependency regressions are
  * caught without needing a real broken venv fixture.
  *
+ * Two layers:
+ *   1. `hermes_cli.config` + its third-party deps (yaml, dotenv) — the CLI
+ *      boot path; a mid-update venv missing python-dotenv used to pass a
+ *      shallower probe and produced an unrecoverable boot loop.
+ *   2. `hermes_cli.apps.catalog` — the deepest eagerly-imported apps-module
+ *      chain (apps/__init__ -> manager -> catalog -> siblings). A TORN
+ *      install (e.g. catalog.py from a newer tree referencing a sibling
+ *      module that was never written, observed as "ModuleNotFoundError:
+ *      hermes_cli.apps.activity") passes layer 1 but dies at backend
+ *      lifespan. Failing the probe here routes the resolver to bootstrap
+ *      instead of spawning a backend that can only crash.
+ *
+ * Layer 2 is deliberately tolerant of OLDER installs: if
+ * hermes_cli/apps/catalog.py does not exist as a file (the module postdates
+ * that install), the tree is self-consistent for its era and the exception
+ * is swallowed. Only a catalog.py that EXISTS but cannot be imported counts
+ * as torn.
+ *
  * @returns {string}
  */
+// Kept as a named module constant (not an inline return) so the Python-side
+// behavioral test (tests/test_desktop_runtime_probe.py) can extract these
+// lines verbatim from this file's source text and execute the REAL probe
+// against synthetic fixtures — the snippet can never drift from its tests.
+const HERMES_RUNTIME_IMPORT_PROBE_LINES = [
+  'import yaml; import dotenv; import hermes_cli.config',
+  'try:',
+  '    import hermes_cli.apps.catalog',
+  'except BaseException:',
+  '    import os, hermes_cli',
+  '    if os.path.exists(os.path.join(os.path.dirname(hermes_cli.__file__), "apps", "catalog.py")):',
+  '        raise'
+]
+
 function hermesRuntimeImportProbe() {
-  return 'import yaml; import dotenv; import hermes_cli.config'
+  return HERMES_RUNTIME_IMPORT_PROBE_LINES.join('\n')
 }
 
 /**

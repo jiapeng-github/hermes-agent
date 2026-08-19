@@ -759,6 +759,16 @@ function resolveOfflineRuntimePath() {
       const manifest = JSON.parse(fs.readFileSync(path.join(candidate, 'manifest.json'), 'utf8'))
 
       if (manifest.bundled !== true || manifest.target !== expectedTarget || !manifest.files) {
+        // Not a usable bundle for this platform -- only worth a log line when
+        // a directory actually exists (a dev tree has neither).
+        if (fs.existsSync(candidate)) {
+          rememberLog(
+            `[offline-runtime] ignoring ${candidate}: ` +
+              `bundled=${manifest.bundled} target=${manifest.target} (expected ${expectedTarget}); ` +
+              `falling back to cached/network install script`
+          )
+        }
+
         continue
       }
 
@@ -766,23 +776,40 @@ function resolveOfflineRuntimePath() {
       const requiredFiles = ['hermes-agent-source.zip', installScript]
 
       if (requiredFiles.some(file => typeof manifest.files[file] !== 'string')) {
+        rememberLog(
+          `[offline-runtime] ignoring ${candidate}: manifest is missing required files ` +
+            `(${requiredFiles.filter(file => typeof manifest.files[file] !== 'string').join(', ')}); ` +
+            `falling back to cached/network install script`
+        )
+
         continue
       }
 
       const root = path.resolve(candidate)
+      const offenders: string[] = []
 
       const valid = Object.entries(manifest.files).every(([relative, expected]) => {
         const file = path.resolve(root, relative)
 
         if (!file.startsWith(`${root}${path.sep}`) || typeof expected !== 'string') {
+          offenders.push(`${relative} (invalid manifest entry)`)
+
           return false
         }
 
         try {
           const actual = crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex')
 
-          return actual === expected
+          if (actual !== expected) {
+            offenders.push(`${relative} (sha256 mismatch)`)
+
+            return false
+          }
+
+          return true
         } catch {
+          offenders.push(`${relative} (unreadable/missing)`)
+
           return false
         }
       })
@@ -790,6 +817,20 @@ function resolveOfflineRuntimePath() {
       if (valid) {
         return candidate
       }
+
+      // One tampered/quarantined file rejects the WHOLE bundle (supply-chain
+      // integrity: the manifest hash set is all-or-nothing). Log exactly which
+      // files failed so "the offline installer silently fell back to network"
+      // is diagnosable from desktop.log -- the classic real-world case is an
+      // antivirus quarantining a handful of pip/setuptools ARM64 launcher
+      // stubs that are irrelevant on x64 yet invalidate all 17k+ hashes.
+      rememberLog(
+        `[offline-runtime] ignoring ${candidate}: ${offenders.length} of ` +
+          `${Object.keys(manifest.files).length} manifest files failed verification ` +
+          `(first: ${offenders.slice(0, 5).join('; ')}); ` +
+          `falling back to cached/network install script. ` +
+          `If files show as missing, check antivirus quarantine.`
+      )
     } catch {
       void 0
     }
@@ -1310,6 +1351,14 @@ let bootstrapRepairRequested = false
 // looping the user through a destructive venv reinstall.
 let bootstrapRepairAttempt = 0
 const MAX_BOOTSTRAP_REPAIR_SOFT_ATTEMPTS = 3
+// Latched when the backend child EXITS before it ever announced ready — the
+// fingerprint of a deterministic startup death (e.g. a torn install whose
+// catalog.py imports a sibling module that was never written:
+// "ModuleNotFoundError: hermes_cli.apps.activity"). Soft-restarting respawns
+// the same crashing runtime, so decideBootstrapRepair() escalates straight
+// to a hard reinstall while this is set. Cleared on a successful boot and on
+// the reset/repair recovery paths.
+let backendExitedBeforeReadyLatch = false
 let connectionConfigCache = null
 let connectionConfigCacheMtime = null
 const hermesLog = []
@@ -9847,6 +9896,7 @@ async function startHermes() {
       sendBackendExit({ code, signal })
 
       if (!backendReady) {
+        backendExitedBeforeReadyLatch = true
         const message = `Hermes backend exited before it became ready (${signal || code}).`
         updateBootProgress(
           {
@@ -9884,6 +9934,7 @@ async function startHermes() {
     // authenticated /api/health.
     await Promise.race([waitForHermes(baseUrl, token, undefined, 'local'), backendStartFailed])
     backendReady = true
+    backendExitedBeforeReadyLatch = false
     backendStartFailure = null
 
     const authToken = await adoptServedDashboardToken(baseUrl, token, {
@@ -11562,6 +11613,7 @@ ipcMain.handle('hermes:bootstrap:reset', async () => {
   await teardownPrimaryBackendAndWait()
   bootstrapFailure = null
   backendStartFailure = null
+  backendExitedBeforeReadyLatch = false
   remoteReauthFailure = null
   getFirstRunSetupGate().resetForRetry()
   resetBootstrapSnapshot()
@@ -11594,8 +11646,14 @@ ipcMain.handle('hermes:bootstrap:repair', async () => {
   const repairDecision = decideBootstrapRepair({
     attempt: bootstrapRepairAttempt,
     maxSoftAttempts: MAX_BOOTSTRAP_REPAIR_SOFT_ATTEMPTS,
-    primaryBackendAlive
+    primaryBackendAlive,
+    backendExitedBeforeReady: backendExitedBeforeReadyLatch
   })
+
+  // The latch carried this episode's evidence into the decision above; it is
+  // consumed now. If the soft path respawns a runtime that again dies before
+  // ready, the exit handler re-latches and the NEXT repair escalates.
+  backendExitedBeforeReadyLatch = false
 
   rememberLog(
     `[bootstrap] repair requested by renderer; forcing reinstall + clearing latched failure ` +
