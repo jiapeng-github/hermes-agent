@@ -44,37 +44,41 @@ test('offline runtime keeps project uv configuration enabled for locked sync', (
   assert.equal(runtimeEnv.UV_PROJECT_ENVIRONMENT, path.join('/tmp/runtime', 'venv'))
 })
 
-test('antivirus-bait launcher stubs are removed only under site-packages', () => {
+test('antivirus-bait launcher stubs are removed anywhere in the bundle', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'stocksense-av-bait-'))
   try {
-    const distlib = path.join(root, 'python', 'cpython-3.11-windows-x86_64-none', 'Lib', 'site-packages', 'pip', '_vendor', 'distlib')
-    const setuptools = path.join(root, 'python', 'cpython-3.11-windows-x86_64-none', 'Lib', 'site-packages', 'setuptools')
-    fs.mkdirSync(distlib, { recursive: true })
-    fs.mkdirSync(setuptools, { recursive: true })
+    const pyRoot = path.join(root, 'python', 'cpython-3.11-windows-x86_64-none', 'Lib', 'site-packages')
+    const distlib = path.join(pyRoot, 'pip', '_vendor', 'distlib')
+    const setuptools = path.join(pyRoot, 'setuptools')
+    // uv's unpacked wheel cache ALSO carries the setuptools stubs -- one
+    // quarantined copy here invalidated the whole bundle in the field.
+    const uvCache = path.join(root, 'uv-cache', 'archive-v0', '4QIFsgvxLvAWMghR', 'setuptools')
+    for (const dir of [distlib, setuptools, uvCache]) {
+      fs.mkdirSync(dir, { recursive: true })
+    }
     for (const name of ['t64-arm.exe', 'w64-arm.exe']) {
       fs.writeFileSync(path.join(distlib, name), 'stub')
     }
     for (const name of ['cli-arm64.exe', 'gui-arm64.exe']) {
       fs.writeFileSync(path.join(setuptools, name), 'stub')
     }
-    // Keep-files: same basename OUTSIDE site-packages must survive, and
-    // ordinary distlib/setuptools files must be untouched.
-    const binDir = path.join(root, 'bin')
-    fs.mkdirSync(binDir, { recursive: true })
-    fs.writeFileSync(path.join(binDir, 't64-arm.exe'), 'keep me')
+    fs.writeFileSync(path.join(uvCache, 'cli-arm64.exe'), 'stub')
+    // Keep-files: near-miss basenames must be untouched.
     fs.writeFileSync(path.join(distlib, 't64.exe'), 'keep me')
+    fs.writeFileSync(path.join(uvCache, 'cli-arm64.exe.bak'), 'keep me')
 
     const removed = removeAntivirusBaitFiles(root)
 
-    assert.equal(removed.length, 4)
+    assert.equal(removed.length, 5)
     for (const name of ['t64-arm.exe', 'w64-arm.exe']) {
       assert.equal(fs.existsSync(path.join(distlib, name)), false)
     }
     for (const name of ['cli-arm64.exe', 'gui-arm64.exe']) {
       assert.equal(fs.existsSync(path.join(setuptools, name)), false)
     }
-    assert.equal(fs.existsSync(path.join(binDir, 't64-arm.exe')), true)
+    assert.equal(fs.existsSync(path.join(uvCache, 'cli-arm64.exe')), false)
     assert.equal(fs.existsSync(path.join(distlib, 't64.exe')), true)
+    assert.equal(fs.existsSync(path.join(uvCache, 'cli-arm64.exe.bak')), true)
     assert.deepEqual(
       [...ANTIVIRUS_BAIT_BASENAMES].sort(),
       ['cli-arm64.exe', 'gui-arm64.exe', 't64-arm.exe', 'w64-arm.exe']

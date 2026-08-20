@@ -137,16 +137,22 @@ function createRuntimeEnv({ prepUvCache, prepPython, tempRoot, baseEnv = process
 // them from the bundle so the manifest never records them in the first
 // place; a file the AV later quarantines that is not in the manifest cannot
 // invalidate it.
+//
+// Matched by basename ANYWHERE in the bundle, not just site-packages: the
+// stubs also ride inside uv-cache/archive-v0/<hash>/setuptools wheel
+// snapshots (observed in the field: one quarantined
+// uv-cache/archive-v0/.../setuptools/cli-arm64.exe invalidated the whole
+// runtime). Removing them from the unpacked cache is safe -- uv installs
+// from archive-v0 by directory copy without a per-file manifest, and the
+// x64 runtime never executes ARM64 launchers either way.
 const ANTIVIRUS_BAIT_BASENAMES = new Set(['t64-arm.exe', 'w64-arm.exe', 'cli-arm64.exe', 'gui-arm64.exe'])
 
 function removeAntivirusBaitFiles(root, { walk = walkFiles } = {}) {
   const removed = []
   for (const file of walk(root)) {
-    const relative = path.relative(root, file)
-    if (!relative.split(path.sep).includes('site-packages')) continue
     if (!ANTIVIRUS_BAIT_BASENAMES.has(path.basename(file))) continue
     fs.rmSync(file, { force: true })
-    removed.push(relative)
+    removed.push(path.relative(root, file))
   }
   if (removed.length > 0) {
     console.log(`[prepare-offline-runtime] removed ${removed.length} antivirus-bait launcher stub(s)`)

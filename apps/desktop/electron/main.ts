@@ -733,6 +733,22 @@ function readStockSenseDesktopUpdateConfig() {
 // particular, bridge releases must not keep querying a former localhost Hub.
 const STOCKSENSE_DESKTOP_UPDATE_CONFIG = readStockSenseDesktopUpdateConfig()
 
+// Basenames whose ABSENCE (antivirus quarantine-by-removal) does not reject
+// the offline bundle during whole-manifest verification. These are ARM64
+// launcher stubs pip vendors into distlib/setuptools; they appear under
+// python/**/site-packages and inside uv-cache/archive-v0 wheel snapshots,
+// are never executed on an x64 runtime, and are disproportionately
+// quarantined by AV heuristics. Must stay in sync with
+// ANTIVIRUS_BAIT_BASENAMES in apps/desktop/scripts/prepare-offline-runtime.cjs,
+// which drops them from the bundle at build time; this runtime set is the
+// second line of defense for bundles built (or tampered with) before that.
+const OFFLINE_RUNTIME_QUARANTINE_TOLERATED_BASENAMES = new Set([
+  't64-arm.exe',
+  'w64-arm.exe',
+  'cli-arm64.exe',
+  'gui-arm64.exe'
+])
+
 function resolveOfflineRuntimePath() {
   const expectedTarget =
     process.platform === 'win32' && process.arch === 'x64'
@@ -787,6 +803,7 @@ function resolveOfflineRuntimePath() {
 
       const root = path.resolve(candidate)
       const offenders: string[] = []
+      const avQuarantined: string[] = []
 
       const valid = Object.entries(manifest.files).every(([relative, expected]) => {
         const file = path.resolve(root, relative)
@@ -808,11 +825,31 @@ function resolveOfflineRuntimePath() {
 
           return true
         } catch {
+          // Known AV-quarantine bait (ARM64 launcher stubs pip vendors into
+          // distlib/setuptools, in site-packages AND inside uv-cache wheel
+          // snapshots): never executed on the x64 runtime, so their absence
+          // is tolerated instead of rejecting the whole 17k-file bundle.
+          // A hash MISMATCH on any file (including these) still fails --
+          // the exemption covers quarantine-by-removal only, never tampering.
+          if (OFFLINE_RUNTIME_QUARANTINE_TOLERATED_BASENAMES.has(path.basename(relative))) {
+            avQuarantined.push(relative)
+
+            return true
+          }
+
           offenders.push(`${relative} (unreadable/missing)`)
 
           return false
         }
       })
+
+      if (avQuarantined.length > 0) {
+        rememberLog(
+          `[offline-runtime] tolerating ${avQuarantined.length} quarantined antivirus-bait ` +
+            `file(s) in ${candidate} (${avQuarantined.slice(0, 3).join('; ')}); ` +
+            `ARM64 launcher stubs are inert on this platform`
+        )
+      }
 
       if (valid) {
         return candidate
