@@ -22,6 +22,11 @@ vi.mock('../chat', () => ({
   ChatView: ({ gateway }: { gateway: { id?: string } | null }) => <div data-testid="gateway">{gateway?.id}</div>
 }))
 vi.mock('../chat/sidebar', () => ({ ChatSidebar: () => null }))
+vi.mock('../cron', () => ({
+  CronView: ({ presentation }: { presentation?: string }) => (
+    <div data-presentation={presentation} data-testid="cron-view" />
+  )
+}))
 vi.mock('../right-sidebar/terminal/chrome', () => ({ TerminalPaneChrome: () => null }))
 vi.mock('../shell/hooks/use-status-snapshot', () => ({ useStatusSnapshot: () => ({}) }))
 vi.mock('../shell/hooks/use-statusbar-items', () => ({
@@ -32,7 +37,8 @@ vi.mock('../routes', () => ({
   contributedRoutes: () => [],
   NEW_CHAT_ROUTE: '/new',
   ROUTES_AREA: 'routes',
-  sessionRoute: (id: string) => `/${id}`
+  sessionRoute: (id: string) => `/${id}`,
+  SETTINGS_ROUTE: '/settings'
 }))
 vi.mock('./latest-actions', () => ({ latestChatActions: () => ({}), latestSidebarActions: () => ({}) }))
 vi.mock('./panes', () => ({ setStatusbarItemGroup: vi.fn(), useStatusbarContributions: () => [] }))
@@ -66,5 +72,20 @@ describe('ChatRoutesSurface', () => {
     })
 
     expect(screen.getByTestId('gateway').textContent).toBe('b')
+  })
+
+  it('renders scheduled tasks as an embedded workspace page', async () => {
+    const actions = {
+      onNewSessionInWorkspace: vi.fn(),
+      onResumeSession: vi.fn()
+    } as unknown as WiringActions
+
+    render(
+      <MemoryRouter initialEntries={['/cron']}>
+        <ChatRoutesSurface actions={actions} />
+      </MemoryRouter>
+    )
+
+    expect((await screen.findByTestId('cron-view')).getAttribute('data-presentation')).toBe('page')
   })
 })

@@ -70,7 +70,7 @@ export function AppActivityView({ profile, sessionId }: AppActivityViewProps) {
         </div>
 
         {artifacts.length === 0 ? (
-          <div className="grid min-h-72 place-items-center border border-dashed bg-background/60 px-8 text-center">
+          <div className="grid min-h-72 place-items-center border border-dashed bg-(--ui-card-surface-background) px-8 text-center">
             <div>
               <FileText className="mx-auto mb-3 size-7 text-muted-foreground" />
               <h2 className="text-sm font-medium">还没有应用产物</h2>
@@ -84,7 +84,7 @@ export function AppActivityView({ profile, sessionId }: AppActivityViewProps) {
             {artifacts.map(artifact => (
               <li className="relative" key={artifact.id}>
                 <span className="absolute -left-[1.48rem] top-5 size-2.5 rounded-full border-2 border-background bg-primary" />
-                <article className="border bg-background p-4 shadow-xs">
+                <article className="border bg-(--ui-card-surface-background) p-4">
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0">
                       <h2 className="truncate text-sm font-semibold text-foreground">{artifact.title}</h2>

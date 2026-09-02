@@ -276,6 +276,119 @@ export const nousTheme: DesktopTheme = {
   }
 }
 
+/**
+ * Finance Mate — a crisp financial-workstation palette built around white,
+ * ice blue and a high-contrast market blue. The dark variant shifts the same
+ * hierarchy onto deep navy surfaces without losing semantic chart colors.
+ */
+export const financeMateTheme: DesktopTheme = {
+  name: 'finance-mate',
+  label: 'Finance Mate',
+  description: 'White canvas, finance blue focus',
+  colors: {
+    background: '#ffffff',
+    foreground: '#102a43',
+    card: '#f7faff',
+    cardForeground: '#102a43',
+    muted: '#eef5ff',
+    mutedForeground: '#5b708b',
+    popover: '#ffffff',
+    popoverForeground: '#102a43',
+    primary: '#0759d5',
+    primaryForeground: '#ffffff',
+    secondary: '#e6f0ff',
+    secondaryForeground: '#163a63',
+    accent: '#dcebff',
+    accentForeground: '#123a67',
+    border: '#c7d9f2',
+    input: '#f5f9ff',
+    ring: '#0759d5',
+    midground: '#0759d5',
+    midgroundForeground: '#ffffff',
+    composerRing: '#0759d5',
+    destructive: '#c7364f',
+    destructiveForeground: '#ffffff',
+    sidebarBackground: '#f1f6ff',
+    sidebarBorder: '#c9dcf7',
+    userBubble: '#e5f0ff',
+    userBubbleBorder: '#bfd5f4'
+  },
+  darkColors: {
+    background: '#071426',
+    foreground: '#eaf2ff',
+    card: '#0c1c33',
+    cardForeground: '#eaf2ff',
+    muted: '#122743',
+    mutedForeground: '#91a8c6',
+    popover: '#10233c',
+    popoverForeground: '#eaf2ff',
+    primary: '#65a2ff',
+    primaryForeground: '#071426',
+    secondary: '#17345a',
+    secondaryForeground: '#ddeaff',
+    accent: '#15345f',
+    accentForeground: '#eff5ff',
+    border: '#25466f',
+    input: '#0b1d35',
+    ring: '#65a2ff',
+    midground: '#65a2ff',
+    midgroundForeground: '#071426',
+    composerRing: '#65a2ff',
+    destructive: '#ff7085',
+    destructiveForeground: '#071426',
+    sidebarBackground: '#061123',
+    sidebarBorder: '#1d3b62',
+    userBubble: '#12335c',
+    userBubbleBorder: '#2b5b91'
+  },
+  typography: {
+    fontSans: SYSTEM_SANS,
+    fontMono: SYSTEM_MONO
+  },
+  terminal: {
+    foreground: '#102a43',
+    cursor: '#0759d5',
+    selectionBackground: '#cfe1ff',
+    black: '#263b53',
+    red: '#c7364f',
+    green: '#087a55',
+    yellow: '#9a6700',
+    blue: '#0759d5',
+    magenta: '#7554c9',
+    cyan: '#087c99',
+    white: '#c7d9f2',
+    brightBlack: '#61758e',
+    brightRed: '#e04b63',
+    brightGreen: '#0d9366',
+    brightYellow: '#b77900',
+    brightBlue: '#2f7de1',
+    brightMagenta: '#8b6adb',
+    brightCyan: '#1496b8',
+    brightWhite: '#ffffff'
+  },
+  darkTerminal: {
+    foreground: '#eaf2ff',
+    cursor: '#65a2ff',
+    selectionBackground: '#2c5a8f80',
+    black: '#14243b',
+    red: '#ff7a8d',
+    green: '#4cd7a0',
+    yellow: '#f3c969',
+    blue: '#65a2ff',
+    magenta: '#b59aff',
+    cyan: '#55cde2',
+    white: '#c8d7ea',
+    brightBlack: '#6f86a5',
+    brightRed: '#ff9aaa',
+    brightGreen: '#73e7b9',
+    brightYellow: '#ffe08a',
+    brightBlue: '#8ab9ff',
+    brightMagenta: '#cbb8ff',
+    brightCyan: '#7fe0ef',
+    brightWhite: '#ffffff'
+  }
+}
+
 /** Catppuccin — Latte in light, Mocha in dark (Catppuccin.catppuccin-vsc). */
 export const catppuccinTheme: DesktopTheme = {
   name: 'catppuccin',
@@ -846,6 +959,7 @@ export const slateTheme: DesktopTheme = {
 }
 
 export const BUILTIN_THEMES: Record<string, DesktopTheme> = {
+  'finance-mate': financeMateTheme,
   nous: nousTheme,
   github: githubTheme,
   catppuccin: catppuccinTheme,

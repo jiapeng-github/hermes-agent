@@ -277,6 +277,11 @@
       var(--theme-elevated-seed) var(--theme-mix-elevated),
       var(--theme-neutral-card)
     );
+    /* Content materials. Cards share the content canvas paint in an opaque
+       window; Glass retunes this one token for application, account and
+       activity cards together instead of letting each surface drift. */
+    --ui-card-surface-background: var(--ui-bg-chrome);
+    --ui-popover-surface-background: color-mix(in srgb, var(--ui-bg-elevated) 92%, transparent);
     --ui-bg-card: color-mix(in srgb, var(--ui-accent) 4%, color-mix(in srgb, var(--ui-base) 4%, transparent));
     --ui-bg-input: #fcfcfc;
     --ui-bg-primary: color-mix(
@@ -586,18 +591,21 @@
 
      ONE PAINTER: <body> paints the glass tint exactly once, at
      `--translucency-glass-keep` (set inline from the Tint slider, linear to
-     zero — the top of the lever is bare material), and the field tokens
-     (chat / sidebar / editor surface) go fully transparent. The field
-     surfaces NEST — body > pane container > chat section > transcript
-     wrapper all wear these tokens — so thinning the tokens themselves stacks
-     the tint once per layer and a session pane ends up near-opaque (~0.93 at
-     60%) while the landing page, with fewer layers, reads far clearer. With a
-     single painter the field alpha is the same number on every route. Raised
-     content (cards, popovers, bubbles, the composer) keeps its own opaque
-     fills over full-contrast text; regions still read distinct through their
-     borders and the material itself. Unlike Clear, nothing on the page fades
-     — the separate Fade lever does that natively, at the window level, and
-     defaults to off.
+     zero — the top of the lever is bare material). A hard split at the live
+     sidebar edge uses the theme's sidebar paint on the rail and its chrome
+     paint on the content field, so Glass does not erase a skin's two-tone
+     hierarchy. The field tokens (chat / sidebar / editor surface) then go
+     fully transparent. Those surfaces NEST — body > pane container > chat
+     section > transcript wrapper all wear these tokens — so thinning the
+     tokens themselves stacks the tint once per layer and a session pane ends
+     up near-opaque (~0.93 at 60%) while the landing page, with fewer layers,
+     reads far clearer. With a single painter the field alpha is the same
+     number on every route. Ordinary cards and popovers use the material
+     tokens below so they stay close to the field instead of becoming white
+     paper islands; masking overlays and editor surfaces keep their stronger
+     fills where content separation requires it.
+     Unlike Clear, nothing on the page fades — the separate Fade lever does
+     that natively, at the window level, and defaults to off.
 
      The boot script in index.html pins an opaque inline background on <html>
      before first paint; it has to go transparent here or it sits behind the
@@ -611,24 +619,51 @@
     --ui-sidebar-surface-background: transparent;
     --ui-editor-surface-background: transparent;
     --ui-terminal-surface-background: var(--ui-bg-chrome);
+    /* Cards sit lower in the native material than the sticky title band, so
+       the same transparent blur resolves darker there. The measured 30% chrome
+       tint closes that gap and is shared by app, account and activity cards. */
+    --ui-card-surface-background: color-mix(in srgb, var(--ui-bg-chrome) 30%, transparent);
+    --ui-popover-surface-background: color-mix(in srgb, var(--ui-bg-elevated) 56%, transparent);
+  }
+
+  :root.dark[data-hermes-glass] {
+    /* Generic floating popovers need a little more pigment in dark glass;
+       the three shared card surfaces keep the measured tint above. */
+    --ui-popover-surface-background: color-mix(in srgb, var(--ui-bg-elevated) 68%, transparent);
   }
 
   :root[data-hermes-glass] body {
-    background: color-mix(in srgb, var(--ui-bg-chrome) var(--translucency-glass-keep, 100%), transparent);
+    background: linear-gradient(
+      to right,
+      color-mix(in srgb, var(--ui-bg-sidebar) var(--translucency-glass-keep, 100%), transparent)
+        var(--glass-rail-edge, 0px),
+      color-mix(in srgb, var(--ui-bg-chrome) var(--translucency-glass-keep, 100%), transparent)
+        var(--glass-rail-edge, 0px)
+    );
+  }
+
+  :root[data-hermes-glass][dir='rtl'] body {
+    background: linear-gradient(
+      to left,
+      color-mix(in srgb, var(--ui-bg-sidebar) var(--translucency-glass-keep, 100%), transparent)
+        var(--glass-rail-edge, 0px),
+      color-mix(in srgb, var(--ui-bg-chrome) var(--translucency-glass-keep, 100%), transparent)
+        var(--glass-rail-edge, 0px)
+    );
   }
 
   /* Sidebar scope (the Finder shape): glass rail, opaque content column.
      <body> stays the one painter but splits at the rail's visual edge — the
      store publishes it as --glass-rail-edge (live-tracked through collapse
-     animation and pane resizes). Left of the seam: the normal glass mix.
-     Right of it: the full opaque chrome. A hard gradient stop, so there is
-     no smear across the seam; RTL mirrors via html[dir='rtl']. The content
+     animation and pane resizes). Left of the seam: the themed sidebar glass
+     mix. Right of it: the full opaque chrome. A hard gradient stop, so there
+     is no smear across the seam; RTL mirrors via html[dir='rtl']. The content
      column's own surfaces stay transparent (they'd double-paint the tint
      otherwise) — the body backdrop alone restores the opaque look. */
   :root[data-hermes-glass][data-hermes-glass-scope='sidebar'] body {
     background: linear-gradient(
       to right,
-      color-mix(in srgb, var(--ui-bg-chrome) var(--translucency-glass-keep, 100%), transparent)
+      color-mix(in srgb, var(--ui-bg-sidebar) var(--translucency-glass-keep, 100%), transparent)
         var(--glass-rail-edge, 0px),
       var(--ui-bg-chrome) var(--glass-rail-edge, 0px)
     );
@@ -637,7 +672,7 @@
   :root[data-hermes-glass][data-hermes-glass-scope='sidebar'][dir='rtl'] body {
     background: linear-gradient(
       to left,
-      color-mix(in srgb, var(--ui-bg-chrome) var(--translucency-glass-keep, 100%), transparent)
+      color-mix(in srgb, var(--ui-bg-sidebar) var(--translucency-glass-keep, 100%), transparent)
         var(--glass-rail-edge, 0px),
       var(--ui-bg-chrome) var(--glass-rail-edge, 0px)
     );
@@ -2954,7 +2989,8 @@ button[data-slot='aui_msg-reactions'] svg {
    Widgets on the shared shell (components/chat/widget-shell.ts →
    `--ui-widget-surface-background`) and any chat-surface card are matched on
    their class, so new ones inherit this without touching the list. */
-[data-hud-shell] [data-slot='composer-bounds']
+[data-hud-shell]
+  [data-slot='composer-bounds']
   :is(
     [data-slot='clarify-inline'],
     [data-slot='tool-block'],

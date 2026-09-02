@@ -19,12 +19,20 @@ function isDeliverField(field: AutomationBlueprintField): boolean {
 // suite can assert the form seeds correctly without mounting React. The deliver
 // slot is special-cased: an "origin" default (or empty) becomes "local" so a
 // desktop-created job delivers to This desktop instead of nowhere.
-export function initialBlueprintValues(blueprint: AutomationBlueprint): Record<string, string> {
+export function initialBlueprintValues(
+  blueprint: AutomationBlueprint,
+  localizeTextDefault?: (field: string, value: string) => string
+): Record<string, string> {
   const out: Record<string, string> = {}
 
   for (const field of blueprint.fields) {
     const seeded = field.default ?? ''
-    out[field.name] = isDeliverField(field) && (seeded === '' || seeded === 'origin') ? DESKTOP_DELIVER_DEFAULT : seeded
+    out[field.name] =
+      isDeliverField(field) && (seeded === '' || seeded === 'origin')
+        ? DESKTOP_DELIVER_DEFAULT
+        : field.type === 'text' && seeded
+          ? (localizeTextDefault?.(field.name, seeded) ?? seeded)
+          : seeded
   }
 
   return out
@@ -40,22 +48,28 @@ export function cleanBlueprintFieldError(message: string): string {
 // origin/dashboard-centric and even contradicts desktop semantics ("local =
 // save only" vs. This desktop), and the DeliverSelect is self-explanatory —
 // skip it for the deliver slot.
-export function blueprintSlotHelp(field: AutomationBlueprintField): string | undefined {
-  return field.help && field.type !== 'text' && !isDeliverField(field) ? field.help : undefined
+export function blueprintSlotHelp(field: AutomationBlueprintField, displayHelp = field.help): string | undefined {
+  return displayHelp && field.type !== 'text' && !isDeliverField(field) ? displayHelp : undefined
 }
 
 // Renders one blueprint slot's control (enum/weekdays → Select, time → time
 // input, else text). The deliver slot is handled separately by the dialog's
 // shared DeliverSelect, so it's not rendered here.
 export function BlueprintSlotControl({
+  displayHelp,
+  displayLabel,
   field,
   id,
   onChange,
+  optionLabel,
   value
 }: {
+  displayHelp?: string
+  displayLabel?: string
   field: AutomationBlueprintField
   id: string
   onChange: (next: string) => void
+  optionLabel?: (value: string) => string
   value: string
 }) {
   if (field.type === 'enum' || field.type === 'weekdays') {
@@ -67,7 +81,7 @@ export function BlueprintSlotControl({
         <SelectContent>
           {field.options.map(option => (
             <SelectItem key={option} value={option}>
-              {option}
+              {optionLabel?.(option) ?? option}
             </SelectItem>
           ))}
         </SelectContent>
@@ -83,7 +97,7 @@ export function BlueprintSlotControl({
     <Input
       id={id}
       onChange={event => onChange(event.target.value)}
-      placeholder={field.help || field.label}
+      placeholder={displayHelp || displayLabel || field.help || field.label}
       type="text"
       value={value}
     />

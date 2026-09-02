@@ -313,9 +313,7 @@ export function AppMarketView({ onCreateApp, onEditApp }: AppMarketViewProps) {
 
     return apps.filter(app => {
       const matchesQuery = !folded || `${app.name} ${app.id} ${app.description}`.toLocaleLowerCase().includes(folded)
-      const matchesCategory =
-        selectedCategory === 'all' ||
-        app.category === selectedCategory
+      const matchesCategory = selectedCategory === 'all' || app.category === selectedCategory
       return matchesQuery && matchesCategory
     })
   }, [apps, query, selectedCategory])
@@ -354,7 +352,8 @@ export function AppMarketView({ onCreateApp, onEditApp }: AppMarketViewProps) {
           conflict_mode: importPlan.conflict.kind === 'none' ? 'install' : 'update',
           copy_app_id: null,
           grants: importPlan.requested_permissions,
-          category: hubOperation?.import_plan?.import_id === importPlan.import_id ? hubOperation.category ?? null : null
+          category:
+            hubOperation?.import_plan?.import_id === importPlan.import_id ? (hubOperation.category ?? null) : null
         }
       })
       const wasHubInstall = hubOperation?.import_plan?.import_id === importPlan.import_id
@@ -474,11 +473,7 @@ export function AppMarketView({ onCreateApp, onEditApp }: AppMarketViewProps) {
               >
                 已安装
               </Button>
-              <Button
-                onClick={() => setMode('hub')}
-                size="xs"
-                variant={mode === 'hub' ? 'secondary' : 'ghost'}
-              >
+              <Button onClick={() => setMode('hub')} size="xs" variant={mode === 'hub' ? 'secondary' : 'ghost'}>
                 应用中心
               </Button>
             </div>
@@ -538,7 +533,7 @@ export function AppMarketView({ onCreateApp, onEditApp }: AppMarketViewProps) {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {[0, 1, 2].map(item => (
                 <div
-                  className="h-72 animate-pulse rounded-md border border-(--ui-stroke-tertiary) bg-(--ui-bg-elevated)"
+                  className="h-72 animate-pulse rounded-md border border-(--ui-stroke-tertiary) bg-(--ui-card-surface-background)"
                   key={item}
                 />
               ))}
@@ -553,7 +548,7 @@ export function AppMarketView({ onCreateApp, onEditApp }: AppMarketViewProps) {
                 const retrying = hubOperation?.state === 'failed' && hubOperation.hub_app_id === app.id
                 return (
                   <article
-                    className="group flex min-w-0 flex-col overflow-hidden rounded-md border border-(--ui-stroke-tertiary) bg-(--ui-bg-elevated) shadow-sm transition-colors hover:border-primary/30"
+                    className="group flex min-w-0 flex-col overflow-hidden rounded-md border border-(--ui-stroke-tertiary) bg-(--ui-card-surface-background) transition-colors hover:border-primary/30"
                     key={app.id}
                   >
                     <HubAppPreview app={app} onOpen={setHubPreview} />
@@ -650,7 +645,7 @@ export function AppMarketView({ onCreateApp, onEditApp }: AppMarketViewProps) {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {[0, 1, 2].map(item => (
               <div
-                className="h-36 animate-pulse rounded-md border border-(--ui-stroke-tertiary) bg-(--ui-bg-elevated)"
+                className="h-36 animate-pulse rounded-md border border-(--ui-stroke-tertiary) bg-(--ui-card-surface-background)"
                 key={item}
               />
             ))}
@@ -662,7 +657,7 @@ export function AppMarketView({ onCreateApp, onEditApp }: AppMarketViewProps) {
 
               return (
                 <article
-                  className="group flex min-h-36 flex-col rounded-md border border-(--ui-stroke-tertiary) bg-(--ui-bg-elevated) p-3.5 shadow-sm transition-colors hover:border-primary/30"
+                  className="group flex min-h-36 flex-col rounded-md border border-(--ui-stroke-tertiary) bg-(--ui-card-surface-background) p-3.5 transition-colors hover:border-primary/30"
                   key={app.id}
                 >
                   <div className="flex items-start gap-3">

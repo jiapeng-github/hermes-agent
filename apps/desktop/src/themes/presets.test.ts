@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
+import { contrastRatio } from './color'
 import {
   BUILTIN_THEME_LIST,
   BUILTIN_THEMES,
   DEFAULT_SKIN_NAME,
   DEFAULT_TYPOGRAPHY,
   EMOJI_FALLBACK,
+  financeMateTheme,
   nousAltTheme
 } from './presets'
 
@@ -48,5 +50,42 @@ describe('nous-alt is the retired Nous, not the default', () => {
     expect(BUILTIN_THEMES.nous).not.toBe(nousAltTheme)
     expect(nousAltTheme.darkColors?.background).toBe('#0D2F86')
     expect(BUILTIN_THEMES.nous.darkColors?.background).not.toBe(nousAltTheme.darkColors?.background)
+  })
+})
+
+describe('Finance Mate theme', () => {
+  it('is registered as a selectable built-in without replacing the default', () => {
+    expect(BUILTIN_THEMES['finance-mate']).toBe(financeMateTheme)
+    expect(financeMateTheme.label).toBe('Finance Mate')
+    expect(DEFAULT_SKIN_NAME).toBe('nous')
+  })
+
+  it.each([
+    ['light foreground', financeMateTheme.colors.foreground, financeMateTheme.colors.background],
+    ['light muted text', financeMateTheme.colors.mutedForeground, financeMateTheme.colors.background],
+    ['light primary action', financeMateTheme.colors.primary, financeMateTheme.colors.primaryForeground],
+    [
+      'light sidebar accent',
+      financeMateTheme.colors.primary,
+      financeMateTheme.colors.sidebarBackground ?? financeMateTheme.colors.background
+    ],
+    ['dark foreground', financeMateTheme.darkColors?.foreground ?? '', financeMateTheme.darkColors?.background ?? ''],
+    [
+      'dark muted text',
+      financeMateTheme.darkColors?.mutedForeground ?? '',
+      financeMateTheme.darkColors?.background ?? ''
+    ],
+    [
+      'dark primary action',
+      financeMateTheme.darkColors?.primary ?? '',
+      financeMateTheme.darkColors?.primaryForeground ?? ''
+    ]
+  ])('%s meets WCAG AA contrast', (_label, foreground, background) => {
+    expect(contrastRatio(foreground, background)).toBeGreaterThanOrEqual(4.5)
+  })
+
+  it('carries dedicated terminal palettes for both appearance modes', () => {
+    expect(financeMateTheme.terminal?.blue).toBe(financeMateTheme.colors.primary)
+    expect(financeMateTheme.darkTerminal?.blue).toBe(financeMateTheme.darkColors?.primary)
   })
 })

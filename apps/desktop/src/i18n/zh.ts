@@ -2,6 +2,173 @@ import { defineFieldCopy } from '@/app/settings/field-copy'
 
 import type { Translations } from './types'
 
+interface CronBlueprintCopy {
+  description: string
+  sourceTitle: string
+  title: string
+}
+
+const CRON_BLUEPRINT_COPY: Record<string, CronBlueprintCopy> = {
+  'bill-renewal-watch': {
+    description: '在定期付款、订阅续费或到期日前提醒你，避免意外自动扣款。',
+    sourceTitle: 'Bills & renewals reminder',
+    title: '账单与续费提醒'
+  },
+  'competitor-watch': {
+    description: '跟踪指定公司的产品发布、价格、融资和公告等重要动态，并生成带来源的摘要。',
+    sourceTitle: 'Competitor news watch',
+    title: '竞品动态监控'
+  },
+  'custom-reminder': {
+    description: '按照你设定的内容和时间重复发送提醒。',
+    sourceTitle: 'Custom reminder',
+    title: '自定义提醒'
+  },
+  'evening-winddown': {
+    description: '在一天结束时回顾明日日程，并提醒今晚需要提前准备的事项。',
+    sourceTitle: 'Evening wind-down',
+    title: '晚间收尾'
+  },
+  'gratitude-journal': {
+    description: '在晚间温和地引导你回顾当天，并记录进展与值得感恩的事情。',
+    sourceTitle: 'Gratitude & reflection prompt',
+    title: '感恩与复盘提示'
+  },
+  'habit-checkin': {
+    description: '定期提醒你坚持习惯，并回顾当天是否完成。',
+    sourceTitle: 'Habit check-in',
+    title: '习惯打卡'
+  },
+  'hydration-move': {
+    description: '在工作时段定期提醒你喝水、起身和伸展。',
+    sourceTitle: 'Hydration & movement nudge',
+    title: '饮水与活动提醒'
+  },
+  'important-mail': {
+    description: '定期检查收件箱，只在邮件确实需要处理时提醒你。',
+    sourceTitle: 'Important-mail monitor',
+    title: '重要邮件监控'
+  },
+  'learn-daily': {
+    description: '每天推送一段循序渐进的微课程，帮助你持续学习感兴趣的主题。',
+    sourceTitle: 'Daily learning drip',
+    title: '每日微学习'
+  },
+  'meal-plan': {
+    description: '根据饮食偏好和可投入的烹饪时间，生成每周膳食计划及汇总采购清单。',
+    sourceTitle: 'Weekly meal plan',
+    title: '每周膳食计划'
+  },
+  'morning-brief': {
+    description: '每日汇总今日日程、天气以及需要你立即关注的事项。',
+    sourceTitle: 'Morning briefing',
+    title: '晨间简报'
+  },
+  'news-digest': {
+    description: '围绕你关注的主题定期生成摘要，并对已推送内容去重，只呈现真正的新进展。',
+    sourceTitle: 'Topic news digest',
+    title: '主题新闻摘要'
+  },
+  'on-this-day': {
+    description: '每天提供一则值得了解的历史事件、知识或词语。',
+    sourceTitle: 'On-this-day discovery',
+    title: '历史上的今天'
+  },
+  'price-watch': {
+    description: '监控指定商品、航班、酒店或其他条目，并在满足价格或可用性条件时提醒你。',
+    sourceTitle: 'Price & availability watch',
+    title: '价格与可用性监控'
+  },
+  'weekly-review': {
+    description: '每周回顾已完成事项、待办事项和接下来的安排。',
+    sourceTitle: 'Weekly review',
+    title: '每周复盘'
+  },
+  'workday-start': {
+    description: '在工作日开始时提醒你查看今日议程和最重要的任务。',
+    sourceTitle: 'Workday start reminder',
+    title: '工作日开始提醒'
+  }
+}
+
+const CRON_BLUEPRINT_FIELD_LABELS: Record<string, string> = {
+  day: '哪一天？',
+  deliver: '投递至',
+  recurrence: '重复日期',
+  time: '执行时间',
+  'bill-renewal-watch.what': '哪项账单或续费？',
+  'competitor-watch.categories': '关注哪些事件？',
+  'competitor-watch.companies': '监控哪些公司？',
+  'custom-reminder.what': '提醒我……',
+  'habit-checkin.habit': '要坚持什么习惯？',
+  'hydration-move.end_hour': '结束时间',
+  'hydration-move.interval_hours': '提醒频率',
+  'hydration-move.start_hour': '开始时间',
+  'important-mail.criteria': '仅在邮件符合以下条件时通知我',
+  'important-mail.interval_min': '检查频率',
+  'learn-daily.topic': '学习什么？',
+  'meal-plan.diet': '饮食偏好',
+  'meal-plan.effort': '烹饪投入',
+  'meal-plan.meals': '每天安排几餐？',
+  'news-digest.count': '最多几条？',
+  'news-digest.topic': '关注什么主题？',
+  'on-this-day.flavor': '内容类型',
+  'price-watch.condition': '满足什么条件时提醒？',
+  'price-watch.interval_h': '检查频率',
+  'price-watch.item': '具体监控什么？'
+}
+
+const CRON_BLUEPRINT_FIELD_HELP: Record<string, string> = {
+  time: '使用本地时间，24 小时制，例如 08:00',
+  'competitor-watch.companies': '填写公司标准名称和官网域名；补充别名有助于去重',
+  'hydration-move.end_hour': '提醒时段的最后一个整点（24 小时制）',
+  'hydration-move.interval_hours': '两次提醒之间的小时数',
+  'hydration-move.start_hour': '提醒时段的第一个整点（24 小时制）',
+  'important-mail.interval_min': '两次检查之间的分钟数',
+  'news-digest.topic': '可以填写主题、产品、人物或搜索词',
+  'price-watch.condition': '填写目标价格和币种、可用性或条款变化',
+  'price-watch.interval_h': '两次检查之间的小时数，请注意访问频率限制',
+  'price-watch.item': '填写网址或精确描述，包括规格、日期和商家'
+}
+
+const CRON_BLUEPRINT_OPTION_LABELS: Record<string, string> = {
+  'all three': '三餐',
+  ambitious: '丰盛',
+  everyday: '每天',
+  friday: '周五',
+  'high-protein': '高蛋白',
+  'low-carb': '低碳水',
+  medium: '适中',
+  monday: '周一',
+  'no restrictions': '无特殊限制',
+  quick: '快手',
+  saturday: '周六',
+  'science fact': '科学知识',
+  sunday: '周日',
+  vegan: '纯素',
+  vegetarian: '素食',
+  weekdays: '工作日',
+  weekends: '周末',
+  'dinner only': '仅晚餐',
+  'lunch and dinner': '午餐和晚餐',
+  'on this day in history': '历史上的今天',
+  'quote of the day': '每日名言',
+  'word of the day': '每日一词'
+}
+
+const CRON_BLUEPRINT_TEXT_DEFAULTS: Record<string, string> = {
+  'bill-renewal-watch.what': '我的流媒体订阅即将续费',
+  'competitor-watch.categories': '产品发布、价格变化、融资、合作、高管变动和重大事件',
+  'competitor-watch.companies': '两到三个竞品公司的标准名称',
+  'custom-reminder.what': '休息一下并伸展身体',
+  'habit-checkin.habit': '阅读 20 分钟',
+  'important-mail.criteria': '今天需要回复、来自我的经理或家人，或者提到了截止日期',
+  'learn-daily.topic': '西班牙语词汇',
+  'news-digest.topic': '人工智能与科技',
+  'price-watch.condition': '含税总价低于我的目标价格',
+  'price-watch.item': '商品网址，或航班、酒店、房源的精确描述'
+}
+
 export const zh: Translations = {
   common: {
     apply: '应用',
@@ -2331,7 +2498,7 @@ export const zh: Translations = {
     modelLabel: '模型',
     modelDefault: '默认（全局模型）',
     customScheduleLabel: '自定义排程',
-    customPlaceholder: '0 9 * * * 或 weekdays at 9am',
+    customPlaceholder: '0 9 * * * 或 工作日上午 9 点',
     customHint: 'Cron 表达式，或类似"每小时""工作日上午 9 点"的短语。',
     optional: '可选',
     promptRequired: '提示词为必填项。',
@@ -2350,6 +2517,17 @@ export const zh: Translations = {
       custom: '自定义',
       subtitle: '现成的自动化',
       dialogDesc: '填写详细信息并进行排程。',
+      titleFor: (key, fallback) =>
+        CRON_BLUEPRINT_COPY[key]?.title ??
+        Object.values(CRON_BLUEPRINT_COPY).find(item => item.sourceTitle === fallback)?.title ??
+        fallback,
+      descriptionFor: (key, fallback) => CRON_BLUEPRINT_COPY[key]?.description ?? fallback,
+      fieldLabelFor: (key, field, fallback) =>
+        CRON_BLUEPRINT_FIELD_LABELS[`${key}.${field}`] ?? CRON_BLUEPRINT_FIELD_LABELS[field] ?? fallback,
+      fieldHelpFor: (key, field, fallback) =>
+        CRON_BLUEPRINT_FIELD_HELP[`${key}.${field}`] ?? CRON_BLUEPRINT_FIELD_HELP[field] ?? fallback,
+      optionLabelFor: (_key, _field, value) => CRON_BLUEPRINT_OPTION_LABELS[value] ?? value,
+      textDefaultFor: (key, field, value) => CRON_BLUEPRINT_TEXT_DEFAULTS[`${key}.${field}`] ?? value,
       scheduleIt: '安排任务',
       scheduling: '安排中...',
       scheduled: '蓝图已安排',

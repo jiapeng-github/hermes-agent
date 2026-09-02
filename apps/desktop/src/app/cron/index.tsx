@@ -124,6 +124,12 @@ function jobName(job: CronJob): string {
   return asText(job.name).trim()
 }
 
+function displayJobTitle(job: CronJob, c: Translations['cron']): string {
+  const title = jobTitle(job)
+
+  return c.blueprints.titleFor('', title)
+}
+
 function jobPrompt(job: CronJob): string {
   return asText(job.prompt)
 }
@@ -277,16 +283,21 @@ function formatTime(iso?: null | string): string {
   return date.toLocaleString()
 }
 
-function matchesQuery(job: CronJob, q: string): boolean {
+function matchesQuery(job: CronJob, q: string, c: Translations['cron']): boolean {
   if (!q) {
     return true
   }
 
   const needle = q.toLowerCase()
 
-  return [jobTitle(job), jobPrompt(job), jobScheduleDisplay(job), jobScheduleExpr(job), jobDeliver(job)].some(value =>
-    value.toLowerCase().includes(needle)
-  )
+  return [
+    displayJobTitle(job, c),
+    jobTitle(job),
+    jobPrompt(job),
+    jobScheduleDisplay(job),
+    jobScheduleExpr(job),
+    jobDeliver(job)
+  ].some(value => value.toLowerCase().includes(needle))
 }
 
 interface CronViewProps extends React.ComponentProps<'section'> {
@@ -401,8 +412,11 @@ export function CronView({
   }, [focusJobId, jobs])
 
   const visibleJobs = useMemo(
-    () => jobs.filter(job => matchesQuery(job, query.trim())).sort((a, b) => jobTitle(a).localeCompare(jobTitle(b))),
-    [jobs, query]
+    () =>
+      jobs
+        .filter(job => matchesQuery(job, query.trim(), c))
+        .sort((a, b) => displayJobTitle(a, c).localeCompare(displayJobTitle(b, c))),
+    [c, jobs, query]
   )
 
   // Blueprint recipes render in the same list rail, below the jobs — clicking
@@ -417,8 +431,14 @@ export function CronView({
     const list = blueprintsQuery.data ?? []
     const needle = query.trim().toLowerCase()
 
-    return needle ? list.filter(item => `${item.title} ${item.description}`.toLowerCase().includes(needle)) : list
-  }, [blueprintsQuery.data, query])
+    return needle
+      ? list.filter(item =>
+          `${c.blueprints.titleFor(item.key, item.title)} ${c.blueprints.descriptionFor(item.key, item.description)} ${item.title} ${item.description}`
+            .toLowerCase()
+            .includes(needle)
+        )
+      : list
+  }, [blueprintsQuery.data, c, query])
 
   // Detail always reflects a concrete job: the explicitly selected one, else the
   // first visible row, so the right pane is never empty while jobs exist.
@@ -487,7 +507,7 @@ export function CronView({
       notify({
         kind: 'success',
         title: isPaused ? c.resumed : c.paused,
-        message: truncate(jobTitle(job), 60)
+        message: truncate(displayJobTitle(job, c), 60)
       })
     } catch (err) {
       notifyError(err, c.failedUpdate)
@@ -509,7 +529,7 @@ export function CronView({
       const run = await controller.run(
         key,
         () => triggerAndRefreshCronJobs(job.id, viewProfile),
-        () => notify({ kind: 'info', title: c.triggerNow, message: truncate(jobTitle(job), 60) })
+        () => notify({ kind: 'info', title: c.triggerNow, message: truncate(displayJobTitle(job, c), 60) })
       )
 
       if (
@@ -531,7 +551,7 @@ export function CronView({
         notifyError(refreshError, c.failedLoad)
       }
 
-      notify({ kind: 'success', title: c.triggered, message: truncate(jobTitle(job), 60) })
+      notify({ kind: 'success', title: c.triggered, message: truncate(displayJobTitle(job, c), 60) })
     } catch (err) {
       if (triggerControllerRef.current === controller && cronProfileForScope($profileScope.get()) === viewProfile) {
         notifyError(err, c.failedTrigger)
@@ -555,7 +575,7 @@ export function CronView({
       notifyError(refreshError, c.failedLoad)
     }
 
-    notify({ kind: 'success', title: c.deleted, message: truncate(jobTitle(pendingDelete), 60) })
+    notify({ kind: 'success', title: c.deleted, message: truncate(displayJobTitle(pendingDelete, c), 60) })
   }
 
   async function handleEditorSave(values: EditorValues) {
@@ -582,7 +602,7 @@ export function CronView({
         notifyError(refreshError, c.failedLoad)
       }
 
-      notify({ kind: 'success', title: c.created, message: truncate(jobTitle(created), 60) })
+      notify({ kind: 'success', title: c.created, message: truncate(displayJobTitle(created, c), 60) })
     } else if (editor.mode === 'edit') {
       const scriptOnlyJob = jobIsScriptOnly(editor.job)
 
@@ -602,7 +622,7 @@ export function CronView({
         notifyError(refreshError, c.failedLoad)
       }
 
-      notify({ kind: 'success', title: c.updated, message: truncate(jobTitle(updated), 60) })
+      notify({ kind: 'success', title: c.updated, message: truncate(displayJobTitle(updated, c), 60) })
     }
 
     setEditor({ mode: 'closed' })
@@ -632,7 +652,11 @@ export function CronView({
       notifyError(refreshError, c.failedLoad)
     }
 
-    notify({ kind: 'success', title: c.blueprints.scheduled, message: asText(job.schedule_display) || blueprint.title })
+    notify({
+      kind: 'success',
+      title: c.blueprints.scheduled,
+      message: asText(job.schedule_display) || c.blueprints.titleFor(blueprint.key, blueprint.title)
+    })
     setEditor({ mode: 'closed' })
   }
 
@@ -657,7 +681,7 @@ export function CronView({
           <PanelList
             onSearchChange={setQuery}
             searchHints={jobs
-              .map(jobTitle)
+              .map(job => displayJobTitle(job, c))
               .filter(Boolean)
               .slice(0, 5)
               .map(title => t.common.tryHint(title))}
@@ -668,6 +692,7 @@ export function CronView({
             {visibleJobs.map(job => (
               <CronJobListRow
                 active={selectedJob?.id === job.id}
+                c={c}
                 job={job}
                 key={job.id}
                 menuItems={[
@@ -694,7 +719,7 @@ export function CronView({
                     key={item.key}
                     onSelect={() => setEditor({ blueprintKey: item.key, mode: 'create' })}
                     rowKey={`blueprint-${item.key}`}
-                    title={item.title}
+                    title={c.blueprints.titleFor(item.key, item.title)}
                   />
                 ))}
               </>
@@ -739,7 +764,7 @@ export function CronView({
           pendingDelete ? (
             <>
               {c.deleteDescPrefix}
-              <span className="font-medium text-foreground">{truncate(jobTitle(pendingDelete), 60)}</span>
+              <span className="font-medium text-foreground">{truncate(displayJobTitle(pendingDelete, c), 60)}</span>
               {c.deleteDescSuffix}
             </>
           ) : null
@@ -756,12 +781,14 @@ export function CronView({
 
 function CronJobListRow({
   active,
+  c,
   job,
   menuItems,
   menuLabel,
   onSelect
 }: {
   active: boolean
+  c: Translations['cron']
   job: CronJob
   menuItems?: PanelMenuItem[]
   menuLabel?: string
@@ -777,7 +804,7 @@ function CronJobListRow({
       menuLabel={menuLabel}
       onSelect={onSelect}
       rowKey={job.id}
-      title={jobTitle(job)}
+      title={displayJobTitle(job, c)}
     />
   )
 }
@@ -808,7 +835,7 @@ function CronJobDetail({
       <header className="space-y-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <h3 className="text-[0.95rem] font-semibold tracking-tight text-foreground">{jobTitle(job)}</h3>
+            <h3 className="text-[0.95rem] font-semibold tracking-tight text-foreground">{displayJobTitle(job, c)}</h3>
             <PanelPill tone={STATE_TONE[state] ?? 'muted'}>{c.states[state] ?? state}</PanelPill>
           </div>
           <div className="flex shrink-0 items-center gap-0.5">
@@ -1093,7 +1120,7 @@ function CronEditorDialog({
       return
     }
 
-    setName(initial ? jobName(initial) : '')
+    setName(initial ? displayJobTitle(initial, c) : '')
     setPrompt(initial ? jobPrompt(initial) : '')
     setSchedule(initial ? jobScheduleExpr(initial) : (SCHEDULE_OPTIONS[0].expr ?? ''))
     setSchedulePreset(initial ? scheduleOptionForExpr(jobScheduleExpr(initial)).value : 'daily')
@@ -1103,14 +1130,18 @@ function CronEditorDialog({
     setTemplateChoice(editor.mode === 'create' ? (editor.blueprintKey ?? CUSTOM_TEMPLATE) : CUSTOM_TEMPLATE)
     setError(null)
     setSaving(false)
-  }, [editor, initial, open])
+  }, [c, editor, initial, open])
 
   // Seed the typed slots with the blueprint's defaults whenever a blueprint is
   // picked from "Start from" (and reset them when switching back to Custom).
   useEffect(() => {
-    setSlotValues(blueprint ? initialBlueprintValues(blueprint) : {})
+    setSlotValues(
+      blueprint
+        ? initialBlueprintValues(blueprint, (field, value) => c.blueprints.textDefaultFor(blueprint.key, field, value))
+        : {}
+    )
     setError(null)
-  }, [blueprint])
+  }, [blueprint, c.blueprints])
 
   const selectedScheduleOption =
     SCHEDULE_OPTIONS.find(candidate => candidate.value === schedulePreset) ?? SCHEDULE_OPTIONS[0]
@@ -1227,12 +1258,14 @@ function CronEditorDialog({
                 <SelectItem value={CUSTOM_TEMPLATE}>{c.blueprints.custom}</SelectItem>
                 {blueprintList.map(item => (
                   <SelectItem key={item.key} value={item.key}>
-                    {item.title}
+                    {c.blueprints.titleFor(item.key, item.title)}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            {blueprint?.description && <FieldHint>{blueprint.description}</FieldHint>}
+            {blueprint?.description && (
+              <FieldHint>{c.blueprints.descriptionFor(blueprint.key, blueprint.description)}</FieldHint>
+            )}
           </Field>
         )}
 
@@ -1240,10 +1273,12 @@ function CronEditorDialog({
           <form className="grid gap-4" onSubmit={handleBlueprintSubmit}>
             {blueprint.fields.map(field => {
               const fieldId = `blueprint-${blueprint.key}-${field.name}`
-              const help = blueprintSlotHelp(field)
+              const displayLabel = c.blueprints.fieldLabelFor(blueprint.key, field.name, field.label)
+              const displayHelp = c.blueprints.fieldHelpFor(blueprint.key, field.name, field.help)
+              const help = blueprintSlotHelp(field, displayHelp)
 
               return (
-                <Field htmlFor={fieldId} key={field.name} label={field.label}>
+                <Field htmlFor={fieldId} key={field.name} label={displayLabel}>
                   {field.name === 'deliver' ? (
                     // Use the shared, backend-sourced delivery targets (same as the
                     // manual editor) rather than the blueprint's static field.options,
@@ -1257,9 +1292,12 @@ function CronEditorDialog({
                     />
                   ) : (
                     <BlueprintSlotControl
+                      displayHelp={displayHelp}
+                      displayLabel={displayLabel}
                       field={field}
                       id={fieldId}
                       onChange={next => setSlotValues(prev => ({ ...prev, [field.name]: next }))}
+                      optionLabel={value => c.blueprints.optionLabelFor(blueprint.key, field.name, value)}
                       value={slotValues[field.name] ?? ''}
                     />
                   )}

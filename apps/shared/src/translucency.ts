@@ -441,8 +441,9 @@ export function glassActive({ intensity, mode }: TranslucencyState): boolean {
 /**
  * Percent of the surface tint the renderer KEEPS at a given intensity. Linear
  * to zero: at 100 the tint is fully gone — bare platform glass — so the slider
- * spans the whole range from opaque theme to untinted blur. Text and cards
- * keep their own opaque tokens for contrast; only the field surfaces thin.
+ * spans the whole range from opaque theme to untinted blur. Text and masking
+ * overlays retain contrast; ordinary cards can deliberately share a field
+ * surface without adding another tint layer.
  */
 export function glassSurfaceKeep(intensity: number): number {
   return TRANSLUCENCY_MAX - clampIntensity(intensity)

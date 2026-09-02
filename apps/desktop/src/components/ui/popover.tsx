@@ -27,7 +27,7 @@ const popoverContentVariants = cva(
         // Themed glass surface, viewport-aware (Radix flips/shifts off edges).
         // Border-only (no shadow).
         default:
-          'border border-(--ui-stroke-secondary) bg-(--popover-surface) text-popover-foreground backdrop-blur-md [--popover-surface:color-mix(in_srgb,var(--ui-bg-elevated)_92%,transparent)]',
+          'border border-(--ui-stroke-secondary) bg-(--popover-surface) text-popover-foreground backdrop-blur-md [--popover-surface:var(--ui-popover-surface-background)]',
         // Solid accent. For a surface that has to read as the app SPEAKING
         // rather than as chrome the user opened — it is loud on purpose, so
         // it earns its place by being rare. No border: at full-strength fill

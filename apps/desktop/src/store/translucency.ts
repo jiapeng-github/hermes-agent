@@ -161,14 +161,15 @@ export const isChatWindow = (search = typeof window === 'undefined' ? '' : windo
   }
 }
 
-/* Sidebar scope needs the rail's visual edge published on :root so <body>
-   can split its paint there (glass left of the seam, opaque chrome right of
-   it — the Finder shape). The rail is an in-flow div whose WIDTH animates
-   (components/ui/sidebar.tsx, collapsible='none' branch), so a
-   ResizeObserver sees every collapse/expand frame; a window resize listener
-   and a re-measure on every store sync cover the rest. RTL flips which side
-   the seam is measured from; styles.css picks the matching gradient
-   direction off html[dir]. */
+/* Glass needs the rail's visual edge published on :root so <body> can keep
+   the theme's sidebar and chrome paints distinct while remaining the single
+   field painter. Whole-window glass tints both halves; sidebar scope keeps
+   the rail translucent and the content column opaque (the Finder shape).
+   The rail is an in-flow div whose WIDTH animates (components/ui/sidebar.tsx,
+   collapsible='none' branch), so a ResizeObserver sees every collapse/expand
+   frame; a window resize listener covers the rest. RTL flips which side the
+   seam is measured from; styles.css picks the matching gradient direction
+   off html[dir]. */
 let railObserver: null | ResizeObserver = null
 let railTarget: Element | null = null
 let railTrackingOn = false
@@ -191,8 +192,7 @@ const measureRailEdge = (): void => {
 
   if (!rail) {
     // No rail in this window (e.g. a pane-only layout): the seam sits at the
-    // window edge and the whole field stays opaque — glass simply waits for
-    // a rail to exist.
+    // window edge, so the whole field resolves to the chrome-side paint.
     root.style.setProperty('--glass-rail-edge', '0px')
 
     return
@@ -212,7 +212,7 @@ const startRailTracking = (): void => {
     // sync would force a layout read (getBoundingClientRect) right after the
     // tint's style write, once per slider tick — write/read thrash on the
     // drag's hot path for a seam that isn't moving. Two exceptions re-acquire:
-    // a rail we haven't FOUND yet (scope enabled before the sidebar mounted),
+    // a rail we haven't FOUND yet (glass enabled before the sidebar mounted),
     // and a rail that REMOUNTED (layout reset swaps the element) — the
     // observer sits on the detached node and never fires again. isConnected
     // is a flag read, so the settled hot path stays a single boolean check.
@@ -336,7 +336,7 @@ const applyGlassSurfaces = ({ intensity, mode, scope }: TranslucencyState): void
     root.removeAttribute('data-hermes-glass-scope')
   }
 
-  if (glassOn && scope === 'sidebar') {
+  if (glassOn) {
     startRailTracking()
   } else {
     stopRailTracking()

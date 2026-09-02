@@ -287,6 +287,39 @@ describe('frost and area', () => {
     setTranslucencyMode('clear')
     expect(document.documentElement.hasAttribute('data-hermes-glass-scope')).toBe(false)
   })
+
+  it('tracks the rail in whole-window glass so the themed sidebar tint survives', () => {
+    const rail = document.createElement('aside')
+    rail.setAttribute('data-slot', 'sidebar')
+    rail.getBoundingClientRect = () =>
+      ({
+        bottom: 800,
+        height: 800,
+        left: 0,
+        right: 240,
+        toJSON: () => ({}),
+        top: 0,
+        width: 240,
+        x: 0,
+        y: 0
+      }) as DOMRect
+    document.body.appendChild(rail)
+
+    try {
+      setTranslucency(50)
+      setTranslucencyScope('window')
+      setTranslucencyMode('glass')
+
+      expect(document.documentElement.style.getPropertyValue('--glass-rail-edge')).toBe('240px')
+
+      setTranslucencyMode('clear')
+      expect(document.documentElement.style.getPropertyValue('--glass-rail-edge')).toBe('')
+    } finally {
+      rail.remove()
+      setTranslucencyMode('clear')
+      setTranslucency(TRANSLUCENCY_MIN)
+    }
+  })
 })
 
 // A held slider drag and a timed pulse from a picker click can overlap, which

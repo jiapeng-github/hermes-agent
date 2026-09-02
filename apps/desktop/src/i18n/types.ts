@@ -1841,6 +1841,12 @@ export interface Translations {
       custom: string
       subtitle: string
       dialogDesc: string
+      titleFor: (key: string, fallback: string) => string
+      descriptionFor: (key: string, fallback: string) => string
+      fieldLabelFor: (key: string, field: string, fallback: string) => string
+      fieldHelpFor: (key: string, field: string, fallback: string) => string
+      optionLabelFor: (key: string, field: string, value: string) => string
+      textDefaultFor: (key: string, field: string, value: string) => string
       scheduleIt: string
       scheduling: string
       scheduled: string
