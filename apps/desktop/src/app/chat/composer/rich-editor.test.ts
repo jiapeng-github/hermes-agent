@@ -1,4 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+
+import { rememberDesktopCommandsCatalog } from '@/lib/desktop-slash-commands'
 
 import { insertInlineRefsIntoEditor } from './inline-refs'
 import {
@@ -12,16 +14,17 @@ import {
   replaceBeforeCaret,
   RICH_INPUT_SLOT
 } from './rich-editor'
+import { placeCaretAtEnd } from './test-utils'
 
-const caretIn = (editor: HTMLElement) => {
-  const range = document.createRange()
-  const selection = window.getSelection()!
+beforeEach(() => {
+  rememberDesktopCommandsCatalog({
+    commands: { '/goal': { argument_mode: 'mixed', desktop: null } }
+  })
+})
 
-  range.selectNodeContents(editor)
-  range.collapse(false)
-  selection.removeAllRanges()
-  selection.addRange(range)
-}
+afterEach(() => {
+  rememberDesktopCommandsCatalog(undefined)
+})
 
 describe('renderComposerContents', () => {
   it('renders refs and raw text without interpreting user text as HTML', () => {
@@ -161,7 +164,7 @@ describe('insertInlineRefsIntoEditor', () => {
     editor.dataset.slot = RICH_INPUT_SLOT
     editor.append(document.createTextNode('review'))
     document.body.append(editor)
-    caretIn(editor)
+    placeCaretAtEnd(editor)
 
     expect(insertInlineRefsIntoEditor(editor, ['@file:`src/a.ts`'])).toBe('review @file:`src/a.ts` ')
 
@@ -173,7 +176,7 @@ describe('insertInlineRefsIntoEditor', () => {
     editor.dataset.slot = RICH_INPUT_SLOT
     editor.append(document.createTextNode('review '))
     document.body.append(editor)
-    caretIn(editor)
+    placeCaretAtEnd(editor)
 
     expect(insertInlineRefsIntoEditor(editor, ['@file:`src/a.ts`'])).toBe('review @file:`src/a.ts` ')
 
@@ -202,7 +205,7 @@ describe('insertComposerContentsAtCaret', () => {
     const editor = document.createElement('div')
     editor.dataset.slot = RICH_INPUT_SLOT
     document.body.append(editor)
-    caretIn(editor)
+    placeCaretAtEnd(editor)
 
     insertComposerContentsAtCaret(editor, 'one\ntwo\nthree')
 
@@ -238,7 +241,7 @@ describe('insertComposerContentsAtCaret', () => {
     const editor = document.createElement('div')
     editor.dataset.slot = RICH_INPUT_SLOT
     document.body.append(editor)
-    caretIn(editor)
+    placeCaretAtEnd(editor)
 
     insertComposerContentsAtCaret(editor, 'read @url:`https://example.dev/a` now')
 
@@ -254,7 +257,7 @@ describe('insertComposerContentsAtCaret', () => {
     const editor = document.createElement('div')
     editor.dataset.slot = RICH_INPUT_SLOT
     document.body.append(editor)
-    caretIn(editor)
+    placeCaretAtEnd(editor)
 
     insertComposerContentsAtCaret(editor, '/some-skill')
 
@@ -270,7 +273,7 @@ describe('insertComposerContentsAtCaret', () => {
     const editor = document.createElement('div')
     editor.dataset.slot = RICH_INPUT_SLOT
     document.body.append(editor)
-    caretIn(editor)
+    placeCaretAtEnd(editor)
 
     insertComposerContentsAtCaret(editor, 'clean @file:`a.ts` with /some-skill then ship')
 
@@ -285,7 +288,7 @@ describe('insertComposerContentsAtCaret', () => {
     const editor = document.createElement('div')
     editor.dataset.slot = RICH_INPUT_SLOT
     document.body.append(editor)
-    caretIn(editor)
+    placeCaretAtEnd(editor)
 
     insertComposerContentsAtCaret(editor, 'see /usr/local/bin and /goal ship it')
 
@@ -300,7 +303,7 @@ describe('insertComposerContentsAtCaret', () => {
     editor.dataset.slot = RICH_INPUT_SLOT
     editor.textContent = 'foo'
     document.body.append(editor)
-    caretIn(editor)
+    placeCaretAtEnd(editor)
 
     insertComposerContentsAtCaret(editor, '/some-skill')
 
@@ -315,7 +318,7 @@ describe('insertComposerContentsAtCaret', () => {
     editor.dataset.slot = RICH_INPUT_SLOT
     editor.append(refChipElement('file', '`a.ts`'))
     document.body.append(editor)
-    caretIn(editor)
+    placeCaretAtEnd(editor)
 
     insertComposerContentsAtCaret(editor, '/some-skill')
 

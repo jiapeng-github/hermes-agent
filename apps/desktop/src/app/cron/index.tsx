@@ -1,3 +1,4 @@
+import { createCronTriggerController, type CronTriggerController } from '@hermes/shared'
 import { useStore } from '@nanostores/react'
 import { useQuery } from '@tanstack/react-query'
 import type * as React from 'react'
@@ -7,6 +8,7 @@ import { PageLoader } from '@/components/page-loader'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Codicon } from '@/components/ui/codicon'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import {
   Dialog,
   DialogContent,
@@ -36,19 +38,17 @@ import {
   getAutomationBlueprints,
   getCronDeliveryTargets,
   getCronJobRuns,
-  getCronJobs,
   instantiateAutomationBlueprint,
   pauseCronJob,
   resumeCronJob,
   type SessionInfo,
-  triggerCronJob,
   updateCronJob
 } from '@/hermes'
 import { type Translations, useI18n } from '@/i18n'
 import { AlertTriangle } from '@/lib/icons'
 import { requestModelOptions } from '@/lib/model-options'
 import { asText } from '@/lib/text'
-import { $cronFocusJobId, $cronJobs, setCronFocusJobId, setCronJobs, updateCronJobs } from '@/store/cron'
+import { $cronFocusJobId, $cronJobs, invalidateCronJobsRequests, setCronFocusJobId } from '@/store/cron'
 import { $changeEventsAvailable, $cronChangeTick } from '@/store/live-sync'
 import { notify, notifyError } from '@/store/notifications'
 import { $profileScope, ALL_PROFILES } from '@/store/profile'
@@ -74,6 +74,7 @@ import {
 import type { SetStatusbarItemGroup } from '../shell/statusbar-controls'
 
 import { BlueprintSlotControl, blueprintSlotHelp, cleanBlueprintFieldError, initialBlueprintValues } from './blueprints'
+import { mutateAndRefreshCronJobs, refreshCronJobs, triggerAndRefreshCronJobs } from './cron-actions'
 import {
   cronEditorUpdates,
   jobIsScriptOnly,
@@ -92,6 +93,10 @@ const MODEL_DEFAULT_VALUE = '__default__'
 // "Start from" default: the manual editor (blank cron). Any other value is a
 // blueprint key. Blueprint keys never collide with this sentinel.
 const CUSTOM_TEMPLATE = 'custom'
+
+function cronProfileForScope(scope: string): string {
+  return scope === ALL_PROFILES ? 'all' : scope
+}
 
 const SCHEDULE_OPTIONS: ReadonlyArray<ScheduleOption> = [
   { expr: '0 9 * * *', value: 'daily' },
@@ -117,6 +122,12 @@ const truncate = (value: string, max = 80): string => (value.length > max ? `${v
 
 function jobName(job: CronJob): string {
   return asText(job.name).trim()
+}
+
+function displayJobTitle(job: CronJob, c: Translations['cron']): string {
+  const title = jobTitle(job)
+
+  return c.blueprints.titleFor('', title)
 }
 
 function jobPrompt(job: CronJob): string {
@@ -272,16 +283,21 @@ function formatTime(iso?: null | string): string {
   return date.toLocaleString()
 }
 
-function matchesQuery(job: CronJob, q: string): boolean {
+function matchesQuery(job: CronJob, q: string, c: Translations['cron']): boolean {
   if (!q) {
     return true
   }
 
   const needle = q.toLowerCase()
 
-  return [jobTitle(job), jobPrompt(job), jobScheduleDisplay(job), jobScheduleExpr(job), jobDeliver(job)].some(value =>
-    value.toLowerCase().includes(needle)
-  )
+  return [
+    displayJobTitle(job, c),
+    jobTitle(job),
+    jobPrompt(job),
+    jobScheduleDisplay(job),
+    jobScheduleExpr(job),
+    jobDeliver(job)
+  ].some(value => value.toLowerCase().includes(needle))
 }
 
 interface CronViewProps extends React.ComponentProps<'section'> {
@@ -305,7 +321,37 @@ export function CronView({
   const jobs = useStore($cronJobs)
   const [loading, setLoading] = useState(jobs.length === 0)
   const [query, setQuery] = useState('')
-  const [busyJobId, setBusyJobId] = useState<null | string>(null)
+  const [busyJobTokens, setBusyJobTokens] = useState<ReadonlyMap<string, symbol>>(() => new Map())
+  const [triggeringJobKeys, setTriggeringJobKeys] = useState<ReadonlySet<string>>(() => new Set())
+  const triggerControllerRef = useRef<CronTriggerController | null>(null)
+
+  // eslint-disable-next-line no-restricted-syntax -- controller mount identity, not an atom mirror
+  useEffect(() => {
+    const controller = createCronTriggerController((key, running) => {
+      if (triggerControllerRef.current !== controller) {
+        return
+      }
+
+      setTriggeringJobKeys(current => {
+        const next = new Set(current)
+
+        if (running) {
+          next.add(key)
+        } else {
+          next.delete(key)
+        }
+
+        return next
+      })
+    })
+
+    triggerControllerRef.current = controller
+
+    return () => {
+      triggerControllerRef.current = null
+    }
+  }, [])
+
   // Master/detail: the job whose schedule + run history fill the right pane.
   const [selectedJobId, setSelectedJobId] = useState<null | string>(null)
   // Set when a job is opened from the sidebar so we scroll it into view once the
@@ -315,27 +361,35 @@ export function CronView({
 
   const [editor, setEditor] = useState<EditorState>({ mode: 'closed' })
   const [pendingDelete, setPendingDelete] = useState<CronJob | null>(null)
-  const [deleting, setDeleting] = useState(false)
 
   // Jobs live per-profile on disk and the list endpoint aggregates 'all' by
   // default — scope the fetch to the sidebar's profile scope so this overlay
   // and the sidebar (which share the $cronJobs atom) agree on what's shown.
   const profileScope = useStore($profileScope)
+  const profile = cronProfileForScope(profileScope)
 
   const refresh = useCallback(async () => {
-    try {
-      setCronJobs(await getCronJobs(profileScope === ALL_PROFILES ? 'all' : profileScope))
-    } catch (err) {
-      notifyError(err, c.failedLoad)
-    } finally {
-      setLoading(false)
+    const { refreshError, stale } = await refreshCronJobs(profile)
+
+    if (stale) {
+      return
     }
-  }, [c, profileScope])
+
+    if (refreshError) {
+      notifyError(refreshError, c.failedLoad)
+    }
+
+    setLoading(false)
+  }, [c, profile])
 
   useRefreshHotkey(refresh)
 
   useEffect(() => {
     void refresh()
+    // Fence the previous profile's request before the next profile effect, and
+    // fence every pending completion when the overlay unmounts.
+
+    return () => invalidateCronJobsRequests()
   }, [refresh])
 
   // Sidebar → "open this job": resolve the focus id (or name) to a job, select
@@ -358,8 +412,11 @@ export function CronView({
   }, [focusJobId, jobs])
 
   const visibleJobs = useMemo(
-    () => jobs.filter(job => matchesQuery(job, query.trim())).sort((a, b) => jobTitle(a).localeCompare(jobTitle(b))),
-    [jobs, query]
+    () =>
+      jobs
+        .filter(job => matchesQuery(job, query.trim(), c))
+        .sort((a, b) => displayJobTitle(a, c).localeCompare(displayJobTitle(b, c))),
+    [c, jobs, query]
   )
 
   // Blueprint recipes render in the same list rail, below the jobs — clicking
@@ -374,8 +431,14 @@ export function CronView({
     const list = blueprintsQuery.data ?? []
     const needle = query.trim().toLowerCase()
 
-    return needle ? list.filter(item => `${item.title} ${item.description}`.toLowerCase().includes(needle)) : list
-  }, [blueprintsQuery.data, query])
+    return needle
+      ? list.filter(item =>
+          `${c.blueprints.titleFor(item.key, item.title)} ${c.blueprints.descriptionFor(item.key, item.description)} ${item.title} ${item.description}`
+            .toLowerCase()
+            .includes(needle)
+        )
+      : list
+  }, [blueprintsQuery.data, c, query])
 
   // Detail always reflects a concrete job: the explicitly selected one, else the
   // first visible row, so the right pane is never empty while jobs exist.
@@ -401,77 +464,165 @@ export function CronView({
 
   const totalCount = jobs.length
 
+  function beginJobBusy(jobId: string): symbol {
+    const token = Symbol(jobId)
+
+    setBusyJobTokens(current => new Map(current).set(jobId, token))
+
+    return token
+  }
+
+  function endJobBusy(jobId: string, token: symbol): void {
+    setBusyJobTokens(current => {
+      if (current.get(jobId) !== token) {
+        return current
+      }
+
+      const next = new Map(current)
+
+      next.delete(jobId)
+
+      return next
+    })
+  }
+
   async function handlePauseResume(job: CronJob) {
-    setBusyJobId(job.id)
+    const busyToken = beginJobBusy(job.id)
 
     try {
       const isPaused = jobState(job) === 'paused'
-      const updated = isPaused ? await resumeCronJob(job.id) : await pauseCronJob(job.id)
-      updateCronJobs(rows => rows.map(row => (row.id === job.id ? updated : row)))
+
+      const { refreshError, stale } = await mutateAndRefreshCronJobs(profile, () =>
+        isPaused ? resumeCronJob(job.id) : pauseCronJob(job.id)
+      )
+
+      if (stale) {
+        return
+      }
+
+      if (refreshError) {
+        notifyError(refreshError, c.failedLoad)
+      }
+
       notify({
         kind: 'success',
         title: isPaused ? c.resumed : c.paused,
-        message: truncate(jobTitle(job), 60)
+        message: truncate(displayJobTitle(job, c), 60)
       })
     } catch (err) {
       notifyError(err, c.failedUpdate)
     } finally {
-      setBusyJobId(null)
+      endJobBusy(job.id, busyToken)
     }
   }
 
   async function handleTrigger(job: CronJob) {
-    setBusyJobId(job.id)
+    const viewProfile = profile
+    const key = `${viewProfile}:${job.id}`
+    const controller = triggerControllerRef.current
+
+    if (!controller) {
+      return
+    }
 
     try {
-      const updated = await triggerCronJob(job.id)
-      updateCronJobs(rows => rows.map(row => (row.id === job.id ? updated : row)))
-      notify({ kind: 'success', title: c.triggered, message: truncate(jobTitle(job), 60) })
+      const run = await controller.run(
+        key,
+        () => triggerAndRefreshCronJobs(job.id, viewProfile),
+        () => notify({ kind: 'info', title: c.triggerNow, message: truncate(displayJobTitle(job, c), 60) })
+      )
+
+      if (
+        triggerControllerRef.current !== controller ||
+        cronProfileForScope($profileScope.get()) !== viewProfile ||
+        !run.started ||
+        !run.value
+      ) {
+        return
+      }
+
+      const { refreshError, stale } = run.value
+
+      if (stale) {
+        return
+      }
+
+      if (refreshError) {
+        notifyError(refreshError, c.failedLoad)
+      }
+
+      notify({ kind: 'success', title: c.triggered, message: truncate(displayJobTitle(job, c), 60) })
     } catch (err) {
-      notifyError(err, c.failedTrigger)
-    } finally {
-      setBusyJobId(null)
+      if (triggerControllerRef.current === controller && cronProfileForScope($profileScope.get()) === viewProfile) {
+        notifyError(err, c.failedTrigger)
+      }
     }
   }
 
+  // Throws on failure — ConfirmDialog reports it inline and stays open.
   async function handleConfirmDelete() {
     if (!pendingDelete) {
       return
     }
 
-    setDeleting(true)
+    const { refreshError, stale } = await mutateAndRefreshCronJobs(profile, () => deleteCronJob(pendingDelete.id))
 
-    try {
-      await deleteCronJob(pendingDelete.id)
-      updateCronJobs(rows => rows.filter(row => row.id !== pendingDelete.id))
-      notify({ kind: 'success', title: c.deleted, message: truncate(jobTitle(pendingDelete), 60) })
-      setPendingDelete(null)
-    } catch (err) {
-      notifyError(err, c.failedDelete)
-    } finally {
-      setDeleting(false)
+    if (stale) {
+      return
     }
+
+    if (refreshError) {
+      notifyError(refreshError, c.failedLoad)
+    }
+
+    notify({ kind: 'success', title: c.deleted, message: truncate(displayJobTitle(pendingDelete, c), 60) })
   }
 
   async function handleEditorSave(values: EditorValues) {
     if (editor.mode === 'create') {
-      const created = await createCronJob({
-        prompt: values.prompt,
-        schedule: values.schedule,
-        name: values.name || undefined,
-        deliver: values.deliver || DEFAULT_DELIVER,
-        ...(values.model.trim() ? { model: values.model.trim(), provider: values.provider.trim() || undefined } : {})
-      })
+      const {
+        value: created,
+        refreshError,
+        stale
+      } = await mutateAndRefreshCronJobs(profile, () =>
+        createCronJob({
+          prompt: values.prompt,
+          schedule: values.schedule,
+          name: values.name || undefined,
+          deliver: values.deliver || DEFAULT_DELIVER,
+          ...(values.model.trim() ? { model: values.model.trim(), provider: values.provider.trim() || undefined } : {})
+        })
+      )
 
-      updateCronJobs(rows => [...rows, created])
-      notify({ kind: 'success', title: c.created, message: truncate(jobTitle(created), 60) })
+      if (stale || !created) {
+        return
+      }
+
+      if (refreshError) {
+        notifyError(refreshError, c.failedLoad)
+      }
+
+      notify({ kind: 'success', title: c.created, message: truncate(displayJobTitle(created, c), 60) })
     } else if (editor.mode === 'edit') {
       const scriptOnlyJob = jobIsScriptOnly(editor.job)
 
-      const updated = await updateCronJob(editor.job.id, cronEditorUpdates(values, { scriptOnlyJob }))
+      const {
+        value: updated,
+        refreshError,
+        stale
+      } = await mutateAndRefreshCronJobs(profile, () =>
+        updateCronJob(editor.job.id, cronEditorUpdates(values, { scriptOnlyJob }))
+      )
 
-      updateCronJobs(rows => rows.map(row => (row.id === updated.id ? updated : row)))
-      notify({ kind: 'success', title: c.updated, message: truncate(jobTitle(updated), 60) })
+      if (stale || !updated) {
+        return
+      }
+
+      if (refreshError) {
+        notifyError(refreshError, c.failedLoad)
+      }
+
+      notify({ kind: 'success', title: c.updated, message: truncate(displayJobTitle(updated, c), 60) })
     }
 
     setEditor({ mode: 'closed' })
@@ -483,15 +634,29 @@ export function CronView({
   // real per-profile job, and "all" is not a writable target — collapse it to
   // 'default', matching the manual create path in handleEditorSave.
   async function handleBlueprintCreate(blueprint: AutomationBlueprint, values: Record<string, string>) {
-    const profile = profileScope === ALL_PROFILES ? 'default' : profileScope
-    const job = await instantiateAutomationBlueprint({ blueprint: blueprint.key, values }, profile)
+    const writableProfile = profileScope === ALL_PROFILES ? 'default' : profileScope
 
-    updateCronJobs(rows => {
-      const rest = rows.filter(row => row.id !== job.id)
+    const {
+      value: job,
+      refreshError,
+      stale
+    } = await mutateAndRefreshCronJobs(profile, () =>
+      instantiateAutomationBlueprint({ blueprint: blueprint.key, values }, writableProfile)
+    )
 
-      return [...rest, job]
+    if (stale || !job) {
+      return
+    }
+
+    if (refreshError) {
+      notifyError(refreshError, c.failedLoad)
+    }
+
+    notify({
+      kind: 'success',
+      title: c.blueprints.scheduled,
+      message: asText(job.schedule_display) || c.blueprints.titleFor(blueprint.key, blueprint.title)
     })
-    notify({ kind: 'success', title: c.blueprints.scheduled, message: asText(job.schedule_display) || blueprint.title })
     setEditor({ mode: 'closed' })
   }
 
@@ -516,7 +681,7 @@ export function CronView({
           <PanelList
             onSearchChange={setQuery}
             searchHints={jobs
-              .map(jobTitle)
+              .map(job => displayJobTitle(job, c))
               .filter(Boolean)
               .slice(0, 5)
               .map(title => t.common.tryHint(title))}
@@ -527,6 +692,7 @@ export function CronView({
             {visibleJobs.map(job => (
               <CronJobListRow
                 active={selectedJob?.id === job.id}
+                c={c}
                 job={job}
                 key={job.id}
                 menuItems={[
@@ -538,7 +704,9 @@ export function CronView({
               />
             ))}
             {visibleJobs.length === 0 && (
-              <p className="px-2 py-4 text-center text-xs text-muted-foreground">{c.emptyTitleSearch}</p>
+              <p className="px-2 py-4 text-center text-xs text-muted-foreground">
+                {query.trim() ? c.emptyTitleSearch : c.emptyTitleNew}
+              </p>
             )}
             <PanelAddButton label={c.newCron} onClick={() => setEditor({ mode: 'create' })} />
             {visibleBlueprints.length > 0 && (
@@ -551,7 +719,7 @@ export function CronView({
                     key={item.key}
                     onSelect={() => setEditor({ blueprintKey: item.key, mode: 'create' })}
                     rowKey={`blueprint-${item.key}`}
-                    title={item.title}
+                    title={c.blueprints.titleFor(item.key, item.title)}
                   />
                 ))}
               </>
@@ -560,15 +728,24 @@ export function CronView({
 
           {selectedJob ? (
             <CronJobDetail
-              busy={busyJobId === selectedJob.id}
+              busy={busyJobTokens.has(selectedJob.id) || triggeringJobKeys.has(`${profile}:${selectedJob.id}`)}
               c={c}
               job={selectedJob}
               onOpenSession={onOpenSession}
               onPauseResume={() => void handlePauseResume(selectedJob)}
               onTrigger={() => void handleTrigger(selectedJob)}
             />
-          ) : (
+          ) : query.trim() ? (
+            // A search with no selected job: search-flavored copy is right.
             <PanelEmpty description={c.emptyDescSearch} icon="search" />
+          ) : (
+            // No selection and no search — "Try a broader search query" here
+            // just confused people staring at an empty panel with zero jobs.
+            <PanelEmpty
+              description={c.emptyDescNew}
+              icon="watch"
+              title={jobs.length === 0 ? c.emptyTitleNew : undefined}
+            />
           )}
         </PanelBody>
       )}
@@ -580,42 +757,38 @@ export function CronView({
         onSave={handleEditorSave}
       />
 
-      <Dialog onOpenChange={open => !open && !deleting && setPendingDelete(null)} open={pendingDelete !== null}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>{c.deleteTitle}</DialogTitle>
-            <DialogDescription>
-              {pendingDelete ? (
-                <>
-                  {c.deleteDescPrefix}
-                  <span className="font-medium text-foreground">{truncate(jobTitle(pendingDelete), 60)}</span>
-                  {c.deleteDescSuffix}
-                </>
-              ) : null}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button disabled={deleting} onClick={() => setPendingDelete(null)} variant="outline">
-              {t.common.cancel}
-            </Button>
-            <Button disabled={deleting} onClick={() => void handleConfirmDelete()} variant="destructive">
-              {deleting ? c.deleting : t.common.delete}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ConfirmDialog
+        busyLabel={c.deleting}
+        confirmLabel={t.common.delete}
+        description={
+          pendingDelete ? (
+            <>
+              {c.deleteDescPrefix}
+              <span className="font-medium text-foreground">{truncate(displayJobTitle(pendingDelete, c), 60)}</span>
+              {c.deleteDescSuffix}
+            </>
+          ) : null
+        }
+        destructive
+        onClose={() => setPendingDelete(null)}
+        onConfirm={handleConfirmDelete}
+        open={pendingDelete !== null}
+        title={c.deleteTitle}
+      />
     </Panel>
   )
 }
 
 function CronJobListRow({
   active,
+  c,
   job,
   menuItems,
   menuLabel,
   onSelect
 }: {
   active: boolean
+  c: Translations['cron']
   job: CronJob
   menuItems?: PanelMenuItem[]
   menuLabel?: string
@@ -631,7 +804,7 @@ function CronJobListRow({
       menuLabel={menuLabel}
       onSelect={onSelect}
       rowKey={job.id}
-      title={jobTitle(job)}
+      title={displayJobTitle(job, c)}
     />
   )
 }
@@ -662,7 +835,7 @@ function CronJobDetail({
       <header className="space-y-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <h3 className="text-[0.95rem] font-semibold tracking-tight text-foreground">{jobTitle(job)}</h3>
+            <h3 className="text-[0.95rem] font-semibold tracking-tight text-foreground">{displayJobTitle(job, c)}</h3>
             <PanelPill tone={STATE_TONE[state] ?? 'muted'}>{c.states[state] ?? state}</PanelPill>
           </div>
           <div className="flex shrink-0 items-center gap-0.5">
@@ -947,7 +1120,7 @@ function CronEditorDialog({
       return
     }
 
-    setName(initial ? jobName(initial) : '')
+    setName(initial ? displayJobTitle(initial, c) : '')
     setPrompt(initial ? jobPrompt(initial) : '')
     setSchedule(initial ? jobScheduleExpr(initial) : (SCHEDULE_OPTIONS[0].expr ?? ''))
     setSchedulePreset(initial ? scheduleOptionForExpr(jobScheduleExpr(initial)).value : 'daily')
@@ -957,14 +1130,18 @@ function CronEditorDialog({
     setTemplateChoice(editor.mode === 'create' ? (editor.blueprintKey ?? CUSTOM_TEMPLATE) : CUSTOM_TEMPLATE)
     setError(null)
     setSaving(false)
-  }, [editor, initial, open])
+  }, [c, editor, initial, open])
 
   // Seed the typed slots with the blueprint's defaults whenever a blueprint is
   // picked from "Start from" (and reset them when switching back to Custom).
   useEffect(() => {
-    setSlotValues(blueprint ? initialBlueprintValues(blueprint) : {})
+    setSlotValues(
+      blueprint
+        ? initialBlueprintValues(blueprint, (field, value) => c.blueprints.textDefaultFor(blueprint.key, field, value))
+        : {}
+    )
     setError(null)
-  }, [blueprint])
+  }, [blueprint, c.blueprints])
 
   const selectedScheduleOption =
     SCHEDULE_OPTIONS.find(candidate => candidate.value === schedulePreset) ?? SCHEDULE_OPTIONS[0]
@@ -1081,12 +1258,14 @@ function CronEditorDialog({
                 <SelectItem value={CUSTOM_TEMPLATE}>{c.blueprints.custom}</SelectItem>
                 {blueprintList.map(item => (
                   <SelectItem key={item.key} value={item.key}>
-                    {item.title}
+                    {c.blueprints.titleFor(item.key, item.title)}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            {blueprint?.description && <FieldHint>{blueprint.description}</FieldHint>}
+            {blueprint?.description && (
+              <FieldHint>{c.blueprints.descriptionFor(blueprint.key, blueprint.description)}</FieldHint>
+            )}
           </Field>
         )}
 
@@ -1094,10 +1273,12 @@ function CronEditorDialog({
           <form className="grid gap-4" onSubmit={handleBlueprintSubmit}>
             {blueprint.fields.map(field => {
               const fieldId = `blueprint-${blueprint.key}-${field.name}`
-              const help = blueprintSlotHelp(field)
+              const displayLabel = c.blueprints.fieldLabelFor(blueprint.key, field.name, field.label)
+              const displayHelp = c.blueprints.fieldHelpFor(blueprint.key, field.name, field.help)
+              const help = blueprintSlotHelp(field, displayHelp)
 
               return (
-                <Field htmlFor={fieldId} key={field.name} label={field.label}>
+                <Field htmlFor={fieldId} key={field.name} label={displayLabel}>
                   {field.name === 'deliver' ? (
                     // Use the shared, backend-sourced delivery targets (same as the
                     // manual editor) rather than the blueprint's static field.options,
@@ -1111,9 +1292,12 @@ function CronEditorDialog({
                     />
                   ) : (
                     <BlueprintSlotControl
+                      displayHelp={displayHelp}
+                      displayLabel={displayLabel}
                       field={field}
                       id={fieldId}
                       onChange={next => setSlotValues(prev => ({ ...prev, [field.name]: next }))}
+                      optionLabel={value => c.blueprints.optionLabelFor(blueprint.key, field.name, value)}
                       value={slotValues[field.name] ?? ''}
                     />
                   )}

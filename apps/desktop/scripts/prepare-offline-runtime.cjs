@@ -128,6 +128,38 @@ function createRuntimeEnv({ prepUvCache, prepPython, tempRoot, baseEnv = process
   return runtimeEnv
 }
 
+// Tiny ARM64 launcher stubs that pip vendors into distlib/setuptools
+// (`t64-arm.exe`, `w64-arm.exe`, `cli-arm64.exe`, `gui-arm64.exe`). They are
+// dead weight on the x64 runtime AND prime antivirus quarantine bait -- when
+// an AV silently removes them post-install, the desktop's whole-bundle SHA
+// verification (17k+ files, all-or-nothing) rejects the ENTIRE offline
+// runtime and first-launch silently falls back to the network path. Drop
+// them from the bundle so the manifest never records them in the first
+// place; a file the AV later quarantines that is not in the manifest cannot
+// invalidate it.
+//
+// Matched by basename ANYWHERE in the bundle, not just site-packages: the
+// stubs also ride inside uv-cache/archive-v0/<hash>/setuptools wheel
+// snapshots (observed in the field: one quarantined
+// uv-cache/archive-v0/.../setuptools/cli-arm64.exe invalidated the whole
+// runtime). Removing them from the unpacked cache is safe -- uv installs
+// from archive-v0 by directory copy without a per-file manifest, and the
+// x64 runtime never executes ARM64 launchers either way.
+const ANTIVIRUS_BAIT_BASENAMES = new Set(['t64-arm.exe', 'w64-arm.exe', 'cli-arm64.exe', 'gui-arm64.exe'])
+
+function removeAntivirusBaitFiles(root, { walk = walkFiles } = {}) {
+  const removed = []
+  for (const file of walk(root)) {
+    if (!ANTIVIRUS_BAIT_BASENAMES.has(path.basename(file))) continue
+    fs.rmSync(file, { force: true })
+    removed.push(path.relative(root, file))
+  }
+  if (removed.length > 0) {
+    console.log(`[prepare-offline-runtime] removed ${removed.length} antivirus-bait launcher stub(s)`)
+  }
+  return removed
+}
+
 function writeManifest(target, bundled, { outputRoot = OUTPUT_ROOT, sourceBundled = bundled } = {}) {
   const files = bundled || sourceBundled
     ? Object.fromEntries(
@@ -211,6 +243,11 @@ function prepareBundle(targetName) {
   rebaseCopiedSymlinks(prepPython, path.join(OUTPUT_ROOT, 'python'))
   rebaseCopiedSymlinks(prepUvCache, path.join(OUTPUT_ROOT, 'uv-cache'))
 
+  // Must run BEFORE writeManifest: the manifest hashes whatever is on disk,
+  // so the stubs have to be gone for the bundle (and its per-file hash set)
+  // to never mention them at all.
+  removeAntivirusBaitFiles(OUTPUT_ROOT)
+
   writeManifest(targetName, true, { sourceBundled: true })
   console.log(`[prepare-offline-runtime] prepared ${targetName} at ${OUTPUT_ROOT}`)
 }
@@ -230,10 +267,12 @@ if (require.main === module) {
 }
 
 module.exports = {
+  ANTIVIRUS_BAIT_BASENAMES,
   TARGETS,
   createRuntimeEnv,
   defaultTarget,
   main,
+  removeAntivirusBaitFiles,
   removeCachedWindowsMinorPythonLink,
   rebaseCopiedSymlinks
 }

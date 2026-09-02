@@ -4,12 +4,12 @@ from fastapi.testclient import TestClient
 from pathlib import Path
 
 from hermes_cli.apps.catalog import INDUSTRY_MONITOR_APP_ID, WATCHLIST_APP_ID
-from hermes_cli.apps.manager import AppManager
 
 
 def test_authenticated_management_launch_and_stop_routes(
     monkeypatch, _isolate_hermes_home
 ) -> None:
+    from hermes_cli.apps.manager import AppManager
     from hermes_cli.web_server import app, _SESSION_HEADER_NAME, _SESSION_TOKEN
 
     launch = {
@@ -49,6 +49,7 @@ def test_authenticated_app_activity_routes_are_read_only_and_issue_launch_urls(
     monkeypatch,
     _isolate_hermes_home,
 ) -> None:
+    from hermes_cli.apps.manager import AppManager
     from hermes_cli.web_server import app, _SESSION_HEADER_NAME, _SESSION_TOKEN
 
     timeline = {
@@ -95,6 +96,7 @@ def test_package_export_import_uninstall_and_data_lifecycle(
     tmp_path: Path,
     _isolate_hermes_home,
 ) -> None:
+    from hermes_cli.apps.manager import AppManager
     from hermes_cli.web_server import app, _SESSION_HEADER_NAME, _SESSION_TOKEN
 
     manager = AppManager()

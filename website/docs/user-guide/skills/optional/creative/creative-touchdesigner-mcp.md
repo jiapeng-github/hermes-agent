@@ -15,13 +15,13 @@ Control TouchDesigner via twozero MCP.
 | | |
 |---|---|
 | Source | Optional — install with `hermes skills install official/creative/touchdesigner-mcp` |
-| Path | `optional-skills/creative/touchdesigner-mcp` |
+| Path | `optional-skills/creative\touchdesigner-mcp` |
 | Version | `1.1.0` |
 | Author | kshitijk4poor |
 | License | MIT |
 | Platforms | linux, macos, windows |
 | Tags | `TouchDesigner`, `MCP`, `twozero`, `creative-coding`, `real-time-visuals`, `generative-art`, `audio-reactive`, `VJ`, `installation`, `GLSL` |
-| Related skills | [`ascii-video`](/docs/user-guide/skills/optional/creative/creative-ascii-video), [`manim-video`](/docs/user-guide/skills/optional/creative/creative-manim-video) |
+| Related skills | [`ascii-video`](/docs/user-guide/skills/bundled/creative/creative-ascii-video), [`manim-video`](/docs/user-guide/skills/bundled/creative/creative-manim-video) |
 
 ## Reference: full SKILL.md
 

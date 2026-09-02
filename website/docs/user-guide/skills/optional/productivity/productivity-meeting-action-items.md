@@ -14,14 +14,14 @@ Turn meeting notes into cited decisions, owners, tickets.
 
 | | |
 |---|---|
-| Source | Optional — install with `hermes skills install official/productivity/meeting-action-items` |
-| Path | `optional-skills/productivity/meeting-action-items` |
+| Source | Bundled (installed by default) |
+| Path | `skills/productivity\meeting-action-items` |
 | Version | `0.1.0` |
 | Author | Ben Barclay (benbarclay), Hermes Agent |
 | License | MIT |
 | Platforms | linux, macos, windows |
 | Tags | `Meetings`, `Action-Items`, `Follow-Up`, `Productivity` |
-| Related skills | [`teams-meeting-pipeline`](/docs/user-guide/skills/optional/productivity/productivity-teams-meeting-pipeline), [`google-workspace`](/docs/user-guide/skills/optional/productivity/productivity-google-workspace), [`notion`](/docs/user-guide/skills/optional/productivity/productivity-notion) |
+| Related skills | [`teams-meeting-pipeline`](/docs/user-guide/skills/bundled/productivity/productivity-teams-meeting-pipeline), [`google-workspace`](/docs/user-guide/skills/bundled/productivity/productivity-google-workspace), [`notion`](/docs/user-guide/skills/bundled/productivity/productivity-notion) |
 
 ## Reference: full SKILL.md
 

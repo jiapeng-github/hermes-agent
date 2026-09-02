@@ -94,6 +94,9 @@ describe('AppMarketView', () => {
     render(<AppMarketView onCreateApp={onCreateApp} onEditApp={onEditApp} />)
 
     expect(await screen.findByText('自选股盯盘看板')).toBeTruthy()
+    const appCardClassName = screen.getByText('自选股盯盘看板').closest('article')?.className
+
+    expect(appCardClassName).toContain('bg-(--ui-card-surface-background)')
     fireEvent.click(screen.getByRole('button', { name: '创建应用' }))
     fireEvent.click(screen.getByRole('button', { name: '打开 自选股盯盘看板' }))
 

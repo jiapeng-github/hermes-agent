@@ -14,8 +14,8 @@ Exploratory QA of web apps: find bugs, evidence, reports.
 
 | | |
 |---|---|
-| Source | Optional — install with `hermes skills install official/dogfood/hermes-dogfood` |
-| Path | `optional-skills/dogfood/hermes-dogfood` |
+| Source | Bundled (installed by default) |
+| Path | `skills/software-development\dogfood` |
 | Version | `1.0.0` |
 | Author | Teknium (teknium1), Hermes Agent |
 | License | MIT |

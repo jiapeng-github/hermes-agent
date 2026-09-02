@@ -7,47 +7,49 @@
 // Cross-platform builds (e.g. --win on darwin) must NOT reuse the local Electron
 // dist — the host platform's binary doesn't match the target.
 
-import fs from "node:fs"
-import path from "node:path"
-import { spawnSync } from "node:child_process"
-import { createRequire } from "node:module"
-import { fileURLToPath } from "node:url"
+import fs from 'node:fs'
+import path from 'node:path'
+import { spawnSync } from 'node:child_process'
+import { createRequire } from 'node:module'
+import { fileURLToPath } from 'node:url'
 
 const require = createRequire(import.meta.url)
 
 function electronDistDir() {
   try {
-    return path.join(path.dirname(require.resolve("electron/package.json")), "dist")
+    return path.join(path.dirname(require.resolve('electron/package.json')), 'dist')
   } catch {
     return null
   }
 }
 
 function distBinary(dist) {
-  if (process.platform === "darwin") {
-    return path.join(dist, "Electron.app", "Contents", "MacOS", "Electron")
+  if (process.platform === 'darwin') {
+    return path.join(dist, 'Electron.app', 'Contents', 'MacOS', 'Electron')
   }
-  if (process.platform === "win32") {
-    return path.join(dist, "electron.exe")
+  if (process.platform === 'win32') {
+    return path.join(dist, 'electron.exe')
   }
-  return path.join(dist, "electron")
+  return path.join(dist, 'electron')
 }
 
 function electronBuilderCli() {
-  const pkgJson = require.resolve("electron-builder/package.json")
+  const pkgJson = require.resolve('electron-builder/package.json')
   const bin = require(pkgJson).bin
-  const rel = typeof bin === "string" ? bin : bin["electron-builder"]
+  const rel = typeof bin === 'string' ? bin : bin['electron-builder']
   return path.join(path.dirname(pkgJson), rel)
 }
 
 function runtimeFlavor(expectedOfflineTarget) {
   const scriptsDir = path.dirname(fileURLToPath(import.meta.url))
-  const manifestPath = path.resolve(scriptsDir, "..", "build", "offline-runtime", "manifest.json")
+  const manifestPath = path.resolve(scriptsDir, '..', 'build', 'offline-runtime', 'manifest.json')
 
-  const requestedFlavor = String(process.env.STOCKSENSE_PACKAGE_FLAVOR || 'offline').trim().toLowerCase()
+  const requestedFlavor = String(process.env.STOCKSENSE_PACKAGE_FLAVOR || 'offline')
+    .trim()
+    .toLowerCase()
 
   try {
-    const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"))
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
     if (requestedFlavor === 'update') {
       if (manifest?.bundled === false && manifest?.source_bundled === false) {
         return 'update'
@@ -55,7 +57,7 @@ function runtimeFlavor(expectedOfflineTarget) {
       throw new Error('Lightweight update builds must use the placeholder runtime manifest.')
     }
     if (manifest?.bundled === true && manifest.target === expectedOfflineTarget) {
-      return "offline"
+      return 'offline'
     }
   } catch {
     // A clear packaging error is raised below for supported desktop targets.
@@ -68,7 +70,7 @@ function runtimeFlavor(expectedOfflineTarget) {
     )
   }
 
-  return "network"
+  return 'network'
 }
 
 const args = process.argv.slice(2)
@@ -93,8 +95,10 @@ const expectedOfflineTarget = args.includes('--win')
         : null
 
 const dist = electronDistDir()
-const builderArgs = []
-if (!args.some(arg => arg.includes("artifactName"))) {
+// Desktop packaging never publishes directly. CI=1 otherwise makes
+// electron-builder infer a publish target from this nested workspace.
+const builderArgs = ['--publish', 'never']
+if (!args.some(arg => arg.includes('artifactName'))) {
   const flavor = runtimeFlavor(expectedOfflineTarget)
   builderArgs.push(`-c.artifactName=FinanceMate-\${version}-\${os}-\${arch}-${flavor}.\${ext}`)
   console.log(`[run-electron-builder] packaging ${flavor} runtime flavor`)
@@ -103,19 +107,19 @@ if (dist && fs.existsSync(distBinary(dist)) && (noCross || !crossTarget)) {
   builderArgs.push(`-c.electronDist=${dist}`)
 } else if (crossTarget) {
   console.warn(
-    "[run-electron-builder] cross-platform build detected; letting electron-builder " +
+    '[run-electron-builder] cross-platform build detected; letting electron-builder ' +
       "fetch the target platform's Electron binary via @electron/get."
   )
 } else {
   console.warn(
-    "[run-electron-builder] no local electron dist; electron-builder will fetch " +
-      "via @electron/get (electronVersion + ELECTRON_MIRROR)."
+    '[run-electron-builder] no local electron dist; electron-builder will fetch ' +
+      'via @electron/get (electronVersion + ELECTRON_MIRROR).'
   )
 }
 builderArgs.push(...args)
 
 const result = spawnSync(process.execPath, [electronBuilderCli(), ...builderArgs], {
-  stdio: "inherit",
+  stdio: 'inherit'
 })
 if (result.error) {
   console.error(`[run-electron-builder] spawn failed: ${result.error.message}`)

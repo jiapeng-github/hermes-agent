@@ -80,6 +80,9 @@ describe('AppActivityView', () => {
 
     expect(await screen.findByText('自选股盯盘看板')).toBeTruthy()
     expect(screen.getByText('贵州茅台行情快照')).toBeTruthy()
+    expect(screen.getByText('贵州茅台行情快照').closest('article')?.className).toContain(
+      'bg-(--ui-card-surface-background)'
+    )
     expect(screen.queryByRole('textbox')).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: '打开产物' }))

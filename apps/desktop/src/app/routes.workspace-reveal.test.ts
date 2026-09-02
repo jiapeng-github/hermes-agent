@@ -97,8 +97,11 @@ describe('classification of targets carrying a query', () => {
 })
 
 describe('syncWorkspaceRoute', () => {
-  it('publishes and fronts on a page route', () => {
-    syncWorkspaceRoute(SKILLS_ROUTE)
+  it.each([
+    ['capabilities', SKILLS_ROUTE],
+    ['cron', CRON_ROUTE]
+  ])('publishes and fronts on the %s page route', (_label, route) => {
+    syncWorkspaceRoute(route)
 
     expect($workspaceIsPage.get()).toBe(true)
     expect(fronted()).toBe(true)
@@ -140,8 +143,7 @@ describe('syncWorkspaceRoute', () => {
     ['the new-chat route', NEW_CHAT_ROUTE],
     ['an overlay', SETTINGS_ROUTE],
     ['an overlay with a query', `${SETTINGS_ROUTE}?tab=keys`],
-    ['another overlay', CRON_ROUTE],
-    ['yet another overlay', AGENTS_ROUTE]
+    ['another overlay', AGENTS_ROUTE]
   ])('leaves the tab alone on %s', (_label, to) => {
     syncWorkspaceRoute(to)
 
@@ -151,12 +153,15 @@ describe('syncWorkspaceRoute', () => {
 })
 
 describe('navigateToWorkspacePage', () => {
-  it('navigates and fronts, so a re-click on the page you are already on still shows it', () => {
+  it.each([
+    ['capabilities', SKILLS_ROUTE],
+    ['cron', CRON_ROUTE]
+  ])('navigates and fronts the %s page, including on a re-click', (_label, route) => {
     const navigate = vi.fn()
 
-    navigateToWorkspacePage(navigate, SKILLS_ROUTE)
+    navigateToWorkspacePage(navigate, route)
 
-    expect(navigate).toHaveBeenCalledWith(SKILLS_ROUTE, undefined)
+    expect(navigate).toHaveBeenCalledWith(route, undefined)
     expect(fronted()).toBe(true)
   })
 

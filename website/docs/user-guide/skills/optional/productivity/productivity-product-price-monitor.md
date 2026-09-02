@@ -14,14 +14,14 @@ Watch product, flight, or listing prices; alert on target.
 
 | | |
 |---|---|
-| Source | Optional — install with `hermes skills install official/productivity/product-price-monitor` |
-| Path | `optional-skills/productivity/product-price-monitor` |
+| Source | Bundled (installed by default) |
+| Path | `skills/productivity\product-price-monitor` |
 | Version | `0.1.0` |
 | Author | Ben Barclay (benbarclay), Hermes Agent |
 | License | MIT |
 | Platforms | linux, macos, windows |
 | Tags | `Prices`, `Availability`, `Shopping`, `Travel`, `Alerts` |
-| Related skills | [`maps`](/docs/user-guide/skills/optional/productivity/productivity-maps) |
+| Related skills | [`maps`](/docs/user-guide/skills/bundled/productivity/productivity-maps) |
 
 ## Reference: full SKILL.md
 

@@ -1,5 +1,6 @@
 import { useStore } from '@nanostores/react'
 import { IconCoins, IconDeviceDesktop, IconLogout, IconRefresh, IconUserCircle } from '@tabler/icons-react'
+import type { CSSProperties } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -60,7 +61,13 @@ export function AccountSummary() {
         </button>
       </PopoverTrigger>
 
-      <PopoverContent align="start" className="w-72 p-0" side="right" sideOffset={8}>
+      <PopoverContent
+        align="start"
+        className="w-72 p-0"
+        side="right"
+        sideOffset={8}
+        style={{ '--popover-surface': 'var(--ui-card-surface-background)' } as CSSProperties}
+      >
         <div className="border-b border-(--ui-stroke-tertiary) px-3 py-3">
           <div className="text-xs font-medium text-foreground">{account.mobileMasked}</div>
           <div className="mt-1 flex items-baseline gap-1 text-primary">

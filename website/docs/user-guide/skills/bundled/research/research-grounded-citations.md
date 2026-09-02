@@ -15,13 +15,13 @@ Ground answers and documents in cited, verifiable sources.
 | | |
 |---|---|
 | Source | Bundled (installed by default) |
-| Path | `skills/research/grounded-citations` |
+| Path | `skills/research\grounded-citations` |
 | Version | `1.1.0` |
 | Author | Hermes Agent + Teknium |
 | License | MIT |
 | Platforms | linux, macos, windows |
 | Tags | `Research`, `Citations`, `Grounding`, `Sources`, `Web`, `Reports` |
-| Related skills | [`research-paper-writing`](/docs/user-guide/skills/optional/research/research-research-paper-writing), [`arxiv`](/docs/user-guide/skills/optional/research/research-arxiv), [`ocr-and-documents`](/docs/user-guide/skills/bundled/productivity/productivity-ocr-and-documents) |
+| Related skills | [`arxiv`](/docs/user-guide/skills/bundled/research/research-arxiv), [`arxiv`](/docs/user-guide/skills/bundled/research/research-arxiv), `ocr-and-documents` |
 
 ## Reference: full SKILL.md
 
@@ -43,7 +43,7 @@ and `verify --evidence` fails any draft whose cited sources carry no evidence.
 
 This skill covers answers in chat, written documents (markdown, PDF, docx,
 slides), and research reports. It does not cover academic BibTeX pipelines —
-for conference papers use the `research-paper-writing` skill, which this skill
+for conference papers use the `arxiv` skill, which this skill
 feeds (see `references/citation-formats.md`).
 
 ## When to Use
