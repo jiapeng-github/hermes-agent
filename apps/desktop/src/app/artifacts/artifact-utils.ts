@@ -1,5 +1,4 @@
-import { readDesktopFileDataUrl } from '@/lib/desktop-fs'
-import { filePathFromMediaPath, isRemoteGateway, mediaExternalUrl } from '@/lib/media'
+import { mediaExternalUrl, resolveMediaDisplaySrc } from '@/lib/media'
 import type { AppActivityArtifact, SessionInfo, SessionMessage } from '@/types/hermes'
 
 export type ArtifactKind = 'image' | 'file' | 'link'
@@ -31,11 +30,27 @@ export interface ArtifactLoadResult {
 
 const MARKDOWN_IMAGE_RE = /!\[([^\]]*)\]\(([^)\s]+)\)/g
 const MARKDOWN_LINK_RE = /\[([^\]]+)\]\(([^)\s]+)\)/g
+const MEDIA_RE = /[`"']?MEDIA:\s*(`[^`\n]+`|"[^"\n]+"|'[^'\n]+'|\S+)[`"']?/g
 const URL_RE = /https?:\/\/[^\s<>"')]+/g
-const PATH_RE = /(^|[\s("'`])((?:(?:[a-z]:[\\/])|\/|~\/|\.\.?\/)[^\s"'`<>]+(?:\.[a-z0-9]{1,8})?)/gi
+const PATH_RE = /(^|[\s("'`])((?:\/|~\/|\.\.?\/)[^\s"'`<>]+(?:\.[a-z0-9]{1,8})?)/gi
+const WINDOWS_PATH_RE = /(^|[\s("'`])([A-Za-z]:[\\/][^\s"'`<>]+(?:\.[a-z0-9]{1,8})?)/gi
 const IMAGE_EXT_RE = /\.(?:png|jpe?g|gif|webp|svg|bmp)(?:\?.*)?$/i
+
 const FILE_EXT_RE =
-  /\.(?:png|jpe?g|gif|webp|svg|bmp|html?|pdf|docx?|xlsx?|pptx?|txt|json|md|csv|zip|tar|gz|mp3|wav|mp4|mov)(?:\?.*)?$/i
+  /\.(?:png|jpe?g|gif|webp|svg|bmp|html?|pdf|docx?|xlsx?|pptx?|txt|json|md|csv|zip|tar|gz|avi|flac|m4a|mkv|mp3|ogg|opus|wav|webm|mp4|mov)(?:\?.*)?$/i
+
+const MAX_UNIX_SECONDS = 10_000_000_000
+
+const ARTIFACT_PRODUCER_TOOL_RE =
+  /(?:^|_)(?:creat(?:e|ion)|download|export|generat(?:e|ion)|render|save|speech|tts|write)(?:_|$)/i
+
+const STRONG_TOOL_ARTIFACT_KEY_RE =
+  /^(?:agent_visible_image|artifact_(?:file|image|path|url)|files?_(?:created|modified|written)|generated_(?:file|image|path|url)|host_image|media_tag|output_(?:file|path|url)|result_(?:file|path|url)|saved_to|screenshot_path)$/i
+
+const PRODUCER_TOOL_ARTIFACT_KEY_RE =
+  /^(?:artifact(?:s|_(?:file|image|path|url))?|attachment(?:s|_(?:file|image|path|url))?|download(?:s|_(?:file|path|url))?|(?:audio|image|video)(?:_(?:file|path|url))?|file_path|local_path|media(?:_(?:file|path|url))?|path)$/i
+
+const SCREENSHOT_PATH_RE = /Screenshot path:\s*([^\r\n<>]+)/gi
 
 function artifactSessionTitle(session: SessionInfo): string {
   return session.title?.trim() || session.preview?.trim() || 'Untitled session'
@@ -43,6 +58,25 @@ function artifactSessionTitle(session: SessionInfo): string {
 
 function normalizeValue(value: string): string {
   return value.trim().replace(/[),.;]+$/, '')
+}
+
+function unquoteMediaValue(value: string): string {
+  let trimmed = value.trim()
+  const quote = trimmed[0]
+
+  if (quote && quote === trimmed.at(-1) && ['"', "'", '`'].includes(quote)) {
+    return trimmed.slice(1, -1)
+  }
+
+  trimmed = trimmed.replace(/[`"'*_]{1,3}$/, '')
+
+  return trimmed
+}
+
+function collectMediaValues(text: string, pushValue: (value: string) => void): void {
+  for (const match of text.matchAll(MEDIA_RE)) {
+    pushValue(unquoteMediaValue(match[1] || ''))
+  }
 }
 
 function parseMaybeJson(value: string): unknown {
@@ -57,6 +91,48 @@ function parseMaybeJson(value: string): unknown {
   }
 }
 
+function untrustedToolPayload(value: string): null | string {
+  const trimmed = value.trim()
+  const openTag = trimmed.match(/^<untrusted_tool_result\b[^>]*>\s*/)
+
+  if (!openTag) {
+    return null
+  }
+
+  const closeIndex = trimmed.lastIndexOf('</untrusted_tool_result>')
+
+  if (closeIndex <= openTag[0].length) {
+    return null
+  }
+
+  const wrapped = trimmed.slice(openTag[0].length, closeIndex).trim()
+  const payloadStart = wrapped.indexOf('\n\n')
+
+  return (payloadStart === -1 ? wrapped : wrapped.slice(payloadStart + 2)).trim()
+}
+
+function parseToolPayloads(text: string): unknown[] {
+  const payloads: unknown[] = []
+
+  for (const candidate of [text, untrustedToolPayload(text)]) {
+    if (!candidate) {
+      continue
+    }
+
+    const parsed = parseMaybeJson(candidate)
+
+    if (parsed !== null) {
+      payloads.push(parsed)
+    }
+  }
+
+  return payloads
+}
+
+function isWindowsPath(value: string): boolean {
+  return /^[A-Za-z]:[\\/]/.test(value) || value.startsWith('\\\\')
+}
+
 function looksLikePathOrUrl(value: string): boolean {
   return (
     value.startsWith('http://') ||
@@ -67,7 +143,7 @@ function looksLikePathOrUrl(value: string): boolean {
     value.startsWith('./') ||
     value.startsWith('../') ||
     value.startsWith('~/') ||
-    /^[a-z]:[\\/]/i.test(value)
+    isWindowsPath(value)
   )
 }
 
@@ -76,11 +152,7 @@ function looksLikeArtifact(value: string): boolean {
     return true
   }
 
-  if (looksLikePathOrUrl(value) && (IMAGE_EXT_RE.test(value) || FILE_EXT_RE.test(value))) {
-    return true
-  }
-
-  return (value.startsWith('/') || /^[a-z]:[\\/]/i.test(value)) && value.includes('.')
+  return looksLikePathOrUrl(value) && (IMAGE_EXT_RE.test(value) || FILE_EXT_RE.test(value))
 }
 
 function artifactKind(value: string): ArtifactKind {
@@ -94,7 +166,7 @@ function artifactKind(value: string): ArtifactKind {
     value.startsWith('../') ||
     value.startsWith('~/') ||
     value.startsWith('file://') ||
-    /^[a-z]:[\\/]/i.test(value)
+    isWindowsPath(value)
   ) {
     return 'file'
   }
@@ -107,23 +179,21 @@ function artifactHref(value: string): string {
     return value
   }
 
-  if (value.startsWith('file://') || value.startsWith('/') || /^[a-z]:[\\/]/i.test(value)) {
+  if (value.startsWith('file://') || value.startsWith('/') || isWindowsPath(value)) {
     return mediaExternalUrl(value)
   }
 
   return value
 }
 
-export async function artifactImageSrc(value: string, href = artifactHref(value)): Promise<string> {
-  if (/^(?:https?|data):/i.test(value)) {
-    return href
-  }
-
-  if (typeof window !== 'undefined' && window.hermesDesktop && isRemoteGateway()) {
-    return readDesktopFileDataUrl(filePathFromMediaPath(value))
-  }
-
-  return href
+export async function artifactImageSrc(value: string): Promise<string> {
+  // Delegate the whole local/remote ladder to the shared media resolver:
+  // inline (http/data) stays as-is, remote gateway goes through the
+  // authenticated fs bridge, local desktop through the Electron
+  // readFileDataUrl, and bare non-path link values fall through untouched.
+  // Reimplementing that ladder here would drift from resolveMediaDisplaySrc
+  // and regress one of its legs (#83380).
+  return resolveMediaDisplaySrc(value)
 }
 
 function artifactLabel(value: string): string {
@@ -137,6 +207,25 @@ function artifactLabel(value: string): string {
 
     return parts.pop() || value
   }
+}
+
+function normalizeArtifactTimestamp(timestamp: null | number | undefined): null | number {
+  if (typeof timestamp !== 'number' || !Number.isFinite(timestamp) || timestamp <= 0) {
+    return null
+  }
+
+  // Persisted session timestamps use Unix seconds. Values above the maximum
+  // plausible Unix-seconds range are already milliseconds and stay unchanged.
+  return timestamp < MAX_UNIX_SECONDS ? timestamp * 1000 : timestamp
+}
+
+function artifactTimestamp(message: SessionMessage, session: SessionInfo): number {
+  return (
+    normalizeArtifactTimestamp(message.timestamp) ??
+    normalizeArtifactTimestamp(session.last_active) ??
+    normalizeArtifactTimestamp(session.started_at) ??
+    Date.now()
+  )
 }
 
 function messageText(message: SessionMessage): string {
@@ -155,7 +244,35 @@ function messageText(message: SessionMessage): string {
   return ''
 }
 
+function collectStringValues(
+  value: unknown,
+  keyPath: string,
+  collector: (value: string, keyPath: string) => void
+): void {
+  if (typeof value === 'string') {
+    collector(value, keyPath)
+
+    return
+  }
+
+  if (Array.isArray(value)) {
+    value.forEach((entry, index) => collectStringValues(entry, `${keyPath}.${index}`, collector))
+
+    return
+  }
+
+  if (!value || typeof value !== 'object') {
+    return
+  }
+
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    collectStringValues(child, keyPath ? `${keyPath}.${key}` : key, collector)
+  }
+}
+
 function collectArtifactsFromText(text: string, pushValue: (value: string) => void): void {
+  collectMediaValues(text, pushValue)
+
   for (const match of text.matchAll(MARKDOWN_IMAGE_RE)) {
     pushValue(match[2] || '')
   }
@@ -185,6 +302,45 @@ function collectArtifactsFromText(text: string, pushValue: (value: string) => vo
   for (const match of text.matchAll(PATH_RE)) {
     pushValue(match[2] || '')
   }
+
+  for (const match of text.matchAll(WINDOWS_PATH_RE)) {
+    pushValue(match[2] || '')
+  }
+}
+
+function toolName(message: SessionMessage): string {
+  return (message.tool_name || message.name || '').trim().toLowerCase()
+}
+
+function isArtifactProducerTool(name: string): boolean {
+  // `bfl_flux3_*` tools were removed from the core toolset, but sessions
+  // recorded while they existed still carry their tool messages — keep
+  // matching so those artifacts stay visible in history.
+  return ARTIFACT_PRODUCER_TOOL_RE.test(name) || name.startsWith('bfl_flux3_')
+}
+
+function explicitToolArtifactKey(keyPath: string, producerTool: boolean): boolean {
+  return keyPath
+    .split('.')
+    .filter(segment => segment && !/^\d+$/.test(segment))
+    .some(
+      segment =>
+        STRONG_TOOL_ARTIFACT_KEY_RE.test(segment) || (producerTool && PRODUCER_TOOL_ARTIFACT_KEY_RE.test(segment))
+    )
+}
+
+function structuredToolPayload(message: SessionMessage): null | unknown {
+  const content = message.content
+
+  if (!content || typeof content !== 'object') {
+    return null
+  }
+
+  if (!Array.isArray(content) && (content as Record<string, unknown>)._multimodal === true) {
+    return (content as Record<string, unknown>).meta || null
+  }
+
+  return content
 }
 
 function collectArtifactsFromMessage(message: SessionMessage, pushValue: (value: string) => void): void {
@@ -192,29 +348,48 @@ function collectArtifactsFromMessage(message: SessionMessage, pushValue: (value:
 
   if (message.role === 'assistant' && text) {
     collectArtifactsFromText(text, pushValue)
-  }
 
-  if (message.role !== 'tool' || (message.tool_name || message.name) !== 'image_generate') {
     return
   }
 
-  const parsed = parseMaybeJson(text)
-
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+  if (message.role !== 'tool') {
     return
   }
 
-  const result = parsed as Record<string, unknown>
+  const name = toolName(message)
+  const producerTool = isArtifactProducerTool(name)
 
-  if (result.success === false || result.status === 'error') {
-    return
+  if (text && producerTool) {
+    collectMediaValues(text, pushValue)
   }
 
-  for (const key of ['host_image', 'image', 'agent_visible_image'] as const) {
-    if (typeof result[key] === 'string') {
-      pushValue(result[key])
-      return
+  if (name === 'browser_vision' && text) {
+    for (const match of text.matchAll(SCREENSHOT_PATH_RE)) {
+      pushValue(match[1] || '')
     }
+  }
+
+  const payloads = parseToolPayloads(text)
+  const structured = structuredToolPayload(message)
+
+  if (structured) {
+    payloads.push(structured)
+  }
+
+  for (const parsed of payloads) {
+    collectStringValues(parsed, 'tool_result', (value, keyPath) => {
+      if (!explicitToolArtifactKey(keyPath, producerTool)) {
+        return
+      }
+
+      collectMediaValues(value, pushValue)
+
+      const normalized = normalizeValue(value)
+
+      if (normalized && looksLikeArtifact(normalized)) {
+        pushValue(normalized)
+      }
+    })
   }
 }
 
@@ -250,7 +425,7 @@ export function collectArtifactsForSession(session: SessionInfo, messages: Sessi
         profile,
         sessionId: session.id,
         sessionTitle: title,
-        timestamp: message.timestamp || session.last_active || session.started_at || Date.now()
+        timestamp: artifactTimestamp(message, session)
       })
     })
   }
@@ -271,7 +446,11 @@ export function artifactFromAppActivity(session: SessionInfo, artifact: AppActiv
     profile,
     sessionId: session.id,
     sessionTitle: artifactSessionTitle(session),
-    timestamp: artifact.created_at || session.last_active || session.started_at || Date.now(),
+    timestamp:
+      normalizeArtifactTimestamp(artifact.created_at) ??
+      normalizeArtifactTimestamp(session.last_active) ??
+      normalizeArtifactTimestamp(session.started_at) ??
+      Date.now(),
     appActivityArtifactId: artifact.id
   }
 }
@@ -302,9 +481,7 @@ export function mergeArtifacts(records: readonly ArtifactRecord[]): ArtifactReco
   for (const artifact of [...records].sort((left, right) => right.timestamp - left.timestamp)) {
     const key = `${artifact.profile}:${artifact.kind}:${canonicalArtifactValue(artifact)}`
 
-    if (!found.has(key)) {
-      found.set(key, artifact)
-    }
+    if (!found.has(key)) found.set(key, artifact)
   }
 
   return Array.from(found.values()).sort((left, right) => right.timestamp - left.timestamp)

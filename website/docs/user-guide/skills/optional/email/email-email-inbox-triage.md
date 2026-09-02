@@ -14,14 +14,14 @@ Triage an inbox: prioritize threads, draft replies safely.
 
 | | |
 |---|---|
-| Source | Optional — install with `hermes skills install official/email/email-inbox-triage` |
-| Path | `optional-skills/email/email-inbox-triage` |
+| Source | Bundled (installed by default) |
+| Path | `skills/email\email-inbox-triage` |
 | Version | `0.1.0` |
 | Author | Ben Barclay (benbarclay), Hermes Agent |
 | License | MIT |
 | Platforms | linux, macos, windows |
 | Tags | `Email`, `Inbox`, `Triage`, `Replies`, `Productivity` |
-| Related skills | [`himalaya`](/docs/user-guide/skills/optional/email/email-himalaya), [`google-workspace`](/docs/user-guide/skills/optional/productivity/productivity-google-workspace) |
+| Related skills | [`himalaya`](/docs/user-guide/skills/bundled/email/email-himalaya), [`google-workspace`](/docs/user-guide/skills/bundled/productivity/productivity-google-workspace) |
 
 ## Reference: full SKILL.md
 
